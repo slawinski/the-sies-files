@@ -15,15 +15,15 @@ const MIN_READY = 13;
 const MAX_PLAYERS = 16;
 
 function statusLabel(status: string): string {
-  if (status === "LOBBY") return "Lobby";
-  if (status === "SETUP") return "Setup";
+  if (status === "LOBBY") return "Poczekalnia";
+  if (status === "SETUP") return "Konfiguracja";
   return status;
 }
 
 function claimStatus(player: StorytellerPlayerDto): { label: string; className: string } {
-  if (player.claimed) return { label: "claimed", className: "text-success" };
-  if (player.hasClaimToken) return { label: "claim issued, unclaimed", className: "text-brass" };
-  return { label: "no claim", className: "text-ink-muted" };
+  if (player.claimed) return { label: "odebrano", className: "text-success" };
+  if (player.hasClaimToken) return { label: "link wydany, nieodebrany", className: "text-brass" };
+  return { label: "brak linku", className: "text-ink-muted" };
 }
 
 interface ClaimTokenResponse {
@@ -65,7 +65,7 @@ export default function StorytellerDashboard() {
       setStale(false);
     } catch (err) {
       const e = err as ApiClientError;
-      setFatalError(friendlyMessage(e.code ?? "UNKNOWN", "Couldn't load this case."));
+      setFatalError(friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się wczytać tej sprawy."));
     } finally {
       setLoading(false);
     }
@@ -89,7 +89,7 @@ export default function StorytellerDashboard() {
         await load();
         setStale(true);
       } else {
-        setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Something went wrong."));
+        setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
       }
       return false;
     } finally {
@@ -140,7 +140,7 @@ export default function StorytellerDashboard() {
 
   async function handleRemove(player: StorytellerPlayerDto) {
     if (!game) return;
-    const confirmed = window.confirm(`Remove ${player.displayName} from the circle?`);
+    const confirmed = window.confirm(`Usunąć gracza ${player.displayName} z kręgu?`);
     if (!confirmed) return;
     await runMutation(() =>
       api(`/api/v1/games/${gameId}/players/${player.id}`, {
@@ -200,7 +200,7 @@ export default function StorytellerDashboard() {
           player,
           link: null,
           busy: false,
-          error: "A claim link was already issued for this player.",
+          error: "Dla tego gracza wydano już link do odbioru.",
         });
       }
       await load();
@@ -214,7 +214,7 @@ export default function StorytellerDashboard() {
         player,
         link: null,
         busy: false,
-        error: friendlyMessage(e.code ?? "UNKNOWN", "Couldn't issue a claim link."),
+        error: friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się wydać linku do odbioru."),
       });
     }
   }
@@ -228,8 +228,8 @@ export default function StorytellerDashboard() {
   const ready = game?.isReady ?? false;
   const need = game ? Math.max(0, MIN_READY - game.participantCount) : 0;
   const gateText = ready
-    ? "Ready for setup"
-    : `Add ${need} more participant${need === 1 ? "" : "s"}`;
+    ? "Gotowe do konfiguracji"
+    : `Dodaj jeszcze ${need} ${need === 1 ? "uczestnika" : "uczestników"}`;
   const gateClassName = ready
     ? "border-success/40 bg-success/10 text-success"
     : "border-brass/40 bg-brass/10 text-brass";
@@ -241,13 +241,13 @@ export default function StorytellerDashboard() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Storyteller</span>
+          <span className="text-xs text-ink-muted">Prowadzący</span>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
         {loading && !game && (
-          <p className="py-12 text-center text-ink-muted">Loading the case file…</p>
+          <p className="py-12 text-center text-ink-muted">Wczytuję akta sprawy…</p>
         )}
 
         {!loading && fatalError && !game && (
@@ -261,7 +261,7 @@ export default function StorytellerDashboard() {
               }}
               className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass hover:bg-brass/20"
             >
-              Try again
+              Spróbuj ponownie
             </button>
           </div>
         )}
@@ -275,13 +275,13 @@ export default function StorytellerDashboard() {
                     role="status"
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brass/40 bg-brass/10 px-4 py-3 text-sm text-brass"
                   >
-                    <span>This case changed in another tab — your view was refreshed. Retry your last action.</span>
+                    <span>Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Ponów ostatnią akcję.</span>
                     <button
                       type="button"
                       onClick={() => setStale(false)}
                       className="min-h-11 rounded-lg px-3 text-brass underline-offset-2 hover:underline"
                     >
-                      Dismiss
+                      Zamknij
                     </button>
                   </div>
                 )}
@@ -296,7 +296,7 @@ export default function StorytellerDashboard() {
                       onClick={() => setActionError(null)}
                       className="min-h-11 rounded-lg px-3 text-danger underline-offset-2 hover:underline"
                     >
-                      Dismiss
+                      Zamknij
                     </button>
                   </div>
                 )}
@@ -308,13 +308,13 @@ export default function StorytellerDashboard() {
               <section className="card md:col-span-6">
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Case file</p>
+                    <p className="display text-xs tracking-[0.25em] text-moss">Akta sprawy</p>
                     <h1 className="display mt-1 break-words text-2xl leading-tight text-ink-primary sm:text-3xl">
                       {game.name}
                     </h1>
                     <p className="mt-1 text-sm text-ink-muted">
                       {statusLabel(game.status)} · {game.participantCount}{" "}
-                      participant{game.participantCount === 1 ? "" : "s"}
+                      {game.participantCount === 1 ? "uczestnik" : "uczestników"}
                     </p>
                   </div>
                   <div className={`rounded-full border px-4 py-2 text-sm font-medium ${gateClassName}`}>
@@ -325,16 +325,16 @@ export default function StorytellerDashboard() {
 
               {/* Add participant card */}
               <section className="card md:col-span-2">
-                <p className="display text-xs tracking-[0.25em] text-moss">Add participant</p>
+                <p className="display text-xs tracking-[0.25em] text-moss">Dodaj uczestnika</p>
                 <form onSubmit={handleAdd} className="mt-3 flex flex-col gap-2">
                   <label htmlFor="new-player-name" className="sr-only">
-                    Participant display name
+                    Imię uczestnika
                   </label>
                   <input
                     id="new-player-name"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Display name"
+                    placeholder="Imię"
                     autoComplete="off"
                     className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
                   />
@@ -343,24 +343,24 @@ export default function StorytellerDashboard() {
                     disabled={busy}
                     className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
                   >
-                    Add to circle
+                    Dodaj do kręgu
                   </button>
                 </form>
                 {game.participantCount >= MAX_PLAYERS && (
-                  <p className="mt-2 text-xs text-ink-muted">Roster full — 16 participants maximum.</p>
+                  <p className="mt-2 text-xs text-ink-muted">Lista pełna — maksimum 16 uczestników.</p>
                 )}
               </section>
 
               {/* Virtual Circle card */}
               <section className="card md:col-span-4">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="display text-xs tracking-[0.25em] text-moss">Virtual Circle</p>
-                  <span className="text-xs text-ink-muted">{game.participantCount} seated</span>
+                  <p className="display text-xs tracking-[0.25em] text-moss">Wirtualny Krąg</p>
+                  <span className="text-xs text-ink-muted">{game.participantCount} osób</span>
                 </div>
 
                 {sorted.length === 0 ? (
                   <p className="mt-6 text-center text-sm text-ink-muted">
-                    No participants yet. Add the first name to open the circle.
+                    Nie ma jeszcze uczestników. Dodaj pierwsze imię, aby otworzyć krąg.
                   </p>
                 ) : (
                   <ol className="mt-3 flex flex-col gap-2">
@@ -385,7 +385,7 @@ export default function StorytellerDashboard() {
                                 <input
                                   value={editingName}
                                   onChange={(e) => setEditingName(e.target.value)}
-                                  aria-label={`Rename ${player.displayName}`}
+                                  aria-label={`Zmień imię: ${player.displayName}`}
                                   autoFocus
                                   className="min-h-11 w-full min-w-40 flex-1 rounded-lg border border-line bg-elevated px-3 text-ink-primary"
                                 />
@@ -395,14 +395,14 @@ export default function StorytellerDashboard() {
                                   disabled={busy}
                                   className="min-h-11 rounded-lg border border-brass/40 bg-brass/10 px-3 text-brass hover:bg-brass/20 disabled:opacity-50"
                                 >
-                                  Save
+                                  Zapisz
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setEditingId(null)}
                                   className="min-h-11 rounded-lg px-3 text-ink-muted hover:text-ink-primary"
                                 >
-                                  Cancel
+                                  Anuluj
                                 </button>
                               </div>
                             ) : (
@@ -420,7 +420,7 @@ export default function StorytellerDashboard() {
                                 onClick={() => startRename(player)}
                                 className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary"
                               >
-                                Rename
+                                Zmień imię
                               </button>
                               <button
                                 type="button"
@@ -428,25 +428,25 @@ export default function StorytellerDashboard() {
                                 disabled={busy}
                                 className="min-h-11 rounded-lg border border-brass/40 px-3 text-sm text-brass hover:bg-brass/10 disabled:opacity-50"
                               >
-                                Claim link
+                                Link do odbioru
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleMove(player.id, -1)}
                                 disabled={busy || isFirst}
-                                aria-label={`Move ${player.displayName} up`}
+                                aria-label={`Przenieś ${player.displayName} w górę`}
                                 className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:opacity-40"
                               >
-                                Up
+                                W górę
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleMove(player.id, 1)}
                                 disabled={busy || isLast}
-                                aria-label={`Move ${player.displayName} down`}
+                                aria-label={`Przenieś ${player.displayName} w dół`}
                                 className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:opacity-40"
                               >
-                                Down
+                                W dół
                               </button>
                               <button
                                 type="button"
@@ -454,7 +454,7 @@ export default function StorytellerDashboard() {
                                 disabled={busy}
                                 className="min-h-11 rounded-lg border border-danger/40 px-3 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
                               >
-                                Remove
+                                Usuń
                               </button>
                             </div>
                           )}
@@ -534,13 +534,13 @@ function ClaimModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`Claim link for ${playerName}`}
+        aria-label={`Link do odbioru dla: ${playerName}`}
         className="card w-full max-w-md bg-elevated"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="display text-xs tracking-[0.25em] text-moss">Claim link</p>
+            <p className="display text-xs tracking-[0.25em] text-moss">Link do odbioru</p>
             <h2 className="mt-1 break-words text-lg text-ink-primary">{playerName}</h2>
           </div>
           <button
@@ -548,18 +548,18 @@ function ClaimModal({
             onClick={onClose}
             className="min-h-11 shrink-0 rounded-lg px-3 text-ink-muted hover:text-ink-primary"
           >
-            Close
+            Zamknij
           </button>
         </div>
 
-        {busy && <p className="mt-4 text-sm text-ink-secondary">Issuing a one-time claim link…</p>}
+        {busy && <p className="mt-4 text-sm text-ink-secondary">Wydaję jednorazowy link do odbioru…</p>}
 
         {!busy && error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
         {!busy && link && (
           <>
             <label htmlFor="claim-link-field" className="mt-4 block text-sm text-ink-secondary">
-              Send this one-time link to {playerName}:
+              Wyślij ten jednorazowy link do: {playerName}
             </label>
             <div className="mt-2 flex gap-2">
               <input
@@ -573,11 +573,11 @@ function ClaimModal({
                 onClick={copy}
                 className="min-h-11 shrink-0 rounded-lg border border-brass/40 bg-brass/10 px-4 text-brass hover:bg-brass/20"
               >
-                {copied ? "Copied" : "Copy"}
+                {copied ? "Skopiowano" : "Kopiuj"}
               </button>
             </div>
             <p className="mt-3 text-xs text-ink-muted">
-              This link works once. Copy it now — it will not be shown again.
+              Ten link działa raz. Skopiuj go teraz — nie zostanie pokazany ponownie.
             </p>
           </>
         )}

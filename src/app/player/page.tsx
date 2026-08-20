@@ -28,7 +28,7 @@ export default function PlayerWaiting() {
       if (e.status === 401 || e.code === "UNAUTHORIZED") {
         setView("unclaimed");
       } else {
-        setError(friendlyMessage(e.code ?? "UNKNOWN", "Couldn't load your case."));
+        setError(friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się wczytać twojej sprawy."));
         setView("error");
       }
     }
@@ -49,13 +49,13 @@ export default function PlayerWaiting() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Player</span>
+          <span className="text-xs text-ink-muted">Gracz</span>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
         {view === "loading" && (
-          <p className="py-12 text-center text-ink-muted">Loading your case…</p>
+          <p className="py-12 text-center text-ink-muted">Wczytuję twoją sprawę…</p>
         )}
 
         {view === "error" && (
@@ -66,22 +66,22 @@ export default function PlayerWaiting() {
               onClick={() => void load()}
               className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass hover:bg-brass/20"
             >
-              Try again
+              Spróbuj ponownie
             </button>
           </div>
         )}
 
         {view === "unclaimed" && (
           <div className="card mx-auto max-w-md text-center">
-            <p className="display text-xs tracking-[0.25em] text-moss">Identity</p>
+            <p className="display text-xs tracking-[0.25em] text-moss">Tożsamość</p>
             <p className="mt-3 text-base text-ink-primary">
-              You haven&apos;t claimed your identity yet — open your claim link.
+              Nie odebrano jeszcze twojej tożsamości — otwórz link do odbioru.
             </p>
             <Link
               href="/claim"
               className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass hover:bg-brass/20"
             >
-              I have a claim link
+              Mam link do odbioru
             </Link>
           </div>
         )}
@@ -90,24 +90,24 @@ export default function PlayerWaiting() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {/* Identity card */}
             <section className="card md:col-span-1">
-              <p className="display text-xs tracking-[0.25em] text-moss">You</p>
+              <p className="display text-xs tracking-[0.25em] text-moss">Ty</p>
               <h1 className="display mt-2 break-words text-2xl leading-tight text-ink-primary">
                 {game.me.displayName}
               </h1>
               <p className="mt-2 text-sm text-ink-muted">
-                Seat {game.me.virtualSeat + 1} in the Virtual Circle
+                Miejsce {game.me.virtualSeat + 1} w Wirtualnym Kręgu
               </p>
               <p className="mt-4 rounded-lg border border-line bg-card-soft px-3 py-2 text-sm text-ink-secondary">
-                Waiting for the case to begin.
+                Czekamy na rozpoczęcie sprawy.
               </p>
             </section>
 
             {/* Roster card */}
             <section className="card md:col-span-2">
               <div className="flex items-center justify-between gap-3">
-                <p className="display text-xs tracking-[0.25em] text-moss">Virtual Circle</p>
+                <p className="display text-xs tracking-[0.25em] text-moss">Wirtualny Krąg</p>
                 <span className="text-xs text-ink-muted">
-                  {game.participantCount} seated · {game.name}
+                  {game.participantCount} osób · {game.name}
                 </span>
               </div>
 
@@ -125,7 +125,7 @@ export default function PlayerWaiting() {
                     </span>
                     {player.id === game.me.playerId && (
                       <span className="shrink-0 rounded-full border border-moss/40 bg-moss/10 px-2.5 py-0.5 text-xs text-moss">
-                        you
+                        ty
                       </span>
                     )}
                   </li>

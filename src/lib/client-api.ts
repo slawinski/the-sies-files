@@ -31,7 +31,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
   } catch {
-    throw new ApiClientError(0, "NETWORK", "Can't reach the server. Check your connection.");
+    throw new ApiClientError(0, "NETWORK", "Nie mogę połączyć się z serwerem. Sprawdź połączenie.");
   }
 
   let data: unknown = null;
@@ -46,7 +46,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiClientError(
       res.status,
       body?.error?.code ?? "UNKNOWN",
-      body?.error?.message ?? "Something went wrong",
+      body?.error?.message ?? "Coś poszło nie tak.",
     );
   }
 
@@ -60,26 +60,26 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export function friendlyMessage(code: string, fallback: string): string {
   switch (code) {
     case "UNAUTHORIZED":
-      return "You don't have access to this case file.";
+      return "Nie masz dostępu do tych akt sprawy.";
     case "FORBIDDEN":
-      return "You don't have permission to do that.";
+      return "Nie masz uprawnień, aby to zrobić.";
     case "GAME_NOT_FOUND":
     case "PLAYER_NOT_FOUND":
-      return "This case file no longer exists.";
+      return "Te akta sprawy już nie istnieją.";
     case "VERSION_CONFLICT":
-      return "This case changed in another tab — your view was refreshed. Try again.";
+      return "Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Spróbuj ponownie.";
     case "INVALID_DISPLAY_NAME":
-      return "A name is required.";
+      return "Imię jest wymagane.";
     case "DISPLAY_NAME_TAKEN":
-      return "That name is already in the circle.";
+      return "To imię jest już w kręgu.";
     case "ROSTER_FULL":
-      return "The roster is already at its 16-participant maximum.";
+      return "Lista osiągnęła już maksimum 16 uczestników.";
     case "ROSTER_SIZE_INVALID":
-      return "A case needs between 13 and 16 participants.";
+      return "Sprawa wymaga od 13 do 16 uczestników.";
     case "CLAIM_ALREADY_USED":
-      return "This claim link has already been used or has expired.";
+      return "Ten link do odbioru został już użyty lub wygasł.";
     case "NETWORK":
-      return "Can't reach the server. Check your connection and try again.";
+      return "Nie mogę połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie.";
     default:
       return fallback;
   }

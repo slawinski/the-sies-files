@@ -33,7 +33,7 @@ export default function StorytellerHome() {
       } catch (err) {
         if (cancelled) return;
         const e = err as ApiClientError;
-        setError(friendlyMessage(e.code ?? "UNKNOWN", "Couldn't check for an open case."));
+        setError(friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się sprawdzić otwartej sprawy."));
         setView("error");
       }
     }
@@ -48,7 +48,7 @@ export default function StorytellerHome() {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Give the case a name before opening it.");
+      setError("Nadaj sprawie nazwę, zanim ją otworzysz.");
       return;
     }
 
@@ -62,7 +62,7 @@ export default function StorytellerHome() {
       router.replace(`/storyteller/${game.gameId}`);
     } catch (err) {
       const e = err as ApiClientError;
-      setError(friendlyMessage(e.code ?? "UNKNOWN", "Couldn't open the case."));
+      setError(friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się otworzyć sprawy."));
       setView("form");
     }
   }
@@ -74,13 +74,13 @@ export default function StorytellerHome() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Storyteller</span>
+          <span className="text-xs text-ink-muted">Prowadzący</span>
         </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10">
         {view === "loading" && (
-          <p className="text-center text-ink-muted">Checking the case files…</p>
+          <p className="text-center text-ink-muted">Sprawdzam akta sprawy…</p>
         )}
 
         {view === "error" && (
@@ -94,31 +94,31 @@ export default function StorytellerHome() {
                 void api<{ gameId: string | null }>("/api/v1/storyteller/current")
                   .then((c) => (c.gameId ? router.replace(`/storyteller/${c.gameId}`) : setView("form")))
                   .catch((err: ApiClientError) => {
-                    setError(friendlyMessage(err.code ?? "UNKNOWN", "Couldn't check for an open case."));
+                    setError(friendlyMessage(err.code ?? "UNKNOWN", "Nie udało się sprawdzić otwartej sprawy."));
                     setView("error");
                   });
               }}
               className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass hover:bg-brass/20"
             >
-              Try again
+              Spróbuj ponownie
             </button>
           </div>
         )}
 
         {(view === "form" || view === "creating") && (
           <div className="card">
-            <p className="display text-xs tracking-[0.25em] text-moss">New case file</p>
+            <p className="display text-xs tracking-[0.25em] text-moss">Nowe akta sprawy</p>
             <h1 className="display mt-2 text-2xl leading-tight text-ink-primary">
-              Open the case
+              Otwórz sprawę
             </h1>
             <p className="mt-2 text-sm text-ink-muted">
-              Name this investigation. You&apos;ll add 13–16 participants and seat them in the
-              Virtual Circle next.
+              Nazwij to śledztwo. Następnie dodasz 13–16 uczestników i ustawisz ich w Wirtualnym
+              Kręgu.
             </p>
 
             <form onSubmit={handleCreate} className="mt-5 flex flex-col gap-3">
               <label htmlFor="game-name" className="sr-only">
-                Case name
+                Nazwa sprawy
               </label>
               <input
                 id="game-name"
@@ -134,7 +134,7 @@ export default function StorytellerHome() {
                 disabled={view === "creating"}
                 className="min-h-12 rounded-xl border border-brass/60 bg-brass/10 px-5 text-ink-primary transition-colors hover:bg-brass/20 disabled:opacity-50"
               >
-                {view === "creating" ? "Opening…" : "Open the case"}
+                {view === "creating" ? "Otwieram…" : "Otwórz sprawę"}
               </button>
             </form>
           </div>

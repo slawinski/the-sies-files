@@ -17,7 +17,7 @@ export default function ClaimIdentity() {
     async (rawToken: string) => {
       const trimmed = rawToken.trim();
       if (!trimmed) {
-        setError("Paste your claim token to continue.");
+        setError("Wklej swój token odbioru, aby kontynuować.");
         setView("error");
         return;
       }
@@ -33,9 +33,9 @@ export default function ClaimIdentity() {
       } catch (err) {
         const e = err as ApiClientError;
         if (e.code === "CLAIM_ALREADY_USED" || e.code === "UNAUTHORIZED") {
-          setError("This claim link has already been used or has expired.");
+          setError("Ten link do odbioru został już użyty lub wygasł.");
         } else {
-          setError(friendlyMessage(e.code ?? "UNKNOWN", "This claim link has already been used or has expired."));
+          setError(friendlyMessage(e.code ?? "UNKNOWN", "Ten link do odbioru został już użyty lub wygasł."));
         }
         setView("error");
       }
@@ -65,34 +65,35 @@ export default function ClaimIdentity() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Claim identity</span>
+          <span className="text-xs text-ink-muted">Odbierz tożsamość</span>
         </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10">
         <div className="card">
-          <p className="display text-xs tracking-[0.25em] text-moss">Identity</p>
+          <p className="display text-xs tracking-[0.25em] text-moss">Tożsamość</p>
           <h1 className="display mt-2 text-2xl leading-tight text-ink-primary">
-            Claim your seat
+            Odbierz swoje miejsce
           </h1>
           <p className="mt-2 text-sm text-ink-muted">
-            Open your claim link to bind this browser to your place in the Virtual Circle.
+            Otwórz link do odbioru, aby powiązać tę przeglądarkę z twoim miejscem w Wirtualnym
+            Kręgu.
           </p>
 
           {view === "submitting" && (
-            <p className="mt-5 text-sm text-ink-secondary">Claiming your identity…</p>
+            <p className="mt-5 text-sm text-ink-secondary">Odbieranie tożsamości…</p>
           )}
 
           {view !== "submitting" && (
             <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-3">
               <label htmlFor="claim-token" className="sr-only">
-                Claim token
+                Token odbioru
               </label>
               <input
                 id="claim-token"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder="Paste your claim token"
+                placeholder="Wklej token odbioru"
                 autoComplete="off"
                 className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 font-mono text-sm text-ink-primary placeholder:text-ink-muted"
               />
@@ -101,7 +102,7 @@ export default function ClaimIdentity() {
                 type="submit"
                 className="min-h-12 rounded-xl border border-brass/60 bg-brass/10 px-5 text-ink-primary transition-colors hover:bg-brass/20"
               >
-                Claim identity
+                Odbierz tożsamość
               </button>
             </form>
           )}

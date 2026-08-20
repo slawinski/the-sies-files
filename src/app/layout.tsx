@@ -4,7 +4,7 @@ import SwRegister from "@/components/SwRegister";
 
 export const metadata: Metadata = {
   title: "The Sieś Files",
-  description: "Mobile-first social-deduction companion for The Sieś Files.",
+  description: "Mobilna aplikacja towarzysząca do gry w dedukcję społeczną The Sieś Files.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

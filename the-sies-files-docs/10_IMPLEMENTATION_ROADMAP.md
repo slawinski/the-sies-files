@@ -140,10 +140,11 @@ Implement milestones in order. Do not start a later slice by bypassing failing a
 
 **Exit gate:** simulated weekend game survives intentional client/server interruptions without DB surgery.
 
-## Milestone 7 — Visual integration and interaction pass
+## Milestone 7 — Visual, copy and localization pass
 
-The visual system should be applied progressively from Milestone 0; this is a consistency pass, not a late reskin.
+The visual system should be applied progressively from Milestone 0; this is a consistency pass, not a late reskin. Copy should likewise be externalized to locale strings from Milestone 0 so localization is not a late big-bang.
 
+- [ ] Localize user-facing content/copy — Polish (primary) with optional English; externalize all UI strings to a locale resource and remove hard-coded English copy.
 - [ ] Apply final Rural Neo-Noir tokens across player/Storyteller shells.
 - [ ] Verify Bento Grid hierarchy at mobile and Storyteller desktop widths.
 - [ ] Replace development map with production base/extended assets when ready.

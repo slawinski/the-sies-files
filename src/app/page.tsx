@@ -5,13 +5,13 @@ export default function Home() {
     <main className="flex min-h-dvh flex-col items-center justify-center gap-10 px-6">
       <div className="text-center">
         <p className="display mb-3 text-sm tracking-[0.3em] text-moss">
-          Case file &middot; Sieśki
+          Akta sprawy &middot; Sieśki
         </p>
         <h1 className="display text-4xl leading-tight text-ink-primary">
           The Sieś Files
         </h1>
         <p className="mx-auto mt-4 max-w-xs text-ink-muted">
-          A rural neo-noir social-deduction companion for a weekend in the field.
+          Towarzysz gry w dedukcję społeczną w klimacie wiejskiego neo-noir — na weekend w terenie.
         </p>
       </div>
 
@@ -20,13 +20,13 @@ export default function Home() {
           href="/storyteller"
           className="flex min-h-12 items-center justify-center rounded-xl border border-brass/60 bg-brass/10 px-5 text-ink-primary transition-colors hover:bg-brass/20"
         >
-          Storyteller
+          Prowadzący
         </Link>
         <Link
           href="/claim"
           className="flex min-h-12 items-center justify-center rounded-xl border border-line px-5 text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary"
         >
-          I have a claim link
+          Mam link do odbioru
         </Link>
       </div>
     </main>
