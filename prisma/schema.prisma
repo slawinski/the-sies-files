@@ -53,6 +53,20 @@ enum OperationalActionStatus {
   SKIPPED
 }
 
+enum NominationState {
+  CLOSED
+  OPEN
+  VOTING
+  RESOLVING
+}
+
+enum NominationStatus {
+  CREATED
+  VOTING
+  LOCKED
+  RESOLVED
+}
+
 model GameSession {
   id              String        @id @default(uuid())
   name            String
@@ -77,6 +91,9 @@ model GameSession {
   setupDraft         SetupDraft?
   operationalPhases  OperationalPhase[]
   effects            Effect[]
+  investigation      InvestigationState?
+  nominations        Nomination[]
+  deathRecords       DeathRecord[]
 
   @@map("game_sessions")
 }
@@ -243,4 +260,70 @@ model Effect {
   @@index([gameId, active])
   @@index([targetPlayerId, active])
   @@map("effects")
+}
+
+model InvestigationState {
+  gameId                            String          @id
+  game                              GameSession     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  cycleNumber                       Int
+  nominationState                   NominationState @default(CLOSED)
+  currentExecutionCandidatePlayerId String?
+  currentHighEffectiveVotes         Int?
+  executionOccurred                 Boolean         @default(false)
+  startedAt                         DateTime        @default(now())
+  completedAt                       DateTime?
+
+  @@map("investigation_states")
+}
+
+model Nomination {
+  id             String          @id @default(uuid())
+  gameId         String
+  game           GameSession     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  cycleNumber    Int
+  nominatorId    String
+  nomineeId      String
+  status         NominationStatus @default(CREATED)
+  sequence       Int
+  rawTotal       Int             @default(0)
+  effectiveTotal Int             @default(0)
+  qualified      Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+
+  votes Vote[]
+
+  @@unique([gameId, cycleNumber, sequence])
+  @@map("nominations")
+}
+
+model Vote {
+  id                String    @id @default(uuid())
+  nominationId      String
+  nomination        Nomination @relation(fields: [nominationId], references: [id], onDelete: Cascade)
+  playerId          String
+  rawIntent         Boolean   @default(false)
+  valid             Boolean   @default(false)
+  effectiveWeight   Int       @default(0)
+  ghostVoteConsumed Boolean   @default(false)
+  invalidReason     String?
+  lockedAt          DateTime?
+
+  @@unique([nominationId, playerId])
+  @@map("votes")
+}
+
+model DeathRecord {
+  id              String      @id @default(uuid())
+  gameId          String
+  game            GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId        String
+  cycleNumber     Int
+  phase           String
+  source          String
+  causedByPlayerId String?
+  executed        Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+
+  @@index([gameId, playerId])
+  @@map("death_records")
 }
