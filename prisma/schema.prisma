@@ -99,6 +99,7 @@ model GameSession {
   scenarioDiscoveries ScenarioDiscovery[]
   taskStates         TaskState[]
   scenarioConditions ScenarioCondition[]
+  checkpoints        Checkpoint[]
 
   @@map("game_sessions")
 }
@@ -400,4 +401,19 @@ model ScenarioCondition {
 
   @@index([gameId, conditionId])
   @@map("scenario_conditions")
+}
+
+model Checkpoint {
+  id                String      @id @default(uuid())
+  gameId            String
+  game              GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  gameVersion       Int
+  lastEventSequence Int
+  snapshotJson      Json
+  checksum          String
+  reason            String?
+  createdAt         DateTime    @default(now())
+
+  @@index([gameId, createdAt])
+  @@map("checkpoints")
 }

@@ -7,8 +7,12 @@ import {
   api,
   ApiClientError,
   friendlyMessage,
+  type AccessResetResponseDto,
+  type CheckpointResponseDto,
   type InfoResultDto,
   type StorytellerActionDto,
+  type StorytellerAuditDto,
+  type StorytellerControlDto,
   type StorytellerGameProjection,
   type StorytellerPlayerDto,
 } from "@/lib/client-api";
@@ -27,6 +31,25 @@ const MAP_OPTIONS = [
   { id: "MAP_BASE", label: "Mapa główna" },
   { id: "MAP_EXTENDED", label: "Mapa rozszerzona" },
 ];
+
+type RecoveryKind = "RESOLVE_ACTION" | "SKIP_ACTION" | "CORRECT_ALIVE" | "RESTORE_GHOST_VOTE";
+
+const RECOVERY_KINDS: { id: RecoveryKind; label: string }[] = [
+  { id: "RESOLVE_ACTION", label: "Rozwiąż akcję" },
+  { id: "SKIP_ACTION", label: "Pomiń akcję" },
+  { id: "CORRECT_ALIVE", label: "Popraw stan życia" },
+  { id: "RESTORE_GHOST_VOTE", label: "Przywróć głos widma" },
+];
+
+/** "2026-08-20T18:04:00Z" → "20.08, 18:04" (local). */
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleString("pl-PL", {
+    day: "numeric",
+    month: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function mapVersionLabel(mapVersionId: string | null): string {
   if (mapVersionId === "MAP_EXTENDED") return "Mapa rozszerzona";
@@ -160,19 +183,52 @@ export default function StorytellerDashboard() {
   const [revealTargetPlayerId, setRevealTargetPlayerId] = useState("");
   const [stageInput, setStageInput] = useState("");
 
+  const [control, setControl] = useState<StorytellerControlDto | null>(null);
+  const [audit, setAudit] = useState<StorytellerAuditDto | null>(null);
+
+  const [checkpointReason, setCheckpointReason] = useState("");
+  const [checkpointNote, setCheckpointNote] = useState<string | null>(null);
+
+  const [recoveryKind, setRecoveryKind] = useState<RecoveryKind>("RESOLVE_ACTION");
+  const [recoveryTargetId, setRecoveryTargetId] = useState("");
+  const [recoveryAlive, setRecoveryAlive] = useState(true);
+  const [recoveryReason, setRecoveryReason] = useState("");
+
+  const [resetModal, setResetModal] = useState<{
+    player: StorytellerPlayerDto;
+    token: string | null;
+    busy: boolean;
+    error: string | null;
+  } | null>(null);
+
+  /** Control plane projections (Slice 6) — refreshed alongside the main load. */
+  const loadAux = useCallback(async () => {
+    try {
+      const [controlRes, auditRes] = await Promise.all([
+        api<StorytellerControlDto>(`/api/v1/games/${gameId}/storyteller/control`),
+        api<StorytellerAuditDto>(`/api/v1/games/${gameId}/storyteller/audit`),
+      ]);
+      setControl(controlRes);
+      setAudit(auditRes);
+    } catch {
+      // Keep the previous snapshot; the control cards are non-critical.
+    }
+  }, [gameId]);
+
   const load = useCallback(async () => {
     try {
       const next = await api<StorytellerGameProjection>(`/api/v1/games/${gameId}/storyteller`);
       setGame(next);
       setFatalError(null);
       setStale(false);
+      void loadAux();
     } catch (err) {
       const e = err as ApiClientError;
       setFatalError(friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się wczytać tej sprawy."));
     } finally {
       setLoading(false);
     }
-  }, [gameId]);
+  }, [gameId, loadAux]);
 
   useEffect(() => {
     void load();
@@ -538,6 +594,96 @@ export default function StorytellerDashboard() {
     );
   }
 
+  /** Prefill the override target from the current blocking action. */
+  useEffect(() => {
+    const blocking = control?.blockingAction ?? null;
+    if (!blocking) return;
+    const needsPlayer = recoveryKind === "CORRECT_ALIVE" || recoveryKind === "RESTORE_GHOST_VOTE";
+    setRecoveryTargetId(needsPlayer ? (blocking.actorPlayerId ?? "") : blocking.id);
+  }, [control, recoveryKind]);
+
+  async function handleCreateCheckpoint() {
+    if (!game) return;
+    setCheckpointNote(null);
+    const reason = checkpointReason.trim();
+    const res = await runWithResult<CheckpointResponseDto>(() =>
+      api(`/api/v1/games/${gameId}/storyteller/checkpoints`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: reason ? { reason } : {},
+        }),
+      }),
+    );
+    if (res.ok) {
+      setCheckpointReason("");
+      setCheckpointNote(
+        res.value?.valid === false
+          ? "Punkt kontrolny utworzony — UWAGA: stan niespójny."
+          : "Punkt kontrolny utworzony — stan spójny.",
+      );
+    }
+  }
+
+  async function handleRecoveryOverride() {
+    if (!game) return;
+    const reason = recoveryReason.trim();
+    if (!reason) return;
+    const target = recoveryTargetId.trim() || undefined;
+    const payload =
+      recoveryKind === "CORRECT_ALIVE"
+        ? { kind: recoveryKind, playerId: target, alive: recoveryAlive, reason }
+        : recoveryKind === "RESTORE_GHOST_VOTE"
+          ? { kind: recoveryKind, playerId: target, reason }
+          : { kind: recoveryKind, actionId: target, reason };
+    const ok = await runMutation(() =>
+      api(`/api/v1/games/${gameId}/storyteller/recovery/override`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version, payload }),
+      }),
+    );
+    if (ok) {
+      setRecoveryReason("");
+      setRecoveryTargetId("");
+    }
+  }
+
+  async function resetPlayerAccess(player: StorytellerPlayerDto) {
+    if (!game) return;
+    try {
+      const res = await api<AccessResetResponseDto>(
+        `/api/v1/games/${gameId}/players/${player.id}/access/reset`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            commandId: crypto.randomUUID(),
+            expectedVersion: game.version,
+          }),
+        },
+      );
+      setResetModal({ player, token: res.claimToken, busy: false, error: null });
+      await load();
+    } catch (err) {
+      const e = err as ApiClientError;
+      if (e.code === "VERSION_CONFLICT") {
+        await load();
+        setStale(true);
+      }
+      setResetModal({
+        player,
+        token: null,
+        busy: false,
+        error: friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się zresetować dostępu."),
+      });
+    }
+  }
+
+  function openResetAccess(player: StorytellerPlayerDto) {
+    setResetModal({ player, token: null, busy: true, error: null });
+    void resetPlayerAccess(player);
+  }
+
   const sorted = game ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat) : [];
   const ready = game?.isReady ?? false;
   const need = game ? Math.max(0, MIN_READY - game.participantCount) : 0;
@@ -771,6 +917,16 @@ export default function StorytellerDashboard() {
                               >
                                 Link do odbioru
                               </button>
+                              {(player.claimed || player.hasClaimToken) && (
+                                <button
+                                  type="button"
+                                  onClick={() => openResetAccess(player)}
+                                  disabled={busy}
+                                  className="min-h-11 rounded-lg border border-danger/40 px-3 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
+                                >
+                                  Reset dostępu
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleMove(player.id, -1)}
@@ -1446,6 +1602,250 @@ export default function StorytellerDashboard() {
                   </div>
                 </section>
               )}
+
+              {/* Control card (Slice 6) */}
+              <section className="card md:col-span-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="display text-xs tracking-[0.25em] text-moss">Sterowanie</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadAux()}
+                    disabled={busy}
+                    className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
+                  >
+                    Odśwież
+                  </button>
+                </div>
+
+                {!control ? (
+                  <p className="mt-3 text-sm text-ink-muted">Wczytuję panel sterowania…</p>
+                ) : (
+                  <>
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm text-ink-secondary">
+                      <span>
+                        <span className="text-ink-muted">status:</span> {control.status ?? "—"}
+                      </span>
+                      <span>
+                        <span className="text-ink-muted">faza:</span> {control.phase ?? "—"}
+                      </span>
+                      <span>
+                        <span className="text-ink-muted">cykl:</span> {control.cycleNumber}
+                      </span>
+                      <span>
+                        <span className="text-ink-muted">wersja:</span>{" "}
+                        <span className="tabular-nums">{control.version}</span>
+                      </span>
+                      <span>
+                        <span className="text-ink-muted">uczestnicy:</span> {control.participantCount}
+                      </span>
+                    </div>
+
+                    {control.blockingAction ? (
+                      <div className="mt-3 rounded-xl border border-brass/40 bg-brass/10 p-3">
+                        <p className="text-xs text-moss">Blokująca akcja</p>
+                        <p className="mt-1 text-sm text-ink-primary">
+                          {titleCaseCharacterId(control.blockingAction.kind)}{" "}
+                          <span className="text-brass">· {control.blockingAction.status}</span>
+                        </p>
+                        {control.blockingAction.actorPlayerId && (
+                          <p className="mt-0.5 text-xs text-ink-muted">
+                            {nameById.get(control.blockingAction.actorPlayerId) ??
+                              control.blockingAction.actorPlayerId}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-xs text-ink-muted">Brak blokującej akcji.</p>
+                    )}
+
+                    <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
+                      <p className="text-xs text-moss">Ostatnie zdarzenie</p>
+                      {control.lastEvent ? (
+                        <p className="mt-1 text-sm text-ink-secondary">
+                          <span className="tabular-nums">#{control.lastEvent.sequence}</span>{" "}
+                          {control.lastEvent.eventType} · wersja {control.lastEvent.gameVersion}
+                          <span className="text-ink-muted">
+                            {" "}
+                            · {formatTime(control.lastEvent.createdAt)}
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-sm text-ink-muted">brak</p>
+                      )}
+                      <p className="mt-3 text-xs text-moss">Ostatni punkt kontrolny</p>
+                      {control.latestCheckpoint ? (
+                        <p className="mt-1 text-sm text-ink-secondary">
+                          wersja {control.latestCheckpoint.gameVersion}
+                          {control.latestCheckpoint.reason &&
+                            ` · ${control.latestCheckpoint.reason}`}
+                          <span className="text-ink-muted">
+                            {" "}
+                            · {formatTime(control.latestCheckpoint.createdAt)}
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-sm text-ink-muted">brak</p>
+                      )}
+                    </div>
+
+                    <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
+                      <p className="text-xs text-moss">Spójność</p>
+                      {control.consistencyIssues.every((issue) => issue.ok) ? (
+                        <p className="mt-1 text-sm text-success">Spójność OK</p>
+                      ) : (
+                        <ul className="mt-1 flex flex-col gap-1">
+                          {control.consistencyIssues
+                            .filter((issue) => !issue.ok)
+                            .map((issue) => (
+                              <li key={issue.check} className="text-sm text-danger">
+                                {issue.check} — {issue.message}
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-end gap-2">
+                      <label className="min-w-40 flex-1">
+                        <span className="mb-1 block text-xs text-ink-muted">Powód (opcjonalnie)</span>
+                        <input
+                          value={checkpointReason}
+                          onChange={(e) => setCheckpointReason(e.target.value)}
+                          placeholder="np. przed nocą 3"
+                          autoComplete="off"
+                          className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleCreateCheckpoint}
+                        disabled={busy}
+                        className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                      >
+                        Utwórz punkt kontrolny
+                      </button>
+                    </div>
+                    {checkpointNote && (
+                      <p className="mt-2 text-xs text-ink-secondary">{checkpointNote}</p>
+                    )}
+                  </>
+                )}
+              </section>
+
+              {/* Recovery card (Slice 6) */}
+              <section className="card critical-card md:col-span-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="display text-xs tracking-[0.25em] text-moss">Odzyskiwanie</p>
+                  <span className="text-xs text-rust">nadpisania stanu</span>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void handleRecoveryOverride();
+                  }}
+                  className="mt-3 flex flex-col gap-2"
+                >
+                  <label>
+                    <span className="mb-1 block text-xs text-ink-muted">Rodzaj nadpisania</span>
+                    <select
+                      value={recoveryKind}
+                      onChange={(e) => setRecoveryKind(e.target.value as RecoveryKind)}
+                      className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary"
+                    >
+                      {RECOVERY_KINDS.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="mb-1 block text-xs text-ink-muted">
+                      {recoveryKind === "CORRECT_ALIVE" || recoveryKind === "RESTORE_GHOST_VOTE"
+                        ? "Identyfikator gracza"
+                        : "Identyfikator akcji"}
+                    </span>
+                    <input
+                      value={recoveryTargetId}
+                      onChange={(e) => setRecoveryTargetId(e.target.value)}
+                      placeholder="id"
+                      autoComplete="off"
+                      className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 font-mono text-sm text-ink-primary placeholder:text-ink-muted"
+                    />
+                  </label>
+
+                  {recoveryKind === "CORRECT_ALIVE" && (
+                    <label>
+                      <span className="mb-1 block text-xs text-ink-muted">Stan życia</span>
+                      <select
+                        value={recoveryAlive ? "true" : "false"}
+                        onChange={(e) => setRecoveryAlive(e.target.value === "true")}
+                        className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary"
+                      >
+                        <option value="true">żyje</option>
+                        <option value="false">nie żyje</option>
+                      </select>
+                    </label>
+                  )}
+
+                  <label>
+                    <span className="mb-1 block text-xs text-ink-muted">Powód (wymagany)</span>
+                    <input
+                      value={recoveryReason}
+                      onChange={(e) => setRecoveryReason(e.target.value)}
+                      placeholder="Dlaczego nadpisujesz stan?"
+                      autoComplete="off"
+                      className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={busy || !recoveryReason.trim()}
+                    className="min-h-11 rounded-xl border border-rust/50 bg-rust/15 px-4 text-rust transition-colors hover:bg-rust/25 disabled:opacity-50"
+                  >
+                    Wykonaj nadpisanie
+                  </button>
+                </form>
+              </section>
+
+              {/* Audit card (Slice 6) */}
+              <section className="card md:col-span-6">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="display text-xs tracking-[0.25em] text-moss">Audyt</p>
+                  {audit && (
+                    <span className="text-xs text-ink-muted">{audit.events.length} zdarzeń</span>
+                  )}
+                </div>
+
+                {!audit ? (
+                  <p className="mt-3 text-sm text-ink-muted">Wczytuję dziennik zdarzeń…</p>
+                ) : audit.events.length === 0 ? (
+                  <p className="mt-3 text-sm text-ink-muted">Brak zdarzeń.</p>
+                ) : (
+                  <ol className="mt-3 flex max-h-96 flex-col gap-1 overflow-y-auto pr-1">
+                    {audit.events.map((event) => (
+                      <li
+                        key={event.sequence}
+                        className="flex flex-wrap items-baseline gap-x-3 rounded-lg px-2 py-1.5 text-sm odd:bg-card-soft/40"
+                      >
+                        <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-ink-muted">
+                          #{event.sequence}
+                        </span>
+                        <span className="min-w-0 break-words text-ink-primary">{event.eventType}</span>
+                        <span className="min-w-0 truncate text-xs text-ink-muted">
+                          {event.actor ?? "—"}
+                        </span>
+                        <span className="ml-auto shrink-0 text-xs tabular-nums text-ink-muted">
+                          {formatTime(event.createdAt)}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
             </div>
           </>
         )}
@@ -1458,6 +1858,16 @@ export default function StorytellerDashboard() {
           busy={claimModal.busy}
           error={claimModal.error}
           onClose={() => setClaimModal(null)}
+        />
+      )}
+
+      {resetModal && (
+        <ResetAccessModal
+          playerName={resetModal.player.displayName}
+          token={resetModal.token}
+          busy={resetModal.busy}
+          error={resetModal.error}
+          onClose={() => setResetModal(null)}
         />
       )}
     </div>
@@ -1560,6 +1970,113 @@ function ClaimModal({
             </div>
             <p className="mt-3 text-xs text-ink-muted">
               Ten link działa raz. Skopiuj go teraz — nie zostanie pokazany ponownie.
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResetAccessModal({
+  playerName,
+  token,
+  busy,
+  error,
+  onClose,
+}: {
+  playerName: string;
+  token: string | null;
+  busy: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [token, onClose]);
+
+  async function copy() {
+    if (!token) return;
+    try {
+      await navigator.clipboard.writeText(token);
+    } catch {
+      const field = document.getElementById("reset-token-field") as HTMLInputElement | null;
+      if (field) {
+        field.focus();
+        field.select();
+        try {
+          document.execCommand("copy");
+        } catch {
+          // Manual copy still available via the selected text.
+        }
+      }
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Reset dostępu dla: ${playerName}`}
+        className="card w-full max-w-md bg-elevated"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="display text-xs tracking-[0.25em] text-moss">Reset dostępu</p>
+            <h2 className="mt-1 break-words text-lg text-ink-primary">{playerName}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 shrink-0 rounded-lg px-3 text-ink-muted hover:text-ink-primary"
+          >
+            Zamknij
+          </button>
+        </div>
+
+        {busy && (
+          <p className="mt-4 text-sm text-ink-secondary">Resetuję dostęp i wydaję nowy token…</p>
+        )}
+
+        {!busy && error && <p className="mt-4 text-sm text-danger">{error}</p>}
+
+        {!busy && token && (
+          <>
+            <label htmlFor="reset-token-field" className="mt-4 block text-sm text-ink-secondary">
+              Wyślij ten nowy jednorazowy token do: {playerName}
+            </label>
+            <div className="mt-2 flex gap-2">
+              <input
+                id="reset-token-field"
+                readOnly
+                value={token}
+                className="min-h-11 w-full rounded-lg border border-line bg-card-soft px-3 font-mono text-sm text-ink-secondary"
+              />
+              <button
+                type="button"
+                onClick={copy}
+                className="min-h-11 shrink-0 rounded-lg border border-brass/40 bg-brass/10 px-4 text-brass hover:bg-brass/20"
+              >
+                {copied ? "Skopiowano" : "Kopiuj"}
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-ink-muted">
+              Ten token działa raz i zastępuje poprzedni dostęp. Skopiuj go teraz — nie zostanie
+              pokazany ponownie.
             </p>
           </>
         )}

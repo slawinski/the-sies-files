@@ -269,6 +269,76 @@ export interface ScanResponseDto {
   outcome: ScanOutcomeDto | { duplicate: true };
 }
 
+// ---- Slice 6: control plane / recovery / audit DTOs -------------------------
+
+export interface BlockingActionDto {
+  id: string;
+  kind: string;
+  actorPlayerId: string | null;
+  status: string;
+}
+
+export interface LastEventDto {
+  eventType: string;
+  sequence: number;
+  gameVersion: number;
+  createdAt: string;
+}
+
+export interface CheckpointDto {
+  id: string;
+  gameVersion: number;
+  checksum: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface ConsistencyIssueDto {
+  check: string;
+  ok: boolean;
+  message: string;
+}
+
+export interface StorytellerControlDto {
+  gameId: string;
+  name: string | null;
+  status: string | null;
+  phase: string | null;
+  cycleNumber: number;
+  version: number;
+  eventSequence: number;
+  participantCount: number;
+  blockingAction: BlockingActionDto | null;
+  lastEvent: LastEventDto | null;
+  latestCheckpoint: CheckpointDto | null;
+  consistencyIssues: ConsistencyIssueDto[];
+}
+
+export interface AuditEventDto {
+  sequence: number;
+  gameVersion: number;
+  eventType: string;
+  actor: string | null;
+  commandId: string | null;
+  payload: unknown;
+  createdAt: string;
+}
+
+export interface StorytellerAuditDto {
+  events: AuditEventDto[];
+}
+
+export interface CheckpointResponseDto {
+  version: number;
+  checkpointId: string;
+  valid: boolean;
+}
+
+export interface AccessResetResponseDto {
+  version: number;
+  claimToken: string;
+}
+
 export interface StorytellerGameProjection {
   gameId: string;
   name: string;
