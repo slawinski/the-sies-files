@@ -40,6 +40,27 @@ function alignmentLabel(alignment: string): string {
   return alignment === "EVIL" ? "Zło" : "Dobro";
 }
 
+function winnerLabel(winner: string | null): string {
+  if (winner === "GOOD") return "Wygrywa dobro";
+  if (winner === "EVIL") return "Wygrywa zło";
+  return "";
+}
+
+function nominationStatusLabel(status: string): string {
+  switch (status) {
+    case "VOTING":
+      return "głosowanie";
+    case "LOCKED":
+      return "zablokowano";
+    case "RESOLVED":
+      return "rozstrzygnięto";
+    case "CREATED":
+      return "utworzono";
+    default:
+      return status;
+  }
+}
+
 function isInfoResult(result: unknown): result is InfoResultDto {
   if (typeof result !== "object" || result === null) return false;
   return "kind" in result && typeof (result as { kind?: unknown }).kind === "string";
@@ -111,6 +132,8 @@ export default function StorytellerDashboard() {
     error: string | null;
   } | null>(null);
 
+  const [winner, setWinner] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     try {
       const next = await api<StorytellerGameProjection>(`/api/v1/games/${gameId}/storyteller`);
@@ -146,6 +169,31 @@ export default function StorytellerDashboard() {
         setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
       }
       return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Like `runMutation`, but returns the endpoint's response body when it succeeds. */
+  async function runWithResult<T>(
+    action: () => Promise<T>,
+  ): Promise<{ ok: boolean; value: T | null }> {
+    setBusy(true);
+    setActionError(null);
+    setStale(false);
+    try {
+      const value = await action();
+      await load();
+      return { ok: true, value };
+    } catch (err) {
+      const e = err as ApiClientError;
+      if (e.code === "VERSION_CONFLICT") {
+        await load();
+        setStale(true);
+      } else {
+        setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
+      }
+      return { ok: false, value: null };
     } finally {
       setBusy(false);
     }
@@ -332,6 +380,72 @@ export default function StorytellerDashboard() {
     );
   }
 
+  async function handleOpenNominations() {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/investigation/nominations/open`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleCloseNominations() {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/investigation/nominations/close`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleLockVote(nominationId: string) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/nominations/${nominationId}/votes/lock`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleResolveExecution() {
+    if (!game) return;
+    const res = await runWithResult<{ version: number; winner: string | null }>(() =>
+      api(`/api/v1/games/${gameId}/investigation/resolve-execution`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+    if (res.ok) setWinner(res.value?.winner ?? null);
+  }
+
+  async function handleCloseInvestigation() {
+    if (!game) return;
+    const res = await runWithResult<{ version: number; winner: string | null }>(() =>
+      api(`/api/v1/games/${gameId}/investigation/close`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+    if (res.ok) setWinner(res.value?.winner ?? null);
+  }
+
+  async function handleExileTraveller(playerId: string) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/traveller/exile`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { playerId },
+        }),
+      }),
+    );
+  }
+
   const sorted = game ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat) : [];
   const ready = game?.isReady ?? false;
   const need = game ? Math.max(0, MIN_READY - game.participantCount) : 0;
@@ -357,6 +471,13 @@ export default function StorytellerDashboard() {
   const unresolvedCount =
     operational?.actions.filter((a) => a.status !== "RESOLVED").length ?? 0;
   const operationalCardVisible = game ? game.status === "ROLE_REVEAL" || game.status === "ACTIVE" : false;
+
+  const investigation = game?.investigation ?? null;
+  const investigationVisible = game ? game.phase === "INVESTIGATION" : false;
+  const gameEnded = game?.status === "ENDED";
+  const candidateId = investigation?.currentExecutionCandidatePlayerId ?? null;
+  const candidateName = candidateId ? (nameById.get(candidateId) ?? candidateId) : null;
+  const travellers = game ? game.players.filter((p) => p.participantKind === "TRAVELLER" && p.alive) : [];
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -826,6 +947,164 @@ export default function StorytellerDashboard() {
                         Zakończ fazę operacyjną
                       </button>
                     </>
+                  )}
+                </section>
+              )}
+
+              {/* Investigation card */}
+              {investigationVisible && (
+                <section className="card md:col-span-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="display text-xs tracking-[0.25em] text-moss">Śledztwo</p>
+                    {investigation && (
+                      <span className="text-xs text-ink-muted">cykl {investigation.cycleNumber}</span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {investigation?.nominationState === "CLOSED" ? (
+                      <button
+                        type="button"
+                        onClick={handleOpenNominations}
+                        disabled={busy || gameEnded}
+                        className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                      >
+                        Otwórz nominacje
+                      </button>
+                    ) : investigation?.nominationState === "OPEN" ? (
+                      <button
+                        type="button"
+                        onClick={handleCloseNominations}
+                        disabled={busy || gameEnded}
+                        className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                      >
+                        Zamknij nominacje
+                      </button>
+                    ) : (
+                      <span className="text-sm text-ink-muted">
+                        stan: {investigation?.nominationState ?? "—"}
+                      </span>
+                    )}
+                    {gameEnded && <span className="text-xs text-ink-muted">sprawa zakończona</span>}
+                  </div>
+
+                  <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
+                    <p className="text-xs text-moss">Kandydat do egzekucji</p>
+                    {candidateId ? (
+                      <p className="mt-1 text-base text-ink-primary">
+                        {candidateName}{" "}
+                        <span className="text-sm text-ink-muted">
+                          ({investigation?.currentHighEffectiveVotes ?? 0} głosów)
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-sm text-ink-muted">Brak kandydata.</p>
+                    )}
+                  </div>
+
+                  {game.nominations.length > 0 ? (
+                    <ol className="mt-3 flex flex-col gap-2">
+                      {game.nominations.map((n) => {
+                        const locked = n.status === "LOCKED" || n.status === "RESOLVED";
+                        return (
+                          <li
+                            key={n.id}
+                            className="rounded-xl border border-line bg-card-soft/60 p-3"
+                          >
+                            <div className="flex min-w-0 items-center gap-3">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
+                                {n.sequence + 1}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-base text-ink-primary">
+                                  {n.nominatorName ?? "—"} → {n.nomineeName ?? "—"}
+                                </p>
+                                <p className="text-xs text-ink-muted">
+                                  {nominationStatusLabel(n.status)}
+                                </p>
+                              </div>
+                              {locked && (
+                                <span
+                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${
+                                    n.qualified
+                                      ? "border-success/40 text-success"
+                                      : "border-line text-ink-muted"
+                                  }`}
+                                >
+                                  {n.qualified ? "kandydat" : "nie przeszedł"} · {n.effectiveTotal}
+                                </span>
+                              )}
+                              {n.status === "VOTING" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLockVote(n.id)}
+                                  disabled={busy || gameEnded}
+                                  className="min-h-11 shrink-0 rounded-lg border border-brass/40 px-3 text-sm text-brass hover:bg-brass/10 disabled:opacity-50"
+                                >
+                                  Zablokuj głosowanie
+                                </button>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  ) : (
+                    <p className="mt-3 text-sm text-ink-muted">Brak nominacji.</p>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleResolveExecution}
+                      disabled={busy || gameEnded || !candidateId}
+                      className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                    >
+                      Wykonaj egzekucję
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseInvestigation}
+                      disabled={busy || gameEnded}
+                      className="min-h-11 rounded-xl border border-line px-5 text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
+                    >
+                      Zamknij śledztwo
+                    </button>
+                  </div>
+
+                  {winner && (
+                    <div
+                      className={`mt-4 rounded-xl border p-3 text-center ${
+                        winner === "EVIL"
+                          ? "border-danger/40 bg-danger/10"
+                          : "border-success/40 bg-success/10"
+                      }`}
+                    >
+                      <p className="display text-lg text-ink-primary">{winnerLabel(winner)}</p>
+                    </div>
+                  )}
+
+                  {travellers.length > 0 && (
+                    <div className="mt-4 rounded-xl border border-line bg-card-soft/60 p-3">
+                      <p className="text-xs text-moss">Podróżni</p>
+                      <ul className="mt-2 flex flex-col gap-2">
+                        {travellers.map((p) => (
+                          <li key={p.id} className="flex items-center justify-between gap-3">
+                            <span className="min-w-0 truncate text-sm text-ink-primary">
+                              {p.displayName}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleExileTraveller(p.id)}
+                              disabled={busy || gameEnded}
+                              className="min-h-11 shrink-0 rounded-lg border border-danger/40 px-3 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
+                            >
+                              Wygnaj
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </section>
               )}

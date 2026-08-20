@@ -178,6 +178,51 @@ export interface DeliveredInfoDto {
   result: unknown;
 }
 
+// ---- Slice 4: investigation / nomination / vote DTOs -----------------------
+
+export interface InvestigationDto {
+  cycleNumber: number;
+  nominationState: string;
+  currentExecutionCandidatePlayerId: string | null;
+  currentHighEffectiveVotes: number | null;
+  executionOccurred: boolean;
+}
+
+export interface VoteDto {
+  playerId: string;
+  playerName: string | null;
+  rawIntent: boolean;
+  valid: boolean | null;
+  effectiveWeight: number;
+  ghostVoteConsumed: boolean;
+}
+
+export interface NominationDto {
+  id: string;
+  sequence: number;
+  nominatorId: string;
+  nominatorName: string | null;
+  nomineeId: string;
+  nomineeName: string | null;
+  status: string;
+  rawTotal: number;
+  effectiveTotal: number;
+  qualified: boolean;
+  votes: VoteDto[];
+}
+
+export interface PlayerNominationDto {
+  id: string;
+  sequence: number;
+  nominatorName: string | null;
+  nomineeName: string | null;
+  status: string;
+  rawTotal: number;
+  effectiveTotal: number;
+  qualified: boolean;
+  myVoteIntent: boolean | null;
+}
+
 export interface StorytellerGameProjection {
   gameId: string;
   name: string;
@@ -190,6 +235,8 @@ export interface StorytellerGameProjection {
   players: StorytellerPlayerDto[];
   setup: StorytellerSetupDto | null;
   operational: StorytellerOperationalDto | null;
+  investigation: InvestigationDto | null;
+  nominations: NominationDto[];
 }
 
 export interface PlayerGameProjection {
@@ -213,6 +260,8 @@ export interface PlayerGameProjection {
   roleAcknowledged: boolean;
   activeAction: ActiveActionDto | null;
   deliveredInfo: DeliveredInfoDto[];
+  investigation: InvestigationDto | null;
+  nominations: PlayerNominationDto[];
 }
 
 // Mirror of the server-side `InfoResult` union (operational/info-resolver).

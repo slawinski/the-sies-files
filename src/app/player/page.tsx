@@ -26,6 +26,21 @@ function alignmentLabel(alignment: string): string {
   return alignment === "EVIL" ? "Zło" : "Dobro";
 }
 
+function nominationStatusLabel(status: string): string {
+  switch (status) {
+    case "VOTING":
+      return "głosowanie";
+    case "LOCKED":
+      return "zablokowano";
+    case "RESOLVED":
+      return "rozstrzygnięto";
+    case "CREATED":
+      return "utworzono";
+    default:
+      return status;
+  }
+}
+
 function isInfoResult(result: unknown): result is InfoResultDto {
   if (typeof result !== "object" || result === null) return false;
   return "kind" in result && typeof (result as { kind?: unknown }).kind === "string";
@@ -137,6 +152,7 @@ export default function PlayerWaiting() {
 
   const [revealed, setRevealed] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [nomineeId, setNomineeId] = useState<string | null>(null);
 
   const apply = useCallback(async () => {
     try {
@@ -233,12 +249,53 @@ export default function PlayerWaiting() {
     });
   }
 
+  async function handleNominate() {
+    if (!game || !nomineeId) return;
+    const ok = await runMutation(() =>
+      api(`/api/v1/games/${game.gameId}/nominations`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { nomineeId },
+        }),
+      }),
+    );
+    if (ok) setNomineeId(null);
+  }
+
+  async function handleVoteIntent(nominationId: string, intent: boolean) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${game.gameId}/nominations/${nominationId}/votes/intent`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { intent },
+        }),
+      }),
+    );
+  }
+
   const roster = game
     ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat)
     : [];
   const nameById = new Map((game?.players ?? []).map((p) => [p.id, p.displayName]));
   const role = game?.myRole ?? null;
   const requiredTargets = game?.activeAction ? requiredTargetCount(game.activeAction.kind) : null;
+
+  const investigation = game?.investigation ?? null;
+  const investigationVisible = game ? game.phase === "INVESTIGATION" : false;
+  const candidateId = investigation?.currentExecutionCandidatePlayerId ?? null;
+  const candidateName = candidateId ? (nameById.get(candidateId) ?? candidateId) : null;
+  const livingOthers = game
+    ? game.players.filter((p) => p.alive && p.id !== game.me.playerId)
+    : [];
+  const votingNominations = game ? game.nominations.filter((n) => n.status === "VOTING") : [];
+  const resolvedNominations = game
+    ? game.nominations.filter((n) => n.status === "LOCKED" || n.status === "RESOLVED")
+    : [];
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -493,6 +550,174 @@ export default function PlayerWaiting() {
                     </li>
                   ))}
                 </ol>
+              </section>
+            )}
+
+            {/* Investigation */}
+            {investigationVisible && (
+              <section className="card md:col-span-3">
+                <p className="display text-xs tracking-[0.25em] text-moss">Śledztwo</p>
+
+                <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
+                  <p className="text-xs text-moss">Kandydat do egzekucji</p>
+                  {candidateId ? (
+                    <p className="mt-1 text-base text-ink-primary">
+                      {candidateName}{" "}
+                      <span className="text-sm text-ink-muted">
+                        ({investigation?.currentHighEffectiveVotes ?? 0} głosów)
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-ink-muted">Brak kandydata.</p>
+                  )}
+                </div>
+
+                {!game.me.alive && (
+                  <p className="mt-2 text-xs text-ink-muted">
+                    Jesteś martwy — głosujesz jako duch
+                    {game.me.ghostVoteAvailable ? " (głos ducha dostępny)" : " (głos ducha zużyty)"}.
+                  </p>
+                )}
+
+                {investigation?.nominationState === "OPEN" && (
+                  <div className="mt-4">
+                    <p className="text-sm text-ink-secondary">Kogo nominujesz?</p>
+                    {livingOthers.length === 0 ? (
+                      <p className="mt-2 text-sm text-ink-muted">
+                        Brak żywych graczy do nominowania.
+                      </p>
+                    ) : (
+                      <>
+                        <ol className="mt-2 flex flex-col gap-2">
+                          {livingOthers.map((player) => {
+                            const selected = nomineeId === player.id;
+                            return (
+                              <li key={player.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => setNomineeId(selected ? null : player.id)}
+                                  aria-pressed={selected}
+                                  className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                                    selected
+                                      ? "border-brass bg-brass/15"
+                                      : "border-line bg-card-soft/60 hover:border-brass/40"
+                                  }`}
+                                >
+                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
+                                    {player.virtualSeat + 1}
+                                  </span>
+                                  <span className="min-w-0 flex-1 truncate text-base text-ink-primary">
+                                    {player.displayName}
+                                  </span>
+                                  {selected && (
+                                    <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-xs text-brass">
+                                      wybrano
+                                    </span>
+                                  )}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                        <button
+                          type="button"
+                          onClick={handleNominate}
+                          disabled={busy || !nomineeId || !game.me.alive}
+                          className="mt-3 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                        >
+                          Nominuj
+                        </button>
+                        {!game.me.alive && (
+                          <p className="mt-1 text-xs text-ink-muted">
+                            Martwi gracze nie mogą nominować.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {votingNominations.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs text-moss">Głosowanie</p>
+                    <div className="mt-2 flex flex-col gap-2">
+                      {votingNominations.map((n) => {
+                        const yesActive = n.myVoteIntent === true;
+                        const noActive = n.myVoteIntent === false;
+                        return (
+                          <div
+                            key={n.id}
+                            className="rounded-xl border border-line bg-card-soft/60 p-3"
+                          >
+                            <p className="text-sm text-ink-primary">
+                              {n.nominatorName ?? "—"} → {n.nomineeName ?? "—"}
+                            </p>
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleVoteIntent(n.id, true)}
+                                disabled={busy}
+                                aria-pressed={yesActive}
+                                className={`min-h-11 flex-1 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
+                                  yesActive
+                                    ? "border-success/50 bg-success/10 text-success"
+                                    : "border-line text-ink-secondary hover:border-success/40 hover:text-ink-primary"
+                                }`}
+                              >
+                                Tak
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleVoteIntent(n.id, false)}
+                                disabled={busy}
+                                aria-pressed={noActive}
+                                className={`min-h-11 flex-1 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
+                                  noActive
+                                    ? "border-danger/50 bg-danger/10 text-danger"
+                                    : "border-line text-ink-secondary hover:border-danger/40 hover:text-ink-primary"
+                                }`}
+                              >
+                                Nie
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {resolvedNominations.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs text-moss">Rozstrzygnięte nominacje</p>
+                    <div className="mt-2 flex flex-col gap-2">
+                      {resolvedNominations.map((n) => (
+                        <div
+                          key={n.id}
+                          className="rounded-xl border border-line bg-card-soft/60 p-3"
+                        >
+                          <p className="text-sm text-ink-primary">
+                            {n.nominatorName ?? "—"} → {n.nomineeName ?? "—"}
+                          </p>
+                          <p className="mt-1 flex items-center gap-2 text-xs">
+                            <span className="text-ink-muted">
+                              {nominationStatusLabel(n.status)} · {n.effectiveTotal} głosów
+                            </span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 ${
+                                n.qualified
+                                  ? "border-success/40 text-success"
+                                  : "border-line text-ink-muted"
+                              }`}
+                            >
+                              {n.qualified ? "kandydat" : "nie przeszedł"}
+                            </span>
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             )}
           </div>

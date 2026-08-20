@@ -5,12 +5,15 @@
 
 import type {
   GameSession,
+  InvestigationState,
+  Nomination,
   OperationalAction,
   OperationalPhase,
   Player,
   PlayerClaim,
   PlayerSecret,
   SetupDraft,
+  Vote,
 } from "@prisma/client";
 import { DomainError } from "@/lib/errors";
 import { isRosterReady } from "@/modules/game-session/roster.rules";
@@ -60,6 +63,8 @@ export interface PlayerGameProjection extends PublicGameProjection {
   roleAcknowledged: boolean;
   activeAction: ActiveActionDto | null;
   deliveredInfo: DeliveredInfoDto[];
+  investigation: InvestigationDto | null;
+  nominations: PlayerNominationDto[];
 }
 
 export interface StorytellerPlayerDto extends PlayerPublicDto {
@@ -79,6 +84,49 @@ export interface StorytellerActionDto {
   resolutionJson: unknown;
 }
 
+export interface InvestigationDto {
+  cycleNumber: number;
+  nominationState: string;
+  currentExecutionCandidatePlayerId: string | null;
+  currentHighEffectiveVotes: number | null;
+  executionOccurred: boolean;
+}
+
+export interface VoteDto {
+  playerId: string;
+  playerName: string | null;
+  rawIntent: boolean;
+  valid: boolean | null;
+  effectiveWeight: number;
+  ghostVoteConsumed: boolean;
+}
+
+export interface NominationDto {
+  id: string;
+  sequence: number;
+  nominatorId: string;
+  nominatorName: string | null;
+  nomineeId: string;
+  nomineeName: string | null;
+  status: string;
+  rawTotal: number;
+  effectiveTotal: number;
+  qualified: boolean;
+  votes: VoteDto[];
+}
+
+export interface PlayerNominationDto {
+  id: string;
+  sequence: number;
+  nominatorName: string | null;
+  nomineeName: string | null;
+  status: string;
+  rawTotal: number;
+  effectiveTotal: number;
+  qualified: boolean;
+  myVoteIntent: boolean | null;
+}
+
 export interface StorytellerGameProjection extends PublicGameProjection {
   players: StorytellerPlayerDto[];
   setup: {
@@ -92,6 +140,8 @@ export interface StorytellerGameProjection extends PublicGameProjection {
     status: string;
     actions: StorytellerActionDto[];
   } | null;
+  investigation: InvestigationDto | null;
+  nominations: NominationDto[];
 }
 
 function sortBySeat(players: Player[]): Player[] {
@@ -130,6 +180,8 @@ export interface PlayerProjectionExtras {
   secret?: PlayerSecret | null;
   candidate?: SetupCandidate | null;
   myActions?: OperationalAction[];
+  investigation?: InvestigationState | null;
+  nominations?: (Nomination & { votes: Vote[] })[];
 }
 
 export function buildPlayerProjection(
@@ -157,6 +209,28 @@ export function buildPlayerProjection(
     .filter((a) => a.status === "RESOLVED" && a.resolutionJson != null)
     .map((a) => ({ actionId: a.id, kind: a.kind, result: a.resolutionJson }));
 
+  const nameById = new Map(players.map((p) => [p.id, p.displayName]));
+  const investigation = extras.investigation
+    ? {
+        cycleNumber: extras.investigation.cycleNumber,
+        nominationState: extras.investigation.nominationState,
+        currentExecutionCandidatePlayerId: extras.investigation.currentExecutionCandidatePlayerId,
+        currentHighEffectiveVotes: extras.investigation.currentHighEffectiveVotes,
+        executionOccurred: extras.investigation.executionOccurred,
+      }
+    : null;
+  const nominations: PlayerNominationDto[] = (extras.nominations ?? []).map((n) => ({
+    id: n.id,
+    sequence: n.sequence,
+    nominatorName: nameById.get(n.nominatorId) ?? null,
+    nomineeName: nameById.get(n.nomineeId) ?? null,
+    status: n.status,
+    rawTotal: n.rawTotal,
+    effectiveTotal: n.effectiveTotal,
+    qualified: n.qualified,
+    myVoteIntent: n.votes.find((v) => v.playerId === viewerPlayerId)?.rawIntent ?? null,
+  }));
+
   return {
     ...base,
     me: {
@@ -170,12 +244,16 @@ export function buildPlayerProjection(
     roleAcknowledged,
     activeAction: active ? { id: active.id, kind: active.kind } : null,
     deliveredInfo,
+    investigation,
+    nominations,
   };
 }
 
 export interface StorytellerProjectionExtras {
   draft?: SetupDraft | null;
   operational?: (OperationalPhase & { actions: OperationalAction[] }) | null;
+  investigation?: InvestigationState | null;
+  nominations?: (Nomination & { votes: Vote[] })[];
 }
 
 export function buildStorytellerProjection(
@@ -214,6 +292,37 @@ export function buildStorytellerProjection(
       }
     : null;
 
+  const investigation = extras.investigation
+    ? {
+        cycleNumber: extras.investigation.cycleNumber,
+        nominationState: extras.investigation.nominationState,
+        currentExecutionCandidatePlayerId: extras.investigation.currentExecutionCandidatePlayerId,
+        currentHighEffectiveVotes: extras.investigation.currentHighEffectiveVotes,
+        executionOccurred: extras.investigation.executionOccurred,
+      }
+    : null;
+
+  const nominations: NominationDto[] = (extras.nominations ?? []).map((n) => ({
+    id: n.id,
+    sequence: n.sequence,
+    nominatorId: n.nominatorId,
+    nominatorName: nameById.get(n.nominatorId) ?? null,
+    nomineeId: n.nomineeId,
+    nomineeName: nameById.get(n.nomineeId) ?? null,
+    status: n.status,
+    rawTotal: n.rawTotal,
+    effectiveTotal: n.effectiveTotal,
+    qualified: n.qualified,
+    votes: n.votes.map((v) => ({
+      playerId: v.playerId,
+      playerName: nameById.get(v.playerId) ?? null,
+      rawIntent: v.rawIntent,
+      valid: v.valid,
+      effectiveWeight: v.effectiveWeight,
+      ghostVoteConsumed: v.ghostVoteConsumed,
+    })),
+  }));
+
   return {
     ...base,
     players: sortBySeat(players).map((p) => {
@@ -227,5 +336,7 @@ export function buildStorytellerProjection(
     }),
     setup,
     operational,
+    investigation,
+    nominations,
   };
 }

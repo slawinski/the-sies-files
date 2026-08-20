@@ -14,6 +14,16 @@ export async function loadGameAndPlayers(gameId: string) {
   return { game, players };
 }
 
+export async function loadInvestigationData(gameId: string, cycleNumber: number) {
+  const investigation = await prisma.investigationState.findUnique({ where: { gameId } });
+  const nominations = await prisma.nomination.findMany({
+    where: { gameId, cycleNumber },
+    include: { votes: true },
+    orderBy: { sequence: "asc" },
+  });
+  return { investigation, nominations };
+}
+
 export async function loadStorytellerData(gameId: string) {
   const { game, players } = await loadGameAndPlayers(gameId);
   const claims = await prisma.playerClaim.findMany({
@@ -24,7 +34,8 @@ export async function loadStorytellerData(gameId: string) {
     where: { gameId, status: { not: "COMPLETED" } },
     include: { actions: { orderBy: { orderIndex: "asc" } } },
   });
-  return { game, players, claims, draft, operational };
+  const { investigation, nominations } = await loadInvestigationData(gameId, game.cycleNumber);
+  return { game, players, claims, draft, operational, investigation, nominations };
 }
 
 export async function loadPlayerData(gameId: string, playerId: string) {
@@ -39,5 +50,6 @@ export async function loadPlayerData(gameId: string, playerId: string) {
     where: { actorPlayerId: playerId },
     orderBy: { orderIndex: "asc" },
   });
-  return { game, players, secret, candidate, myActions };
+  const { investigation, nominations } = await loadInvestigationData(gameId, game.cycleNumber);
+  return { game, players, secret, candidate, myActions, investigation, nominations };
 }
