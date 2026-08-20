@@ -9,7 +9,9 @@ import {
   type DeliveredInfoDto,
   type InfoResultDto,
   type PlayerGameProjection,
+  type PlayerScenarioDto,
   type RoleRevealDto,
+  type ScanResponseDto,
 } from "@/lib/client-api";
 
 type View = "loading" | "ready" | "unclaimed" | "error";
@@ -39,6 +41,56 @@ function nominationStatusLabel(status: string): string {
     default:
       return status;
   }
+}
+
+function mapVersionLabel(mapVersionId: string | null): string {
+  return mapVersionId === "MAP_EXTENDED" ? "Mapa rozszerzona" : "Mapa główna";
+}
+
+function taskStateLabel(state: string): string {
+  return state === "COMPLETED" ? "ukończono" : "do zrobienia";
+}
+
+/** Friendly summary of a successful QR scan, using refetched titles when known. */
+function isDuplicateOutcome(
+  outcome: ScanResponseDto["outcome"],
+): outcome is { duplicate: true } {
+  return "duplicate" in outcome && outcome.duplicate === true;
+}
+
+function describeScanOutcome(
+  outcome: ScanResponseDto["outcome"],
+  scenario: PlayerScenarioDto | null,
+): string {
+  if (isDuplicateOutcome(outcome)) {
+    return "Ten kod został już wykorzystany.";
+  }
+  const parts: string[] = [];
+  if (outcome.discoveries.length > 0) {
+    const titles = outcome.discoveries.map(
+      (id) => scenario?.clues.find((c) => c.id === id)?.title ?? id,
+    );
+    parts.push(`Nowe dowody: ${titles.join(", ")}`);
+  }
+  if (outcome.tasks.length > 0) {
+    const titles = outcome.tasks.map(
+      (id) => scenario?.tasks.find((t) => t.id === id)?.title ?? id,
+    );
+    parts.push(`Nowe zadania: ${titles.join(", ")}`);
+  }
+  if (outcome.mapVersionId) {
+    parts.push(
+      outcome.mapVersionId === "MAP_EXTENDED"
+        ? "Mapa rozszerzona odblokowana — aneks dołączony do akt."
+        : "Mapa zaktualizowana.",
+    );
+  }
+  for (const conditionId of outcome.conditions) {
+    parts.push(
+      conditionId === "INJURED" ? "Jesteś ranny — znajdź apteczkę." : `Stan: ${conditionId}`,
+    );
+  }
+  return parts.length > 0 ? parts.join(" ") : "Skan przyjęty.";
 }
 
 function isInfoResult(result: unknown): result is InfoResultDto {
@@ -154,12 +206,22 @@ export default function PlayerWaiting() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [nomineeId, setNomineeId] = useState<string | null>(null);
 
+  const [scanToken, setScanToken] = useState("");
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  /** Fetch + store the latest projection. Returns it so callers can react to it. */
+  const fetchProjection = useCallback(async (): Promise<PlayerGameProjection> => {
+    const next = await api<PlayerGameProjection>("/api/v1/me");
+    setGame(next);
+    setView("ready");
+    setError(null);
+    return next;
+  }, []);
+
   const apply = useCallback(async () => {
     try {
-      const next = await api<PlayerGameProjection>("/api/v1/me");
-      setGame(next);
-      setView("ready");
-      setError(null);
+      await fetchProjection();
     } catch (err) {
       const e = err as ApiClientError;
       if (e.status === 401 || e.code === "UNAUTHORIZED") {
@@ -169,7 +231,7 @@ export default function PlayerWaiting() {
         setView("error");
       }
     }
-  }, []);
+  }, [fetchProjection]);
 
   const load = useCallback(async () => {
     setView("loading");
@@ -278,6 +340,50 @@ export default function PlayerWaiting() {
     );
   }
 
+  async function handleScan() {
+    if (!game || !scanToken.trim()) return;
+    const token = scanToken.trim();
+    setBusy(true);
+    setActionError(null);
+    setScanMessage(null);
+    setScanError(null);
+    setStale(false);
+    try {
+      const res = await api<ScanResponseDto>(`/api/v1/games/${game.gameId}/scenario/qr/scan`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { token },
+        }),
+      });
+      setScanToken("");
+      let scenario: PlayerScenarioDto | null = null;
+      try {
+        scenario = (await fetchProjection()).scenario;
+      } catch {
+        // Refetch failed — the outcome summary falls back to raw ids.
+      }
+      setScanMessage(describeScanOutcome(res.outcome, scenario));
+    } catch (err) {
+      const e = err as ApiClientError;
+      if (e.code === "VERSION_CONFLICT") {
+        await refetch();
+        setStale(true);
+      } else if (e.code === "TERRAIN_UNAVAILABLE") {
+        setScanError(
+          "Teren niedostępny — skanowanie możliwe tylko podczas śledztwa, poza formalnymi nominacjami.",
+        );
+      } else if (e.code === "QR_ALREADY_CONSUMED") {
+        setScanError("Ten kod został już wykorzystany.");
+      } else {
+        setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const roster = game
     ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat)
     : [];
@@ -296,6 +402,8 @@ export default function PlayerWaiting() {
   const resolvedNominations = game
     ? game.nominations.filter((n) => n.status === "LOCKED" || n.status === "RESOLVED")
     : [];
+  const scenario = game?.scenario ?? null;
+  const scenarioVisible = game ? game.phase === "INVESTIGATION" && scenario !== null : false;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -716,6 +824,152 @@ export default function PlayerWaiting() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Scenario */}
+            {scenarioVisible && scenario && (
+              <section className="md:col-span-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="display text-xs tracking-[0.25em] text-moss">Scenariusz</p>
+                  <span className="text-xs text-ink-muted">etap: {scenario.stageId ?? "—"}</span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
+                  {/* Evidence */}
+                  <div className="card paper-card md:col-span-2">
+                    <p className="display text-xs tracking-[0.25em] text-ink">Dowody</p>
+                    {scenario.clues.length === 0 ? (
+                      <p className="mt-3 text-sm text-ink/70">Brak dowodów</p>
+                    ) : (
+                      <ol className="mt-3 flex flex-col gap-2">
+                        {scenario.clues.map((clue) => (
+                          <li
+                            key={clue.id}
+                            className="rounded-xl border border-ink/15 bg-ink/5 p-3"
+                          >
+                            <p className="text-sm font-semibold text-ink">{clue.title}</p>
+                            <p className="mt-1 text-sm text-ink/75">{clue.body}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+
+                  {/* Tasks */}
+                  <div className="card md:col-span-1">
+                    <p className="display text-xs tracking-[0.25em] text-moss">Zadania</p>
+                    {scenario.tasks.length === 0 ? (
+                      <p className="mt-3 text-sm text-ink-muted">Brak zadań</p>
+                    ) : (
+                      <ol className="mt-3 flex flex-col gap-2">
+                        {scenario.tasks.map((task) => {
+                          const done = task.state === "COMPLETED";
+                          return (
+                            <li
+                              key={task.id}
+                              className="rounded-xl border border-line bg-card-soft/60 p-3"
+                            >
+                              <p className="text-sm text-ink-primary">{task.title}</p>
+                              <p className={`mt-1 text-xs ${done ? "text-success" : "text-brass"}`}>
+                                {taskStateLabel(task.state)}
+                              </p>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )}
+                  </div>
+
+                  {/* Map */}
+                  <div className="card map-card md:col-span-2">
+                    <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+                      <p className="display text-xs tracking-[0.25em] text-moss">Mapa</p>
+                      <span className="text-xs text-ink-muted">
+                        {mapVersionLabel(scenario.mapVersionId)}
+                      </span>
+                    </div>
+                    <div className="p-4">
+                      {scenario.mapVersionId === "MAP_EXTENDED" && (
+                        <p className="mb-3 text-xs text-brass">aneks dołączony do akt</p>
+                      )}
+                      {scenario.mapLocations.length === 0 ? (
+                        <p className="text-sm text-ink-muted">Brak lokalizacji.</p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                          {scenario.mapLocations.map((location) => (
+                            <span
+                              key={location}
+                              className="rounded-lg border border-line bg-card-soft px-2.5 py-2 text-center text-xs text-ink-secondary"
+                            >
+                              {titleCaseCharacterId(location)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Scanner */}
+                  <div className="card md:col-span-1">
+                    <p className="display text-xs tracking-[0.25em] text-moss">Skaner</p>
+                    <p className="mt-2 text-xs text-ink-muted">
+                      Skanuj kody QR znalezione na terenie śledztwa.
+                    </p>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void handleScan();
+                      }}
+                      className="mt-3 flex flex-col gap-2"
+                    >
+                      <label htmlFor="qr-token" className="sr-only">
+                        Kod QR
+                      </label>
+                      <input
+                        id="qr-token"
+                        value={scanToken}
+                        onChange={(e) => setScanToken(e.target.value)}
+                        placeholder="Wpisz kod QR"
+                        autoComplete="off"
+                        className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
+                      />
+                      <button
+                        type="submit"
+                        disabled={busy || !scanToken.trim()}
+                        className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                      >
+                        Skanuj
+                      </button>
+                    </form>
+                    {scanMessage && (
+                      <p
+                        role="status"
+                        className="mt-3 rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-sm text-success"
+                      >
+                        {scanMessage}
+                      </p>
+                    )}
+                    {scanError && (
+                      <p
+                        role="alert"
+                        className="mt-3 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger"
+                      >
+                        {scanError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Scenario-only condition warning (no game effect) */}
+                {scenario.conditions.includes("INJURED") && (
+                  <div
+                    role="status"
+                    className="mt-3 flex min-h-11 items-center rounded-xl border border-rust/50 bg-rust/10 px-4 py-3 text-sm text-rust"
+                  >
+                    Jesteś ranny — znajdź apteczkę.
                   </div>
                 )}
               </section>

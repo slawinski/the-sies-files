@@ -223,6 +223,52 @@ export interface PlayerNominationDto {
   myVoteIntent: boolean | null;
 }
 
+// ---- Slice 5: scenario DTOs -------------------------------------------------
+
+export interface ScenarioClueDto {
+  id: string;
+  title: string;
+  body: string;
+}
+
+export interface ScenarioTaskDto {
+  id: string;
+  title: string;
+  state: string;
+}
+
+export interface PlayerScenarioDto {
+  stageId: string | null;
+  mapVersionId: string | null;
+  mapLocations: string[];
+  clues: ScenarioClueDto[];
+  tasks: ScenarioTaskDto[];
+  conditions: string[];
+}
+
+export interface ScenarioScanDto {
+  qrTokenId: string;
+  playerId: string;
+  playerName: string | null;
+}
+
+export interface StorytellerScenarioDto extends PlayerScenarioDto {
+  scans: ScenarioScanDto[];
+}
+
+/** Successful `POST /scenario/qr/scan` outcome (duplicate = idempotent replay). */
+export interface ScanOutcomeDto {
+  discoveries: string[];
+  tasks: string[];
+  conditions: string[];
+  mapVersionId: string | null;
+}
+
+export interface ScanResponseDto {
+  version: number;
+  outcome: ScanOutcomeDto | { duplicate: true };
+}
+
 export interface StorytellerGameProjection {
   gameId: string;
   name: string;
@@ -237,6 +283,7 @@ export interface StorytellerGameProjection {
   operational: StorytellerOperationalDto | null;
   investigation: InvestigationDto | null;
   nominations: NominationDto[];
+  scenario: StorytellerScenarioDto | null;
 }
 
 export interface PlayerGameProjection {
@@ -262,6 +309,7 @@ export interface PlayerGameProjection {
   deliveredInfo: DeliveredInfoDto[];
   investigation: InvestigationDto | null;
   nominations: PlayerNominationDto[];
+  scenario: PlayerScenarioDto | null;
 }
 
 // Mirror of the server-side `InfoResult` union (operational/info-resolver).

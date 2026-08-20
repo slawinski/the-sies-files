@@ -68,6 +68,15 @@ async function loadFacts(tx: Prisma.TransactionClient, gameId: string): Promise<
   };
 }
 
+async function ensureScenarioState(tx: Prisma.TransactionClient, gameId: string) {
+  const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
+  return tx.scenarioState.upsert({
+    where: { gameId },
+    create: { gameId, scenarioId: def.id, scenarioVersion: def.version, stageId: def.initialStageId, mapVersionId: def.initialMapVersionId, stateJson: {} },
+    update: {},
+  });
+}
+
 export async function scanQr({
   gameId,
   playerId,
@@ -112,11 +121,7 @@ export async function scanQr({
       }
 
       // Ensure scenario state exists.
-      await tx.scenarioState.upsert({
-        where: { gameId },
-        create: { gameId, scenarioId: def.id, scenarioVersion: def.version, stageId: def.initialStageId, mapVersionId: def.initialMapVersionId, stateJson: {} },
-        update: {},
-      });
+      await ensureScenarioState(tx, gameId);
 
       // Apply the QR's actions + transitions.
       const facts = await loadFacts(tx, gameId);
@@ -178,4 +183,152 @@ export async function scanQr({
   });
   publishInvalidation(gameId, version, sequence);
   return { version, outcome: result.outcome };
+}
+
+interface OverrideArgs {
+  gameId: string;
+  commandId: string;
+  expectedVersion: number;
+}
+
+export async function storytellerRevealClue({
+  gameId,
+  clueId,
+  targetPlayerId,
+  commandId,
+  expectedVersion,
+}: OverrideArgs & { clueId: string; targetPlayerId?: string }): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, appendEvent }) => {
+      const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
+      const clue = def.clues.find((c) => c.id === clueId);
+      if (!clue) throw new DomainError("INVALID_TARGET", "Unknown clue");
+      await ensureScenarioState(tx, gameId);
+      const existing = await tx.scenarioDiscovery.findFirst({
+        where: { gameId, objectId: clueId, objectType: "CLUE" },
+      });
+      if (!existing) {
+        await tx.scenarioDiscovery.create({
+          data: {
+            gameId,
+            playerId: targetPlayerId ?? null,
+            objectId: clueId,
+            objectType: "CLUE",
+            visibilityScope: clue.visibilityScope,
+            contentJson: { title: clue.title, body: clue.body },
+          },
+        });
+      }
+      await appendEvent(EVENTS.SCENARIO_OVERRIDE_APPLIED, { kind: "REVEAL_CLUE", clueId });
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
+}
+
+export async function storytellerCompleteTask({
+  gameId,
+  taskId,
+  commandId,
+  expectedVersion,
+}: OverrideArgs & { taskId: string }): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, appendEvent }) => {
+      const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
+      if (!def.tasks.some((t) => t.id === taskId)) throw new DomainError("INVALID_TARGET", "Unknown task");
+      await ensureScenarioState(tx, gameId);
+      await tx.taskState.upsert({
+        where: { id: `${gameId}:${taskId}` },
+        create: { id: `${gameId}:${taskId}`, gameId, taskId, state: "COMPLETED" },
+        update: { state: "COMPLETED" },
+      });
+      await appendEvent(EVENTS.SCENARIO_OVERRIDE_APPLIED, { kind: "COMPLETE_TASK", taskId });
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
+}
+
+export async function storytellerSetStage({
+  gameId,
+  stageId,
+  commandId,
+  expectedVersion,
+}: OverrideArgs & { stageId: string }): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, appendEvent }) => {
+      if (!stageId.trim()) throw new DomainError("INVALID_TARGET", "Stage id is required");
+      await ensureScenarioState(tx, gameId);
+      await tx.scenarioState.update({ where: { gameId }, data: { stageId } });
+      await appendEvent(EVENTS.SCENARIO_OVERRIDE_APPLIED, { kind: "SET_STAGE", stageId });
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
+}
+
+export async function storytellerSetMap({
+  gameId,
+  mapVersionId,
+  commandId,
+  expectedVersion,
+}: OverrideArgs & { mapVersionId: string }): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, appendEvent }) => {
+      const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
+      if (!def.mapVersions.some((m) => m.id === mapVersionId)) throw new DomainError("INVALID_TARGET", "Unknown map version");
+      await ensureScenarioState(tx, gameId);
+      await tx.scenarioState.update({ where: { gameId }, data: { mapVersionId } });
+      await appendEvent(EVENTS.SCENARIO_OVERRIDE_APPLIED, { kind: "SET_MAP", mapVersionId });
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
+}
+
+export async function storytellerSetCondition({
+  gameId,
+  conditionId,
+  active,
+  commandId,
+  expectedVersion,
+}: OverrideArgs & { conditionId: string; active: boolean }): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, appendEvent }) => {
+      await ensureScenarioState(tx, gameId);
+      await tx.scenarioCondition.upsert({
+        where: { id: `${gameId}:${conditionId}` },
+        create: { id: `${gameId}:${conditionId}`, gameId, conditionId, active },
+        update: { active },
+      });
+      await appendEvent(EVENTS.SCENARIO_OVERRIDE_APPLIED, { kind: "SET_CONDITION", conditionId, active });
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
 }

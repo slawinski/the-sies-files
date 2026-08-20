@@ -16,6 +16,28 @@ import {
 const MIN_READY = 13;
 const MAX_PLAYERS = 16;
 
+/** Scenario definition fixture ids (docs/08) — ST-only override menu. */
+const CLUE_OPTIONS = [
+  { id: "clue-letter", label: "clue-letter — List milionera" },
+  { id: "clue-map", label: "clue-map — Aneks do mapy" },
+  { id: "clue-finale", label: "clue-finale — Zniknięcie" },
+];
+
+const MAP_OPTIONS = [
+  { id: "MAP_BASE", label: "Mapa główna" },
+  { id: "MAP_EXTENDED", label: "Mapa rozszerzona" },
+];
+
+function mapVersionLabel(mapVersionId: string | null): string {
+  if (mapVersionId === "MAP_EXTENDED") return "Mapa rozszerzona";
+  if (mapVersionId === "MAP_BASE") return "Mapa główna";
+  return "—";
+}
+
+function taskStateLabel(state: string): string {
+  return state === "COMPLETED" ? "ukończono" : "do zrobienia";
+}
+
 function statusLabel(status: string): string {
   if (status === "LOBBY") return "Poczekalnia";
   if (status === "SETUP") return "Konfiguracja";
@@ -133,6 +155,10 @@ export default function StorytellerDashboard() {
   } | null>(null);
 
   const [winner, setWinner] = useState<string | null>(null);
+
+  const [revealClueId, setRevealClueId] = useState("clue-letter");
+  const [revealTargetPlayerId, setRevealTargetPlayerId] = useState("");
+  const [stageInput, setStageInput] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -446,6 +472,72 @@ export default function StorytellerDashboard() {
     );
   }
 
+  async function handleScenarioRevealClue() {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/storyteller/scenario/clues/${revealClueId}/reveal`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: revealTargetPlayerId ? { targetPlayerId: revealTargetPlayerId } : {},
+        }),
+      }),
+    );
+  }
+
+  async function handleScenarioCompleteTask(taskId: string) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/storyteller/scenario/tasks/${taskId}/complete`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleScenarioSetStage() {
+    if (!game || !stageInput.trim()) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/storyteller/scenario/stage`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { stageId: stageInput.trim() },
+        }),
+      }),
+    );
+  }
+
+  async function handleScenarioSetMap(mapVersionId: string) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/storyteller/scenario/map`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { mapVersionId },
+        }),
+      }),
+    );
+  }
+
+  async function handleScenarioSetCondition(conditionId: string, active: boolean) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/storyteller/scenario/conditions`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { conditionId, active },
+        }),
+      }),
+    );
+  }
+
   const sorted = game ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat) : [];
   const ready = game?.isReady ?? false;
   const need = game ? Math.max(0, MIN_READY - game.participantCount) : 0;
@@ -478,6 +570,10 @@ export default function StorytellerDashboard() {
   const candidateId = investigation?.currentExecutionCandidatePlayerId ?? null;
   const candidateName = candidateId ? (nameById.get(candidateId) ?? candidateId) : null;
   const travellers = game ? game.players.filter((p) => p.participantKind === "TRAVELLER" && p.alive) : [];
+
+  const scenario = game?.scenario ?? null;
+  const availableTasks = scenario ? scenario.tasks.filter((t) => t.state !== "COMPLETED") : [];
+  const injured = scenario?.conditions.includes("INJURED") ?? false;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -1106,6 +1202,248 @@ export default function StorytellerDashboard() {
                       </ul>
                     </div>
                   )}
+                </section>
+              )}
+
+              {/* Scenario card */}
+              {scenario && (
+                <section className="card md:col-span-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="display text-xs tracking-[0.25em] text-moss">Scenariusz</p>
+                    <span className="text-xs text-ink-muted">panel Mistrza Gry</span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    {/* State */}
+                    <div className="rounded-xl border border-line bg-card-soft/60 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Etap</p>
+                      <p className="mt-1 text-base text-ink-primary">{scenario.stageId ?? "—"}</p>
+                      <p className="mt-3 text-xs uppercase tracking-[0.2em] text-ink-muted">Mapa</p>
+                      <p className="mt-1 text-base text-ink-primary">
+                        {mapVersionLabel(scenario.mapVersionId)}
+                      </p>
+                      <p className="mt-3 text-xs uppercase tracking-[0.2em] text-ink-muted">Stany</p>
+                      {scenario.conditions.length === 0 ? (
+                        <p className="mt-1 text-sm text-ink-muted">brak</p>
+                      ) : (
+                        <ul className="mt-1 flex flex-wrap gap-1.5">
+                          {scenario.conditions.map((condition) => (
+                            <li
+                              key={condition}
+                              className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-0.5 text-xs text-rust"
+                            >
+                              {condition}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {/* Clues */}
+                    <div className="rounded-xl border border-line bg-card-soft/60 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Wskazówki</p>
+                      {scenario.clues.length === 0 ? (
+                        <p className="mt-1 text-sm text-ink-muted">Brak dowodów</p>
+                      ) : (
+                        <ol className="mt-2 flex flex-col gap-1.5">
+                          {scenario.clues.map((clue) => (
+                            <li key={clue.id} className="text-sm text-ink-secondary">
+                              <span className="text-ink-primary">{clue.title}</span>
+                              <span className="text-ink-muted"> · {clue.id}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+
+                    {/* Tasks */}
+                    <div className="rounded-xl border border-line bg-card-soft/60 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Zadania</p>
+                      {scenario.tasks.length === 0 ? (
+                        <p className="mt-1 text-sm text-ink-muted">Brak zadań</p>
+                      ) : (
+                        <ol className="mt-2 flex flex-col gap-1.5">
+                          {scenario.tasks.map((task) => {
+                            const done = task.state === "COMPLETED";
+                            return (
+                              <li key={task.id} className="text-sm text-ink-secondary">
+                                <span className="text-ink-primary">{task.title}</span>
+                                <span
+                                  className={`ml-1 text-xs ${done ? "text-success" : "text-brass"}`}
+                                >
+                                  · {taskStateLabel(task.state)}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      )}
+                    </div>
+
+                    {/* Scans */}
+                    <div className="rounded-xl border border-line bg-card-soft/60 p-3 md:col-span-2">
+                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Skanowania</p>
+                      {scenario.scans.length === 0 ? (
+                        <p className="mt-1 text-sm text-ink-muted">brak</p>
+                      ) : (
+                        <ol className="mt-2 flex flex-col gap-1.5">
+                          {scenario.scans.map((scan, index) => (
+                            <li
+                              key={`${scan.qrTokenId}-${scan.playerId}-${index}`}
+                              className="flex flex-wrap items-center gap-2 text-sm text-ink-secondary"
+                            >
+                              <span className="text-ink-primary">
+                                {scan.playerName ?? scan.playerId}
+                              </span>
+                              <span className="rounded-full border border-line px-2 py-0.5 font-mono text-xs text-ink-muted">
+                                {scan.qrTokenId}
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Override controls — visually distinct from role/nomination controls */}
+                  <div className="mt-4 rounded-xl border border-dashed border-brass/40 bg-elevated/60 p-3">
+                    <p className="display text-xs tracking-[0.25em] text-brass">
+                      Nadpisania scenariusza
+                    </p>
+
+                    <div className="mt-3 flex flex-col gap-3">
+                      {/* Reveal clue */}
+                      <div className="flex flex-wrap items-end gap-2">
+                        <label className="min-w-40 flex-1">
+                          <span className="mb-1 block text-xs text-ink-muted">Odsłoń wskazówkę</span>
+                          <select
+                            value={revealClueId}
+                            onChange={(e) => setRevealClueId(e.target.value)}
+                            className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary"
+                          >
+                            {CLUE_OPTIONS.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="min-w-40 flex-1">
+                          <span className="mb-1 block text-xs text-ink-muted">
+                            Dla gracza (opcjonalnie)
+                          </span>
+                          <select
+                            value={revealTargetPlayerId}
+                            onChange={(e) => setRevealTargetPlayerId(e.target.value)}
+                            className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary"
+                          >
+                            <option value="">— wszyscy —</option>
+                            {sorted.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.displayName}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleScenarioRevealClue}
+                          disabled={busy}
+                          className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                        >
+                          Odsłoń
+                        </button>
+                      </div>
+
+                      {/* Complete task */}
+                      <div>
+                        <p className="text-xs text-ink-muted">Ukończ zadanie</p>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {availableTasks.length === 0 ? (
+                            <span className="text-sm text-ink-muted">Brak dostępnych zadań.</span>
+                          ) : (
+                            availableTasks.map((task) => (
+                              <button
+                                key={task.id}
+                                type="button"
+                                onClick={() => handleScenarioCompleteTask(task.id)}
+                                disabled={busy}
+                                className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                              >
+                                Ukończ: {task.title}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Set stage */}
+                      <div className="flex flex-wrap items-end gap-2">
+                        <label className="min-w-40 flex-1">
+                          <span className="mb-1 block text-xs text-ink-muted">Zmień etap</span>
+                          <input
+                            value={stageInput}
+                            onChange={(e) => setStageInput(e.target.value)}
+                            placeholder={scenario.stageId ?? "stage-finale"}
+                            autoComplete="off"
+                            className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 font-mono text-sm text-ink-primary placeholder:text-ink-muted"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleScenarioSetStage}
+                          disabled={busy || !stageInput.trim()}
+                          className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                        >
+                          Ustaw etap
+                        </button>
+                      </div>
+
+                      {/* Set map */}
+                      <div>
+                        <p className="text-xs text-ink-muted">Odblokuj mapę</p>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {MAP_OPTIONS.map((option) => {
+                            const active = scenario.mapVersionId === option.id;
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => handleScenarioSetMap(option.id)}
+                                disabled={busy}
+                                aria-pressed={active}
+                                className={`min-h-11 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
+                                  active
+                                    ? "border-brass bg-brass/15 text-brass"
+                                    : "border-line text-ink-secondary hover:border-brass/40 hover:text-ink-primary"
+                                }`}
+                              >
+                                {option.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* INJURED condition toggle */}
+                      <div>
+                        <p className="text-xs text-ink-muted">Stan: INJURED</p>
+                        <button
+                          type="button"
+                          onClick={() => handleScenarioSetCondition("INJURED", !injured)}
+                          disabled={busy}
+                          aria-pressed={injured}
+                          className={`mt-1 min-h-11 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
+                            injured
+                              ? "border-rust bg-rust/15 text-rust"
+                              : "border-line text-ink-secondary hover:border-rust/40 hover:text-ink-primary"
+                          }`}
+                        >
+                          {injured ? "wyłącz" : "włącz"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </section>
               )}
             </div>
