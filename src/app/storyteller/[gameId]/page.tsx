@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import {
   type StorytellerGameProjection,
   type StorytellerPlayerDto,
 } from "@/lib/client-api";
+import PhaseBadge from "@/components/PhaseBadge";
 
 const MIN_READY = 13;
 const MAX_PLAYERS = 16;
@@ -189,6 +190,10 @@ export default function StorytellerDashboard() {
   const [checkpointReason, setCheckpointReason] = useState("");
   const [checkpointNote, setCheckpointNote] = useState<string | null>(null);
 
+  /** One-shot crisp confirmation after a vote lock succeeds (docs/11 §13). */
+  const [lockConfirm, setLockConfirm] = useState(false);
+  const lockConfirmTimerRef = useRef<number | null>(null);
+
   const [recoveryKind, setRecoveryKind] = useState<RecoveryKind>("RESOLVE_ACTION");
   const [recoveryTargetId, setRecoveryTargetId] = useState("");
   const [recoveryAlive, setRecoveryAlive] = useState(true);
@@ -233,6 +238,15 @@ export default function StorytellerDashboard() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Clear the vote-lock confirmation timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (lockConfirmTimerRef.current !== null) {
+        window.clearTimeout(lockConfirmTimerRef.current);
+      }
+    };
+  }, []);
 
   async function runMutation(action: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
@@ -484,12 +498,19 @@ export default function StorytellerDashboard() {
 
   async function handleLockVote(nominationId: string) {
     if (!game) return;
-    await runMutation(() =>
+    const ok = await runMutation(() =>
       api(`/api/v1/games/${gameId}/nominations/${nominationId}/votes/lock`, {
         method: "POST",
         body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
       }),
     );
+    if (ok) {
+      setLockConfirm(true);
+      if (lockConfirmTimerRef.current !== null) {
+        window.clearTimeout(lockConfirmTimerRef.current);
+      }
+      lockConfirmTimerRef.current = window.setTimeout(() => setLockConfirm(false), 2200);
+    }
   }
 
   async function handleResolveExecution() {
@@ -760,6 +781,7 @@ export default function StorytellerDashboard() {
                 {stale && (
                   <div
                     role="status"
+                    aria-live="polite"
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brass/40 bg-brass/10 px-4 py-3 text-sm text-brass"
                   >
                     <span>Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Ponów ostatnią akcję.</span>
@@ -775,6 +797,7 @@ export default function StorytellerDashboard() {
                 {actionError && (
                   <div
                     role="alert"
+                    aria-live="polite"
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
                   >
                     <span>{actionError}</span>
@@ -804,8 +827,11 @@ export default function StorytellerDashboard() {
                       {game.participantCount === 1 ? "uczestnik" : "uczestników"}
                     </p>
                   </div>
-                  <div className={`rounded-full border px-4 py-2 text-sm font-medium ${gateClassName}`}>
-                    {gateText}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <PhaseBadge phase={game.phase} status={game.status} />
+                    <div className={`rounded-full border px-4 py-2 text-sm font-medium ${gateClassName}`}>
+                      {gateText}
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1029,7 +1055,7 @@ export default function StorytellerDashboard() {
                                 </span>
                               </div>
                               {isRedHerring && (
-                                <p className="mt-1 pl-11 text-xs text-rust">czerwony śledź Wróżki</p>
+                                <p className="mt-1 pl-11 text-xs text-ink-secondary">czerwony śledź Wróżki</p>
                               )}
                             </li>
                           );
@@ -1065,15 +1091,17 @@ export default function StorytellerDashboard() {
                   )}
                 </section>
               ) : (
-                <section className="card md:col-span-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                /* Compact confirmation strip — subordinate to the active
+                   blocker once the setup is locked (docs/11 §6). */
+                <section className="card md:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="display text-xs tracking-[0.25em] text-moss">Konfiguracja</p>
                     <span className="rounded-full border border-success/40 bg-success/10 px-3 py-1 text-xs text-success">
                       zatwierdzono
                     </span>
                   </div>
-                  <p className="mt-3 text-sm text-ink-secondary">
-                    Układ ról jest zatwierdzony i zablokowany. Gracze mogą teraz odebrać swoje role.
+                  <p className="mt-2 text-xs text-ink-muted">
+                    Układ ról zatwierdzony i zablokowany.
                   </p>
                 </section>
               )}
@@ -1305,6 +1333,15 @@ export default function StorytellerDashboard() {
                     <p className="mt-3 text-sm text-ink-muted">Brak nominacji.</p>
                   )}
 
+                  {lockConfirm && (
+                    <p
+                      role="status"
+                      className="lock-confirm mt-3 inline-flex min-h-11 items-center rounded-lg border border-success/40 bg-success/10 px-3 text-sm text-success"
+                    >
+                      Głosowanie zablokowane.
+                    </p>
+                  )}
+
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -1386,7 +1423,7 @@ export default function StorytellerDashboard() {
                           {scenario.conditions.map((condition) => (
                             <li
                               key={condition}
-                              className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-0.5 text-xs text-rust"
+                              className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-0.5 text-xs text-ink-primary"
                             >
                               {condition}
                             </li>
@@ -1591,7 +1628,7 @@ export default function StorytellerDashboard() {
                           aria-pressed={injured}
                           className={`mt-1 min-h-11 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
                             injured
-                              ? "border-rust bg-rust/15 text-rust"
+                              ? "border-rust bg-rust/15 text-ink-primary"
                               : "border-line text-ink-secondary hover:border-rust/40 hover:text-ink-primary"
                           }`}
                         >
@@ -1736,7 +1773,7 @@ export default function StorytellerDashboard() {
               <section className="card critical-card md:col-span-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="display text-xs tracking-[0.25em] text-moss">Odzyskiwanie</p>
-                  <span className="text-xs text-rust">nadpisania stanu</span>
+                  <span className="text-xs text-ink-secondary">nadpisania stanu</span>
                 </div>
 
                 <form
@@ -1804,7 +1841,7 @@ export default function StorytellerDashboard() {
                   <button
                     type="submit"
                     disabled={busy || !recoveryReason.trim()}
-                    className="min-h-11 rounded-xl border border-rust/50 bg-rust/15 px-4 text-rust transition-colors hover:bg-rust/25 disabled:opacity-50"
+                    className="min-h-11 rounded-xl border border-rust/50 bg-rust/15 px-4 text-ink-primary transition-colors hover:bg-rust/25 disabled:opacity-50"
                   >
                     Wykonaj nadpisanie
                   </button>

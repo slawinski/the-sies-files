@@ -137,7 +137,7 @@ export interface PlayerNominationDto {
 export interface PlayerScenarioDto {
   stageId: string | null;
   mapVersionId: string | null;
-  mapLocations: string[];
+  mapLocations: { id: string; x: number; y: number }[];
   clues: { id: string; title: string; body: string }[];
   tasks: { id: string; title: string; state: string }[];
   conditions: string[];

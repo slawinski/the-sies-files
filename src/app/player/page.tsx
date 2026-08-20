@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   api,
@@ -13,6 +13,8 @@ import {
   type RoleRevealDto,
   type ScanResponseDto,
 } from "@/lib/client-api";
+import MapCard from "@/components/MapCard";
+import PhaseBadge from "@/components/PhaseBadge";
 
 type View = "loading" | "ready" | "unclaimed" | "error";
 
@@ -405,14 +407,43 @@ export default function PlayerWaiting() {
   const scenario = game?.scenario ?? null;
   const scenarioVisible = game ? game.phase === "INVESTIGATION" && scenario !== null : false;
 
+  // Track newly discovered clues so only genuinely new evidence cards play the
+  // one-shot dossier-insertion animation (docs/11 §13) — refetches of the
+  // existing list never re-animate.
+  const clueIdsKey = scenario?.clues.map((c) => c.id).join("|") ?? "";
+  const seenClueIdsRef = useRef<Set<string> | null>(null);
+  const [enteringClueIds, setEnteringClueIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (clueIdsKey === "") {
+      seenClueIdsRef.current = null;
+      setEnteringClueIds(new Set());
+      return;
+    }
+    const current = new Set(clueIdsKey.split("|"));
+    const prev = seenClueIdsRef.current;
+    if (prev === null) {
+      seenClueIdsRef.current = current;
+      return;
+    }
+    const fresh = new Set<string>();
+    for (const id of current) {
+      if (!prev.has(id)) fresh.add(id);
+    }
+    seenClueIdsRef.current = current;
+    if (fresh.size > 0) setEnteringClueIds(fresh);
+  }, [clueIdsKey]);
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-line">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Gracz</span>
+          <div className="flex items-center gap-3">
+            {game && <PhaseBadge phase={game.phase} status={game.status} />}
+            <span className="text-xs text-ink-muted">Gracz</span>
+          </div>
         </div>
       </header>
 
@@ -456,6 +487,7 @@ export default function PlayerWaiting() {
                 {stale && (
                   <div
                     role="status"
+                    aria-live="polite"
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brass/40 bg-brass/10 px-4 py-3 text-sm text-brass"
                   >
                     <span>Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Ponów ostatnią akcję.</span>
@@ -471,6 +503,7 @@ export default function PlayerWaiting() {
                 {actionError && (
                   <div
                     role="alert"
+                    aria-live="polite"
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
                   >
                     <span>{actionError}</span>
@@ -504,7 +537,7 @@ export default function PlayerWaiting() {
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-3">
+                  <div className="role-reveal mt-3">
                     <RoleCard role={role} nameById={nameById} />
                     <button
                       type="button"
@@ -515,6 +548,73 @@ export default function PlayerWaiting() {
                       Potwierdź
                     </button>
                   </div>
+                )}
+              </section>
+            )}
+
+            {/* Operational action — current action sits first, full width (docs/11 §6) */}
+            {game.activeAction && (
+              <section className="card md:col-span-3">
+                <p className="display text-xs tracking-[0.25em] text-moss">Działanie</p>
+                <h2 className="display mt-2 text-xl leading-tight text-ink-primary">
+                  {titleCaseCharacterId(game.activeAction.kind)}
+                </h2>
+
+                {requiredTargets === null ? (
+                  <p className="mt-3 text-sm text-ink-secondary">
+                    Czekam na rozstrzygnięcie Mistrza Gry…
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm text-ink-secondary">
+                      Wybierz graczy: {selectedIds.length} / {requiredTargets}
+                    </p>
+                    <ol className="mt-3 flex flex-col gap-2">
+                      {roster.map((player) => {
+                        const selected = selectedIds.includes(player.id);
+                        const isSelf = player.id === game.me.playerId;
+                        return (
+                          <li key={player.id}>
+                            <button
+                              type="button"
+                              onClick={() => togglePlayer(player.id, requiredTargets)}
+                              aria-pressed={selected}
+                              className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                                selected
+                                  ? "border-brass bg-brass/15"
+                                  : "border-line bg-card-soft/60 hover:border-brass/40"
+                              }`}
+                            >
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
+                                {player.virtualSeat + 1}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-base text-ink-primary">
+                                {player.displayName}
+                              </span>
+                              {isSelf && (
+                                <span className="shrink-0 rounded-full border border-moss/40 bg-moss/10 px-2.5 py-0.5 text-xs text-moss">
+                                  ty
+                                </span>
+                              )}
+                              {selected && (
+                                <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-xs text-ink-primary">
+                                  wybrano
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                    <button
+                      type="button"
+                      onClick={handleSubmitAction}
+                      disabled={busy || selectedIds.length !== requiredTargets}
+                      className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                    >
+                      Złóż działanie
+                    </button>
+                  </>
                 )}
               </section>
             )}
@@ -576,73 +676,6 @@ export default function PlayerWaiting() {
                 ))}
               </ol>
             </section>
-
-            {/* Operational action */}
-            {game.activeAction && (
-              <section className="card md:col-span-3">
-                <p className="display text-xs tracking-[0.25em] text-moss">Działanie</p>
-                <h2 className="display mt-2 text-xl leading-tight text-ink-primary">
-                  {titleCaseCharacterId(game.activeAction.kind)}
-                </h2>
-
-                {requiredTargets === null ? (
-                  <p className="mt-3 text-sm text-ink-secondary">
-                    Czekam na rozstrzygnięcie Mistrza Gry…
-                  </p>
-                ) : (
-                  <>
-                    <p className="mt-3 text-sm text-ink-secondary">
-                      Wybierz graczy: {selectedIds.length} / {requiredTargets}
-                    </p>
-                    <ol className="mt-3 flex flex-col gap-2">
-                      {roster.map((player) => {
-                        const selected = selectedIds.includes(player.id);
-                        const isSelf = player.id === game.me.playerId;
-                        return (
-                          <li key={player.id}>
-                            <button
-                              type="button"
-                              onClick={() => togglePlayer(player.id, requiredTargets)}
-                              aria-pressed={selected}
-                              className={`flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                                selected
-                                  ? "border-brass bg-brass/15"
-                                  : "border-line bg-card-soft/60 hover:border-brass/40"
-                              }`}
-                            >
-                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
-                                {player.virtualSeat + 1}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate text-base text-ink-primary">
-                                {player.displayName}
-                              </span>
-                              {isSelf && (
-                                <span className="shrink-0 rounded-full border border-moss/40 bg-moss/10 px-2.5 py-0.5 text-xs text-moss">
-                                  ty
-                                </span>
-                              )}
-                              {selected && (
-                                <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-xs text-brass">
-                                  wybrano
-                                </span>
-                              )}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                    <button
-                      type="button"
-                      onClick={handleSubmitAction}
-                      disabled={busy || selectedIds.length !== requiredTargets}
-                      className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                    >
-                      Złóż działanie
-                    </button>
-                  </>
-                )}
-              </section>
-            )}
 
             {/* Delivered info */}
             {game.deliveredInfo.length > 0 && (
@@ -718,7 +751,7 @@ export default function PlayerWaiting() {
                                     {player.displayName}
                                   </span>
                                   {selected && (
-                                    <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-xs text-brass">
+                                    <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-xs text-ink-primary">
                                       wybrano
                                     </span>
                                   )}
@@ -848,7 +881,9 @@ export default function PlayerWaiting() {
                         {scenario.clues.map((clue) => (
                           <li
                             key={clue.id}
-                            className="rounded-xl border border-ink/15 bg-ink/5 p-3"
+                            className={`rounded-xl border border-ink/15 bg-ink/5 p-3 ${
+                              enteringClueIds.has(clue.id) ? "card-in" : ""
+                            }`}
                           >
                             <p className="text-sm font-semibold text-ink">{clue.title}</p>
                             <p className="mt-1 text-sm text-ink/75">{clue.body}</p>
@@ -891,25 +926,10 @@ export default function PlayerWaiting() {
                         {mapVersionLabel(scenario.mapVersionId)}
                       </span>
                     </div>
-                    <div className="p-4">
-                      {scenario.mapVersionId === "MAP_EXTENDED" && (
-                        <p className="mb-3 text-xs text-brass">aneks dołączony do akt</p>
-                      )}
-                      {scenario.mapLocations.length === 0 ? (
-                        <p className="text-sm text-ink-muted">Brak lokalizacji.</p>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                          {scenario.mapLocations.map((location) => (
-                            <span
-                              key={location}
-                              className="rounded-lg border border-line bg-card-soft px-2.5 py-2 text-center text-xs text-ink-secondary"
-                            >
-                              {titleCaseCharacterId(location)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <MapCard
+                      mapVersionId={scenario.mapVersionId}
+                      mapLocations={scenario.mapLocations}
+                    />
                   </div>
 
                   {/* Scanner */}
@@ -967,7 +987,7 @@ export default function PlayerWaiting() {
                 {scenario.conditions.includes("INJURED") && (
                   <div
                     role="status"
-                    className="mt-3 flex min-h-11 items-center rounded-xl border border-rust/50 bg-rust/10 px-4 py-3 text-sm text-rust"
+                    className="mt-3 flex min-h-11 items-center rounded-xl border border-rust/50 bg-rust/10 px-4 py-3 text-sm text-ink-primary"
                   >
                     Jesteś ranny — znajdź apteczkę.
                   </div>

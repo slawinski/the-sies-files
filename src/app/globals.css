@@ -15,12 +15,15 @@
   --ink: #171814;
   --text-primary: #eee9dc;
   --text-secondary: #b9b5a8;
-  --text-muted: #858477;
-  --moss: #7b8450;
-  --brass: #a6925f;
-  --rust: #9a4f3e;
-  --danger: #b95c4b;
-  --success: #7c9460;
+  /* Contrast pass (docs/11 §15): original accent values below failed WCAG AA
+     as small text on card/tinted surfaces. Hues kept, roles unchanged —
+     see docs/11 §3 ("values may be tuned in final art pass"). */
+  --text-muted: #9a988b; /* was #858477 — AA on cards, inputs, tints */
+  --moss: #93a066; /* was #7b8450 — AA on card surfaces */
+  --brass: #b19d68; /* was #a6925f — AA on brass-tinted chips */
+  --rust: #b9674d; /* was #9a4f3e — AA on canvas */
+  --danger: #db7d66; /* was #b95c4b — AA on tinted banners/buttons */
+  --success: #8ba06c; /* was #7c9460 — AA on tinted chips */
   --border: #3a3c31;
 }
 
@@ -100,6 +103,115 @@ body {
 :focus-visible {
   outline: 2px solid var(--brass);
   outline-offset: 2px;
+}
+
+/* ============================================================
+   Restrained motion (docs/11 §13)
+   Short (150–300ms), gentle easing, one-shot. All of these are
+   neutralized by the global prefers-reduced-motion block below.
+   ============================================================ */
+
+/* Role reveal — quiet fade/slide-in; no bright flash. */
+@keyframes role-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.role-reveal {
+  animation: role-reveal 0.28s ease-out both;
+}
+
+/* Clue acquisition — a new dossier page slips into the evidence list. */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.card-in {
+  animation: card-in 0.24s ease-out both;
+}
+
+/* Map unlock — a new annex sheet attaches to the case file. */
+@keyframes annex-in {
+  from {
+    opacity: 0.45;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.annex-in {
+  animation: annex-in 0.3s ease-out both;
+}
+
+/* Phase transition — one-time soft outline pulse on the phase badge. */
+@keyframes phase-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(177, 157, 104, 0.55); /* --brass */
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(177, 157, 104, 0);
+  }
+}
+.phase-pulse {
+  animation: phase-pulse 0.9s ease-out both;
+}
+
+/* Vote lock confirmation — crisp, small. */
+@keyframes lock-confirm {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.lock-confirm {
+  animation: lock-confirm 0.18s ease-out both;
+}
+
+/* Map location markers (docs/12 §8–§10) — app-rendered labels with a dark
+   halo so they stay legible over artwork and meet contrast requirements. */
+.map-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.map-marker-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--brass);
+  border: 2px solid rgba(17, 19, 15, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.map-marker-label {
+  max-width: 96px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(17, 19, 15, 0.82);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
 }
 
 @media (prefers-reduced-motion: reduce) {

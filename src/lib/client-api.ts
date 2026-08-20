@@ -240,7 +240,7 @@ export interface ScenarioTaskDto {
 export interface PlayerScenarioDto {
   stageId: string | null;
   mapVersionId: string | null;
-  mapLocations: string[];
+  mapLocations: { id: string; x: number; y: number }[];
   clues: ScenarioClueDto[];
   tasks: ScenarioTaskDto[];
   conditions: string[];

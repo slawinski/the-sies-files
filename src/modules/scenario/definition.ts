@@ -12,9 +12,15 @@ export type VisibilityScope =
 
 export type QrRepeatPolicy = "REPEATABLE_PER_PLAYER" | "ONCE_PER_PLAYER" | "ONCE_PER_GAME";
 
+export interface MapLocationDefinition {
+  id: string;
+  x: number; // normalized 0..1
+  y: number; // normalized 0..1
+}
+
 export interface MapVersionDefinition {
   id: string;
-  locations: string[];
+  locations: MapLocationDefinition[];
 }
 
 export interface ClueDefinition {
@@ -72,11 +78,37 @@ export const TSF_MILLIONAIRE: ScenarioDefinition = {
   mapVersions: [
     {
       id: "MAP_BASE",
-      locations: ["HOUSE", "OUTBUILDING", "TERRACE", "FIELD", "FIREPIT", "HAMMOCK_APPLES", "PARKING", "GATE", "WICKET", "TRASH"],
+      locations: [
+        { id: "HOUSE", x: 0.72, y: 0.22 },
+        { id: "OUTBUILDING", x: 0.6, y: 0.3 },
+        { id: "TERRACE", x: 0.55, y: 0.36 },
+        { id: "FIELD", x: 0.4, y: 0.2 },
+        { id: "FIREPIT", x: 0.45, y: 0.62 },
+        { id: "HAMMOCK_APPLES", x: 0.3, y: 0.75 },
+        { id: "PARKING", x: 0.82, y: 0.45 },
+        { id: "GATE", x: 0.9, y: 0.5 },
+        { id: "WICKET", x: 0.68, y: 0.58 },
+        { id: "TRASH", x: 0.85, y: 0.68 },
+      ],
     },
     {
       id: "MAP_EXTENDED",
-      locations: ["HOUSE", "OUTBUILDING", "TERRACE", "FIELD", "FIREPIT", "HAMMOCK_APPLES", "PARKING", "GATE", "WICKET", "TRASH", "WEST_PATH", "STREAM", "WOODS", "HERMITAGE"],
+      locations: [
+        { id: "HOUSE", x: 0.72, y: 0.22 },
+        { id: "OUTBUILDING", x: 0.6, y: 0.3 },
+        { id: "TERRACE", x: 0.55, y: 0.36 },
+        { id: "FIELD", x: 0.4, y: 0.2 },
+        { id: "FIREPIT", x: 0.45, y: 0.62 },
+        { id: "HAMMOCK_APPLES", x: 0.3, y: 0.75 },
+        { id: "PARKING", x: 0.82, y: 0.45 },
+        { id: "GATE", x: 0.9, y: 0.5 },
+        { id: "WICKET", x: 0.68, y: 0.58 },
+        { id: "TRASH", x: 0.85, y: 0.68 },
+        { id: "WEST_PATH", x: 0.22, y: 0.5 },
+        { id: "STREAM", x: 0.14, y: 0.42 },
+        { id: "WOODS", x: 0.1, y: 0.6 },
+        { id: "HERMITAGE", x: 0.06, y: 0.48 },
+      ],
     },
   ],
   qrTokens: [

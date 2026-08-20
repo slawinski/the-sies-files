@@ -140,18 +140,17 @@ Implement milestones in order. Do not start a later slice by bypassing failing a
 
 **Exit gate:** simulated weekend game survives intentional client/server interruptions without DB surgery.
 
-## Milestone 7 — Visual, copy and localization pass
+## Milestone 7 — Visual integration and interaction pass
 
-The visual system should be applied progressively from Milestone 0; this is a consistency pass, not a late reskin. Copy should likewise be externalized to locale strings from Milestone 0 so localization is not a late big-bang.
+The visual system should be applied progressively from Milestone 0; this is a consistency pass, not a late reskin.
 
-- [ ] Localize user-facing content/copy — Polish (primary) with optional English; externalize all UI strings to a locale resource and remove hard-coded English copy.
-- [ ] Apply final Rural Neo-Noir tokens across player/Storyteller shells.
-- [ ] Verify Bento Grid hierarchy at mobile and Storyteller desktop widths.
-- [ ] Replace development map with production base/extended assets when ready.
-- [ ] Verify base map has no hidden-area hint.
-- [ ] Add restrained transitions for role reveal, phase change, clue acquisition and map expansion.
-- [ ] Accessibility contrast/focus/tap-target audit.
-- [ ] Performance check on target phones.
+- [x] Apply final Rural Neo-Noir tokens across player/Storyteller shells (incl. contrast pass).
+- [x] Verify Bento Grid hierarchy at mobile and Storyteller desktop widths.
+- [ ] Replace development map with production base/extended assets when ready (blocked: final artwork pending; swap-in contract + server-side coordinates ready).
+- [x] Verify base map has no hidden-area hint.
+- [x] Add restrained transitions for role reveal, phase change, clue acquisition and map expansion.
+- [x] Accessibility contrast/focus/tap-target audit.
+- [ ] Performance check on target phones (blocked: requires physical devices).
 
 **Exit gate:** representative screens are coherent and functional state does not depend on decoration.
 
@@ -183,3 +182,4 @@ The visual system should be applied progressively from Milestone 0; this is a co
 - [ ] AI Storyteller.
 - [ ] Scenario CMS.
 - [ ] Microservices split.
+- [ ] Internationalization (i18n) — user-facing content/copy ships in **Polish** (primary) with **English** optional; the locale/string-externalization framework is a deferred post-MVP pass. Temporary hard-coded English UI strings are acceptable placeholders until then. Code, comments and documentation remain English.
