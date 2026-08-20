@@ -37,6 +37,20 @@ export class CryptoSecureRng implements Rng {
 
 export const cryptoSecureRng: Rng = new CryptoSecureRng();
 
+/**
+ * Hash a string (e.g. a 128-bit hex seed) to a 32-bit uint for seeding a
+ * deterministic PRNG. The seed string itself can carry more entropy than the
+ * PRNG state; hashing just derives the working state.
+ */
+export function hashStringToUint32(input: string): number {
+  let h = 2166136261 >>> 0; // FNV-1a
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 /** Deterministic xorshift32-based generator for tests and seeded setup. */
 export class SeededRng implements Rng {
   private state: number;

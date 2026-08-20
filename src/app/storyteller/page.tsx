@@ -74,7 +74,7 @@ export default function StorytellerHome() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Prowadzący</span>
+          <span className="text-xs text-ink-muted">Storyteller</span>
         </div>
       </header>
 

@@ -102,6 +102,74 @@ export interface StorytellerPlayerDto extends PublicPlayerDto {
   claimIssuedAt: string | null;
 }
 
+// ---- Slice 2: setup / operational / role-reveal DTOs -----------------------
+
+export interface SetupAssignmentDto {
+  playerId: string;
+  virtualSeat: number;
+  participantKind: "NORMAL" | "TRAVELLER";
+  trueCharacterId: string;
+  perceivedCharacterId: string;
+  trueAlignment: "GOOD" | "EVIL";
+}
+
+export interface SetupCandidateDto {
+  generatorVersion: number;
+  participantCount: number;
+  normalCount: number;
+  assignments: SetupAssignmentDto[];
+  fortuneTellerRedHerringPlayerId: string | null;
+  demonBluffs: string[];
+}
+
+export interface StorytellerSetupDto {
+  regenerationIndex: number;
+  committed: boolean;
+  candidate: SetupCandidateDto | null;
+}
+
+export interface StorytellerActionDto {
+  id: string;
+  orderIndex: number;
+  kind: string;
+  actorPlayerId: string | null;
+  actorDisplayName: string | null;
+  status: string;
+  secretJson: unknown;
+  resolutionJson: unknown;
+}
+
+export interface StorytellerOperationalDto {
+  phaseId: string;
+  cycleNumber: number;
+  status: string;
+  actions: StorytellerActionDto[];
+}
+
+export interface TeamKnowledgeDto {
+  demonId: string;
+  minionIds: string[];
+}
+
+export interface RoleRevealDto {
+  characterId: string;
+  alignment: "GOOD" | "EVIL";
+  publicCharacter: boolean;
+  teamKnowledge?: TeamKnowledgeDto;
+  bluffs?: string[];
+}
+
+export interface ActiveActionDto {
+  id: string;
+  kind: string;
+}
+
+export interface DeliveredInfoDto {
+  actionId: string;
+  kind: string;
+  result: unknown;
+}
+
 export interface StorytellerGameProjection {
   gameId: string;
   name: string;
@@ -112,6 +180,8 @@ export interface StorytellerGameProjection {
   participantCount: number;
   isReady: boolean;
   players: StorytellerPlayerDto[];
+  setup: StorytellerSetupDto | null;
+  operational: StorytellerOperationalDto | null;
 }
 
 export interface PlayerGameProjection {
@@ -131,4 +201,36 @@ export interface PlayerGameProjection {
     alive: boolean;
     ghostVoteAvailable: boolean;
   };
+  myRole: RoleRevealDto | null;
+  roleAcknowledged: boolean;
+  activeAction: ActiveActionDto | null;
+  deliveredInfo: DeliveredInfoDto[];
 }
+
+// Mirror of the server-side `InfoResult` union (operational/info-resolver).
+export interface InfoCharacterCandidatesDto {
+  kind: "CHARACTER_CANDIDATES";
+  characterId: string;
+  candidatePlayerIds: string[];
+}
+export interface InfoNumberDto {
+  kind: "NUMBER";
+  value: number;
+}
+export interface InfoNoOutsidersDto {
+  kind: "NO_OUTSIDERS";
+}
+export interface InfoDemonYesNoDto {
+  kind: "DEMON_YES_NO";
+  value: boolean;
+}
+export interface InfoGrimoireDto {
+  kind: "GRIMOIRE";
+  assignments: SetupAssignmentDto[];
+}
+export type InfoResultDto =
+  | InfoCharacterCandidatesDto
+  | InfoNumberDto
+  | InfoNoOutsidersDto
+  | InfoDemonYesNoDto
+  | InfoGrimoireDto;

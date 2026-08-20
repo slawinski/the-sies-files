@@ -4,7 +4,7 @@ import { hashToken } from "@/lib/auth/tokens";
 import { COOKIE_PLAYER_SESSION } from "@/lib/auth/cookies";
 import { DomainError } from "@/lib/errors";
 import { findPlayerSessionByHashOnly } from "@/modules/auth/session";
-import { loadGameAndPlayers } from "@/modules/projections/load";
+import { loadPlayerData } from "@/modules/projections/load";
 import { buildPlayerProjection } from "@/modules/projections/projections";
 
 // Returns the current player's projection, resolving the game from the session
@@ -18,8 +18,13 @@ export async function GET() {
     if (!session || !session.playerId || !session.player) {
       throw new DomainError("UNAUTHORIZED", "Not authenticated");
     }
-    const { game, players } = await loadGameAndPlayers(session.player.gameId);
-    return jsonOk(buildPlayerProjection(game, players, session.playerId));
+    const { game, players, secret, candidate, myActions } = await loadPlayerData(
+      session.player.gameId,
+      session.playerId,
+    );
+    return jsonOk(
+      buildPlayerProjection(game, players, session.playerId, { secret, candidate, myActions }),
+    );
   } catch (err) {
     return jsonError(err);
   }

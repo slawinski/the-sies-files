@@ -38,6 +38,21 @@ enum CommandReceiptStatus {
   APPLIED
 }
 
+enum OperationalPhaseStatus {
+  BUILDING
+  RUNNING
+  COMPLETED
+}
+
+enum OperationalActionStatus {
+  PENDING
+  WAITING_FOR_PLAYER
+  WAITING_FOR_STORYTELLER
+  RESOLVING
+  RESOLVED
+  SKIPPED
+}
+
 model GameSession {
   id              String        @id @default(uuid())
   name            String
@@ -59,6 +74,8 @@ model GameSession {
   events             DomainEvent[]
   commands           CommandReceipt[]
   storytellerSession BrowserSession[]
+  setupDraft         SetupDraft?
+  operationalPhases  OperationalPhase[]
 
   @@map("game_sessions")
 }
@@ -77,6 +94,7 @@ model Player {
 
   claim    PlayerClaim?
   sessions BrowserSession[]
+  secret   PlayerSecret?
 
   @@unique([gameId, virtualSeat])
   @@unique([gameId, displayName])
@@ -143,4 +161,67 @@ model CommandReceipt {
 
   @@unique([gameId, commandId])
   @@map("command_receipts")
+}
+
+model PlayerSecret {
+  playerId             String    @id
+  player               Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  trueCharacterId      String?
+  perceivedCharacterId String?
+  trueAlignment        String?
+  abilityStateJson     Json?
+  roleAcknowledgedAt   DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("player_secrets")
+}
+
+model SetupDraft {
+  id                String      @id @default(uuid())
+  gameId            String      @unique
+  game              GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  generatorVersion  Int
+  seed              String
+  candidateJson     Json
+  regenerationIndex Int         @default(0)
+  committedAt       DateTime?
+  setupHash         String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@map("setup_drafts")
+}
+
+model OperationalPhase {
+  id          String                 @id @default(uuid())
+  gameId      String
+  game        GameSession            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  cycleNumber Int
+  status      OperationalPhaseStatus @default(RUNNING)
+  startedAt   DateTime               @default(now())
+  completedAt DateTime?
+
+  actions OperationalAction[]
+
+  @@index([gameId, cycleNumber])
+  @@map("operational_phases")
+}
+
+model OperationalAction {
+  id                 String                  @id @default(uuid())
+  operationalPhaseId String
+  phase              OperationalPhase        @relation(fields: [operationalPhaseId], references: [id], onDelete: Cascade)
+  orderIndex         Int
+  kind               String
+  actorPlayerId      String?
+  status             OperationalActionStatus @default(PENDING)
+  publicJson         Json?
+  secretJson         Json?
+  resolutionJson     Json?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([operationalPhaseId, orderIndex])
+  @@map("operational_actions")
 }

@@ -20,7 +20,7 @@ export default function Home() {
           href="/storyteller"
           className="flex min-h-12 items-center justify-center rounded-xl border border-brass/60 bg-brass/10 px-5 text-ink-primary transition-colors hover:bg-brass/20"
         >
-          Prowadzący
+          Storyteller
         </Link>
         <Link
           href="/claim"

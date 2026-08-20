@@ -7,6 +7,8 @@ import {
   api,
   ApiClientError,
   friendlyMessage,
+  type InfoResultDto,
+  type StorytellerActionDto,
   type StorytellerGameProjection,
   type StorytellerPlayerDto,
 } from "@/lib/client-api";
@@ -24,6 +26,50 @@ function claimStatus(player: StorytellerPlayerDto): { label: string; className: 
   if (player.claimed) return { label: "odebrano", className: "text-success" };
   if (player.hasClaimToken) return { label: "link wydany, nieodebrany", className: "text-brass" };
   return { label: "brak linku", className: "text-ink-muted" };
+}
+
+/** "WASHERWOMAN" → "Washerwoman", "FORTUNE_TELLER" → "Fortune Teller". */
+function titleCaseCharacterId(id: string): string {
+  return id
+    .split("_")
+    .map((word) => (word.length > 0 ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word))
+    .join(" ");
+}
+
+function alignmentLabel(alignment: string): string {
+  return alignment === "EVIL" ? "Zło" : "Dobro";
+}
+
+function isInfoResult(result: unknown): result is InfoResultDto {
+  if (typeof result !== "object" || result === null) return false;
+  return "kind" in result && typeof (result as { kind?: unknown }).kind === "string";
+}
+
+/** Readable text for a resolved secret (InfoResult or `{ targetPlayerIds }`). */
+function resolutionText(result: unknown, nameById: Map<string, string>): string {
+  if (isInfoResult(result)) {
+    switch (result.kind) {
+      case "CHARACTER_CANDIDATES":
+        return `${titleCaseCharacterId(result.characterId)}: ${result.candidatePlayerIds
+          .map((id) => nameById.get(id) ?? id)
+          .join(", ")}`;
+      case "NUMBER":
+        return `Liczba: ${result.value}`;
+      case "NO_OUTSIDERS":
+        return "brak outsiderów";
+      case "DEMON_YES_NO":
+        return result.value ? "Tak" : "Nie";
+      case "GRIMOIRE":
+        return `Pełna lista ról (${result.assignments.length})`;
+      default:
+        return "—";
+    }
+  }
+  if (result && typeof result === "object" && "targetPlayerIds" in result) {
+    const ids = (result as { targetPlayerIds?: string[] }).targetPlayerIds ?? [];
+    return `Wybrani: ${ids.map((id) => nameById.get(id) ?? id).join(", ")}`;
+  }
+  return "—";
 }
 
 interface ClaimTokenResponse {
@@ -224,6 +270,60 @@ export default function StorytellerDashboard() {
     void issueClaim(player);
   }
 
+  async function handleGenerateSetup() {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/setup/generate`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleCommitSetup() {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/setup/commit`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleStartOperational() {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/operational/start`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleResolveAction(action: StorytellerActionDto) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/storyteller/actions/${action.id}/resolve`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { resolution: action.secretJson },
+        }),
+      }),
+    );
+  }
+
+  async function handleCompleteOperational() {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/operational/complete`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
   const sorted = game ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat) : [];
   const ready = game?.isReady ?? false;
   const need = game ? Math.max(0, MIN_READY - game.participantCount) : 0;
@@ -234,6 +334,22 @@ export default function StorytellerDashboard() {
     ? "border-success/40 bg-success/10 text-success"
     : "border-brass/40 bg-brass/10 text-brass";
 
+  const setup = game?.setup ?? null;
+  const setupCommitted = setup?.committed ?? false;
+  const candidate = setup?.candidate ?? null;
+  const grimoireAssignments = candidate
+    ? [...candidate.assignments].sort((a, b) => a.virtualSeat - b.virtualSeat)
+    : [];
+  const operational = game?.operational ?? null;
+  const nameById = new Map((game?.players ?? []).map((p) => [p.id, p.displayName]));
+  const activeAction =
+    operational?.actions.find(
+      (a) => a.status === "WAITING_FOR_PLAYER" || a.status === "WAITING_FOR_STORYTELLER",
+    ) ?? null;
+  const unresolvedCount =
+    operational?.actions.filter((a) => a.status !== "RESOLVED").length ?? 0;
+  const operationalCardVisible = game ? game.status === "ROLE_REVEAL" || game.status === "ACTIVE" : false;
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-line">
@@ -241,7 +357,7 @@ export default function StorytellerDashboard() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Prowadzący</span>
+          <span className="text-xs text-ink-muted">Storyteller</span>
         </div>
       </header>
 
@@ -464,6 +580,247 @@ export default function StorytellerDashboard() {
                   </ol>
                 )}
               </section>
+
+              {/* Setup card */}
+              {!setupCommitted ? (
+                <section className="card md:col-span-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="display text-xs tracking-[0.25em] text-moss">Konfiguracja</p>
+                    {setup && setup.regenerationIndex > 0 && (
+                      <span className="text-xs text-ink-muted">układ {setup.regenerationIndex}</span>
+                    )}
+                  </div>
+
+                  {!candidate ? (
+                    <>
+                      <p className="mt-3 text-sm text-ink-secondary">
+                        {ready
+                          ? "Krąg jest gotowy — wygeneruj tajny układ ról."
+                          : "Uzupełnij krąg, aby wygenerować układ."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleGenerateSetup}
+                        disabled={busy || !ready}
+                        className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                      >
+                        Wygeneruj układ
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-xs text-ink-muted">Grimuar — tajny układ ról</p>
+                      <ol className="mt-3 flex flex-col gap-2">
+                        {grimoireAssignments.map((a) => {
+                          const isRedHerring = a.playerId === candidate.fortuneTellerRedHerringPlayerId;
+                          const isDrunk = a.trueCharacterId === "DRUNK";
+                          return (
+                            <li
+                              key={a.playerId}
+                              className={`rounded-xl border p-3 ${
+                                isRedHerring ? "border-rust bg-rust/10" : "border-line bg-card-soft/60"
+                              }`}
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
+                                  {a.virtualSeat + 1}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-base text-ink-primary">
+                                  {nameById.get(a.playerId) ?? a.playerId}
+                                </span>
+                                <span className="min-w-0 text-right text-sm text-ink-secondary">
+                                  {titleCaseCharacterId(a.trueCharacterId)}
+                                  {isDrunk && a.perceivedCharacterId !== a.trueCharacterId && (
+                                    <span className="text-ink-muted">
+                                      {" "}
+                                      → {titleCaseCharacterId(a.perceivedCharacterId)}
+                                    </span>
+                                  )}
+                                </span>
+                                <span
+                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${
+                                    a.trueAlignment === "EVIL"
+                                      ? "border-danger/40 text-danger"
+                                      : "border-success/40 text-success"
+                                  }`}
+                                >
+                                  {alignmentLabel(a.trueAlignment)}
+                                </span>
+                              </div>
+                              {isRedHerring && (
+                                <p className="mt-1 pl-11 text-xs text-rust">czerwony śledź Wróżki</p>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+
+                      <div className="mt-4 rounded-xl border border-line bg-card-soft/60 p-3">
+                        <p className="text-xs text-moss">Bluffy Demona</p>
+                        <p className="mt-1 text-sm text-ink-secondary">
+                          {candidate.demonBluffs.map(titleCaseCharacterId).join(", ")}
+                        </p>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={handleGenerateSetup}
+                          disabled={busy}
+                          className="min-h-11 rounded-xl border border-line px-4 text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
+                        >
+                          Przegeneruj
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCommitSetup}
+                          disabled={busy}
+                          className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                        >
+                          Zatwierdź układ
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </section>
+              ) : (
+                <section className="card md:col-span-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="display text-xs tracking-[0.25em] text-moss">Konfiguracja</p>
+                    <span className="rounded-full border border-success/40 bg-success/10 px-3 py-1 text-xs text-success">
+                      zatwierdzono
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm text-ink-secondary">
+                    Układ ról jest zatwierdzony i zablokowany. Gracze mogą teraz odebrać swoje role.
+                  </p>
+                </section>
+              )}
+
+              {/* Operational card */}
+              {operationalCardVisible && (
+                <section className="card md:col-span-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="display text-xs tracking-[0.25em] text-moss">Faza operacyjna</p>
+                    {operational && (
+                      <span className="text-xs text-ink-muted">cykl {operational.cycleNumber}</span>
+                    )}
+                  </div>
+
+                  {!operational ? (
+                    game.status === "ROLE_REVEAL" ? (
+                      <div className="mt-3">
+                        <p className="text-sm text-ink-secondary">
+                          Rozpocznij pierwszą noc — zbuduj kolejkę działań i roześlij informacje.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleStartOperational}
+                          disabled={busy}
+                          className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                        >
+                          Rozpocznij fazę operacyjną
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-ink-secondary">
+                        Faza operacyjna zakończona — śledztwo w toku.
+                      </p>
+                    )
+                  ) : (
+                    <>
+                      <ol className="mt-3 flex flex-col gap-2">
+                        {operational.actions.map((action) => {
+                          const isActive = action.id === activeAction?.id;
+                          const isStoryteller = action.status === "WAITING_FOR_STORYTELLER";
+                          const isWaitingPlayer = action.status === "WAITING_FOR_PLAYER";
+                          const isResolved = action.status === "RESOLVED";
+                          const isPending = action.status === "PENDING";
+                          return (
+                            <li
+                              key={action.id}
+                              className={`rounded-xl border p-3 ${
+                                isActive
+                                  ? "border-brass bg-brass/10"
+                                  : "border-line bg-card-soft/60"
+                              }`}
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
+                                  {action.orderIndex + 1}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-base text-ink-primary">
+                                    {titleCaseCharacterId(action.kind)}
+                                  </p>
+                                  <p className="truncate text-xs text-ink-muted">
+                                    {action.actorDisplayName ?? "—"}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${
+                                    isResolved
+                                      ? "border-success/40 text-success"
+                                      : isActive
+                                        ? "border-brass/40 text-brass"
+                                        : "border-line text-ink-muted"
+                                  }`}
+                                >
+                                  {isResolved
+                                    ? "rozstrzygnięto"
+                                    : isPending
+                                      ? "w kolejce"
+                                      : isWaitingPlayer
+                                        ? "czeka na gracza"
+                                        : "czeka na Ciebie"}
+                                </span>
+                              </div>
+
+                              {isStoryteller && (
+                                <div className="mt-2 pl-11">
+                                  <p className="text-xs text-moss">Prawdziwa odpowiedź</p>
+                                  {action.secretJson != null ? (
+                                    <p className="text-sm text-ink-secondary">
+                                      {resolutionText(action.secretJson, nameById)}
+                                    </p>
+                                  ) : (
+                                    <p className="text-sm text-ink-muted">
+                                      Odpowiedź zostanie wyliczona przy zatwierdzeniu.
+                                    </p>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResolveAction(action)}
+                                    disabled={busy}
+                                    className="mt-2 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                                  >
+                                    Zatwierdź
+                                  </button>
+                                </div>
+                              )}
+
+                              {isResolved && (
+                                <p className="mt-1 pl-11 text-xs text-ink-muted">
+                                  {resolutionText(action.resolutionJson, nameById)}
+                                </p>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+
+                      <button
+                        type="button"
+                        onClick={handleCompleteOperational}
+                        disabled={busy || unresolvedCount > 0}
+                        className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                      >
+                        Zakończ fazę operacyjną
+                      </button>
+                    </>
+                  )}
+                </section>
+              )}
             </div>
           </>
         )}

@@ -10,8 +10,8 @@ export async function GET(
   try {
     const { gameId } = await params;
     await resolveStoryteller(gameId);
-    const { game, players, claims } = await loadStorytellerData(gameId);
-    return jsonOk(buildStorytellerProjection(game, players, claims));
+    const { game, players, claims, draft, operational } = await loadStorytellerData(gameId);
+    return jsonOk(buildStorytellerProjection(game, players, claims, { draft, operational }));
   } catch (err) {
     return jsonError(err);
   }
