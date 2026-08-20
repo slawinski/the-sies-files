@@ -10,6 +10,7 @@ import type { SetupCandidate } from "@/modules/setup/types";
 
 export type InfoResult =
   | { kind: "CHARACTER_CANDIDATES"; characterId: string; candidatePlayerIds: string[] }
+  | { kind: "CHARACTER"; characterId: string; playerId: string }
   | { kind: "NUMBER"; value: number }
   | { kind: "NO_OUTSIDERS" }
   | { kind: "DEMON_YES_NO"; value: boolean }
@@ -69,4 +70,13 @@ export function computeFortuneTellerResult(
   const demonId = candidate.assignments.find((a) => a.trueCharacterId === "IMP")?.playerId;
   const redHerring = candidate.fortuneTellerRedHerringPlayerId;
   return targetPlayerIds.some((id) => id === demonId || id === redHerring);
+}
+
+/** Ravenkeeper: the true character of the chosen player. */
+export function computeCharacterOf(
+  candidate: SetupCandidate,
+  targetPlayerId: string,
+): InfoResult {
+  const target = candidate.assignments.find((a) => a.playerId === targetPlayerId);
+  return { kind: "CHARACTER", characterId: target!.trueCharacterId, playerId: targetPlayerId };
 }

@@ -1,12 +1,11 @@
 // Versioned Trouble Brewing script definition (docs/01 §6, docs/03 §6).
 //
-// The exact first-Operational order lives here (not in UI code) and is
-// snapshot-tested. Slice 2 uses a narrow first-cycle runner; Slice 3 generalizes
-// occurrence (`FIRST_CYCLE_ONLY` / `EACH_CYCLE` / `NOT_FIRST_CYCLE`).
+// The exact Operational orders live here (not in UI code) and are
+// snapshot-tested. Occurrence metadata drives the queue builder.
 
 import type { CharacterId } from "./characters";
 
-export type FirstCycleStepKind =
+export type StepKind =
   | "POISONER_CHOOSE"
   | "WASHERWOMAN_INFO"
   | "LIBRARIAN_INFO"
@@ -17,11 +16,17 @@ export type FirstCycleStepKind =
   | "FORTUNE_TELLER_INFO"
   | "SPY_GRIMOIRE"
   | "BUTLER_CHOOSE"
-  | "BUREAUCRAT_CHOOSE";
+  | "BUREAUCRAT_CHOOSE"
+  | "MONK_CHOOSE"
+  | "IMP_CHOOSE"
+  | "IMP_KILL"
+  | "RAVENKEEPER_CHOOSE"
+  | "RAVENKEEPER_INFO";
 
 export type StepActor = "PLAYER" | "STORYTELLER";
+export type Occurrence = "FIRST_CYCLE_ONLY" | "EACH_CYCLE" | "NOT_FIRST_CYCLE" | "TRIGGERED";
 
-export const STEP_CHARACTER: Record<FirstCycleStepKind, CharacterId> = {
+export const STEP_CHARACTER: Record<StepKind, CharacterId> = {
   POISONER_CHOOSE: "POISONER",
   WASHERWOMAN_INFO: "WASHERWOMAN",
   LIBRARIAN_INFO: "LIBRARIAN",
@@ -33,9 +38,14 @@ export const STEP_CHARACTER: Record<FirstCycleStepKind, CharacterId> = {
   SPY_GRIMOIRE: "SPY",
   BUTLER_CHOOSE: "BUTLER",
   BUREAUCRAT_CHOOSE: "BUREAUCRAT",
+  MONK_CHOOSE: "MONK",
+  IMP_CHOOSE: "IMP",
+  IMP_KILL: "IMP",
+  RAVENKEEPER_CHOOSE: "RAVENKEEPER",
+  RAVENKEEPER_INFO: "RAVENKEEPER",
 };
 
-export const STEP_ACTOR: Record<FirstCycleStepKind, StepActor> = {
+export const STEP_ACTOR: Record<StepKind, StepActor> = {
   POISONER_CHOOSE: "PLAYER",
   WASHERWOMAN_INFO: "STORYTELLER",
   LIBRARIAN_INFO: "STORYTELLER",
@@ -47,12 +57,37 @@ export const STEP_ACTOR: Record<FirstCycleStepKind, StepActor> = {
   SPY_GRIMOIRE: "STORYTELLER",
   BUTLER_CHOOSE: "PLAYER",
   BUREAUCRAT_CHOOSE: "PLAYER",
+  MONK_CHOOSE: "PLAYER",
+  IMP_CHOOSE: "PLAYER",
+  IMP_KILL: "STORYTELLER",
+  RAVENKEEPER_CHOOSE: "PLAYER",
+  RAVENKEEPER_INFO: "STORYTELLER",
+};
+
+export const STEP_OCCURRENCE: Record<StepKind, Occurrence> = {
+  POISONER_CHOOSE: "EACH_CYCLE",
+  WASHERWOMAN_INFO: "FIRST_CYCLE_ONLY",
+  LIBRARIAN_INFO: "FIRST_CYCLE_ONLY",
+  INVESTIGATOR_INFO: "FIRST_CYCLE_ONLY",
+  CHEF_INFO: "FIRST_CYCLE_ONLY",
+  EMPATH_INFO: "EACH_CYCLE",
+  FORTUNE_TELLER_CHOOSE: "EACH_CYCLE",
+  FORTUNE_TELLER_INFO: "EACH_CYCLE",
+  SPY_GRIMOIRE: "EACH_CYCLE",
+  BUTLER_CHOOSE: "EACH_CYCLE",
+  BUREAUCRAT_CHOOSE: "EACH_CYCLE",
+  MONK_CHOOSE: "NOT_FIRST_CYCLE",
+  IMP_CHOOSE: "NOT_FIRST_CYCLE",
+  IMP_KILL: "NOT_FIRST_CYCLE",
+  RAVENKEEPER_CHOOSE: "TRIGGERED",
+  RAVENKEEPER_INFO: "TRIGGERED",
 };
 
 export interface ScriptDefinition {
   id: "TROUBLE_BREWING";
   version: number;
-  firstOperationalOrder: FirstCycleStepKind[];
+  firstOperationalOrder: StepKind[];
+  otherOperationalOrder: StepKind[];
 }
 
 export const TROUBLE_BREWING_SCRIPT_ID = "TROUBLE_BREWING";
@@ -74,9 +109,20 @@ export const TROUBLE_BREWING: ScriptDefinition = {
     "BUTLER_CHOOSE",
     "BUREAUCRAT_CHOOSE",
   ],
+  otherOperationalOrder: [
+    "POISONER_CHOOSE",
+    "MONK_CHOOSE",
+    "EMPATH_INFO",
+    "FORTUNE_TELLER_CHOOSE",
+    "FORTUNE_TELLER_INFO",
+    "SPY_GRIMOIRE",
+    "BUTLER_CHOOSE",
+    "IMP_CHOOSE",
+    "IMP_KILL",
+    "BUREAUCRAT_CHOOSE",
+  ],
 };
 
-/** Resolve the active script definition (single script in MVP). */
 export function getScriptDefinition(id: string, version: number): ScriptDefinition {
   if (id === TROUBLE_BREWING.id && version === TROUBLE_BREWING.version) {
     return TROUBLE_BREWING;

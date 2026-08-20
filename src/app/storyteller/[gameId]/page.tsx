@@ -45,6 +45,14 @@ function isInfoResult(result: unknown): result is InfoResultDto {
   return "kind" in result && typeof (result as { kind?: unknown }).kind === "string";
 }
 
+/** Slice 3 wraps ST context as `{ info, functioning }`; unwrap the info. */
+function unwrapSecret(secretJson: unknown): unknown {
+  if (secretJson && typeof secretJson === "object" && "info" in secretJson) {
+    return (secretJson as { info: unknown }).info;
+  }
+  return secretJson;
+}
+
 /** Readable text for a resolved secret (InfoResult or `{ targetPlayerIds }`). */
 function resolutionText(result: unknown, nameById: Map<string, string>): string {
   if (isInfoResult(result)) {
@@ -308,7 +316,7 @@ export default function StorytellerDashboard() {
         body: JSON.stringify({
           commandId: crypto.randomUUID(),
           expectedVersion: game.version,
-          payload: { resolution: action.secretJson },
+          payload: { resolution: unwrapSecret(action.secretJson) },
         }),
       }),
     );
@@ -781,7 +789,7 @@ export default function StorytellerDashboard() {
                                   <p className="text-xs text-moss">Prawdziwa odpowiedź</p>
                                   {action.secretJson != null ? (
                                     <p className="text-sm text-ink-secondary">
-                                      {resolutionText(action.secretJson, nameById)}
+                                      {resolutionText(unwrapSecret(action.secretJson), nameById)}
                                     </p>
                                   ) : (
                                     <p className="text-sm text-ink-muted">

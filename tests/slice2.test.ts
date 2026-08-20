@@ -167,7 +167,7 @@ describe("Slice 2 — setup + first Operational", () => {
 
   it("claim links remain issuable after setup commit", async () => {
     const { gameId, playerIds, version } = await setupCommittedGame(15);
-    const { token, tokenHash, expiresAt } = newClaimToken();
+    const { tokenHash, expiresAt } = newClaimToken();
     const r = await issueClaimToken({
       gameId,
       playerId: playerIds[0],

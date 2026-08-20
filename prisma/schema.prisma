@@ -76,6 +76,7 @@ model GameSession {
   storytellerSession BrowserSession[]
   setupDraft         SetupDraft?
   operationalPhases  OperationalPhase[]
+  effects            Effect[]
 
   @@map("game_sessions")
 }
@@ -224,4 +225,22 @@ model OperationalAction {
 
   @@index([operationalPhaseId, orderIndex])
   @@map("operational_actions")
+}
+
+model Effect {
+  id             String      @id @default(uuid())
+  gameId         String
+  game           GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  effectType     String
+  sourcePlayerId String?
+  targetPlayerId String
+  cycleNumber    Int
+  expiryBoundary String
+  active         Boolean     @default(true)
+  metadataJson   Json?
+  createdAt      DateTime    @default(now())
+
+  @@index([gameId, active])
+  @@index([targetPlayerId, active])
+  @@map("effects")
 }
