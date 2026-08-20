@@ -24,6 +24,15 @@ export async function loadInvestigationData(gameId: string, cycleNumber: number)
   return { investigation, nominations };
 }
 
+export async function loadScenarioData(gameId: string) {
+  const scenarioState = await prisma.scenarioState.findUnique({ where: { gameId } });
+  const discoveries = await prisma.scenarioDiscovery.findMany({ where: { gameId } });
+  const taskStates = await prisma.taskState.findMany({ where: { gameId } });
+  const conditions = await prisma.scenarioCondition.findMany({ where: { gameId, active: true } });
+  const scans = await prisma.qrScan.findMany({ where: { gameId } });
+  return { scenarioState, discoveries, taskStates, conditions, scans };
+}
+
 export async function loadStorytellerData(gameId: string) {
   const { game, players } = await loadGameAndPlayers(gameId);
   const claims = await prisma.playerClaim.findMany({
@@ -35,7 +44,8 @@ export async function loadStorytellerData(gameId: string) {
     include: { actions: { orderBy: { orderIndex: "asc" } } },
   });
   const { investigation, nominations } = await loadInvestigationData(gameId, game.cycleNumber);
-  return { game, players, claims, draft, operational, investigation, nominations };
+  const scenario = await loadScenarioData(gameId);
+  return { game, players, claims, draft, operational, investigation, nominations, ...scenario };
 }
 
 export async function loadPlayerData(gameId: string, playerId: string) {
@@ -51,5 +61,6 @@ export async function loadPlayerData(gameId: string, playerId: string) {
     orderBy: { orderIndex: "asc" },
   });
   const { investigation, nominations } = await loadInvestigationData(gameId, game.cycleNumber);
-  return { game, players, secret, candidate, myActions, investigation, nominations };
+  const scenario = await loadScenarioData(gameId);
+  return { game, players, secret, candidate, myActions, investigation, nominations, ...scenario };
 }

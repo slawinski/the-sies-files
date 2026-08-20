@@ -94,6 +94,11 @@ model GameSession {
   investigation      InvestigationState?
   nominations        Nomination[]
   deathRecords       DeathRecord[]
+  scenario           ScenarioState?
+  qrScans            QrScan[]
+  scenarioDiscoveries ScenarioDiscovery[]
+  taskStates         TaskState[]
+  scenarioConditions ScenarioCondition[]
 
   @@map("game_sessions")
 }
@@ -326,4 +331,73 @@ model DeathRecord {
 
   @@index([gameId, playerId])
   @@map("death_records")
+}
+
+model ScenarioState {
+  gameId          String      @id
+  game            GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  scenarioId      String?
+  scenarioVersion Int?
+  stageId         String?
+  mapVersionId    String?
+  stateJson       Json?
+  updatedAt       DateTime    @updatedAt
+
+  @@map("scenario_states")
+}
+
+model QrScan {
+  id        String   @id @default(uuid())
+  gameId    String
+  game      GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId  String
+  qrTokenId String
+  commandId String
+  outcome   String   @default("CONSUMED")
+  createdAt DateTime @default(now())
+
+  @@unique([gameId, playerId, commandId])
+  @@index([gameId, playerId])
+  @@map("qr_scans")
+}
+
+model ScenarioDiscovery {
+  id              String   @id @default(uuid())
+  gameId          String
+  game            GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId        String?
+  objectId        String
+  objectType      String
+  visibilityScope String
+  contentJson     Json?
+  discoveredAt    DateTime @default(now())
+
+  @@index([gameId, playerId])
+  @@map("scenario_discoveries")
+}
+
+model TaskState {
+  id        String   @id @default(uuid())
+  gameId    String
+  game      GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  taskId    String
+  playerId  String?
+  state     String   @default("AVAILABLE")
+  updatedAt DateTime @updatedAt
+
+  @@index([gameId, taskId])
+  @@map("task_states")
+}
+
+model ScenarioCondition {
+  id          String   @id @default(uuid())
+  gameId      String
+  game        GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  conditionId String
+  playerId    String?
+  active      Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+
+  @@index([gameId, conditionId])
+  @@map("scenario_conditions")
 }

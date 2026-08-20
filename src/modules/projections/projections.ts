@@ -12,13 +12,19 @@ import type {
   Player,
   PlayerClaim,
   PlayerSecret,
+  QrScan,
+  ScenarioCondition,
+  ScenarioDiscovery,
+  ScenarioState,
   SetupDraft,
+  TaskState,
   Vote,
 } from "@prisma/client";
 import { DomainError } from "@/lib/errors";
 import { isRosterReady } from "@/modules/game-session/roster.rules";
 import { buildRoleReveal, type RoleReveal } from "@/modules/setup/reveal";
 import type { SetupCandidate } from "@/modules/setup/types";
+import { getScenarioDefinition } from "@/modules/scenario/definition";
 
 export interface PlayerPublicDto {
   id: string;
@@ -65,6 +71,7 @@ export interface PlayerGameProjection extends PublicGameProjection {
   deliveredInfo: DeliveredInfoDto[];
   investigation: InvestigationDto | null;
   nominations: PlayerNominationDto[];
+  scenario: PlayerScenarioDto | null;
 }
 
 export interface StorytellerPlayerDto extends PlayerPublicDto {
@@ -127,6 +134,19 @@ export interface PlayerNominationDto {
   myVoteIntent: boolean | null;
 }
 
+export interface PlayerScenarioDto {
+  stageId: string | null;
+  mapVersionId: string | null;
+  mapLocations: string[];
+  clues: { id: string; title: string; body: string }[];
+  tasks: { id: string; title: string; state: string }[];
+  conditions: string[];
+}
+
+export interface StorytellerScenarioDto extends PlayerScenarioDto {
+  scans: { qrTokenId: string; playerId: string; playerName: string | null }[];
+}
+
 export interface StorytellerGameProjection extends PublicGameProjection {
   players: StorytellerPlayerDto[];
   setup: {
@@ -142,6 +162,7 @@ export interface StorytellerGameProjection extends PublicGameProjection {
   } | null;
   investigation: InvestigationDto | null;
   nominations: NominationDto[];
+  scenario: StorytellerScenarioDto | null;
 }
 
 function sortBySeat(players: Player[]): Player[] {
@@ -182,6 +203,56 @@ export interface PlayerProjectionExtras {
   myActions?: OperationalAction[];
   investigation?: InvestigationState | null;
   nominations?: (Nomination & { votes: Vote[] })[];
+  scenarioState?: ScenarioState | null;
+  discoveries?: ScenarioDiscovery[];
+  taskStates?: TaskState[];
+  conditions?: ScenarioCondition[];
+}
+
+function buildPlayerScenario(
+  data: {
+    scenarioState: ScenarioState | null;
+    discoveries: ScenarioDiscovery[];
+    taskStates: TaskState[];
+    conditions: ScenarioCondition[];
+  },
+  viewer: { playerId: string | null; characterId: string | null },
+): PlayerScenarioDto | null {
+  if (!data.scenarioState) return null;
+  const def = getScenarioDefinition(
+    data.scenarioState.scenarioId ?? "THE_SIES_FILES_MILLIONAIRE",
+    data.scenarioState.scenarioVersion ?? 1,
+  );
+  const mapVersionId = data.scenarioState.mapVersionId ?? def.initialMapVersionId;
+  const map = def.mapVersions.find((m) => m.id === mapVersionId);
+  const clues = data.discoveries
+    .filter((d) => d.objectType === "CLUE")
+    .filter((d) => {
+      if (viewer.playerId === null) return true; // storyteller sees all
+      if (d.visibilityScope === "PUBLIC") return true;
+      if (d.visibilityScope === "DISCOVERER_ONLY") return d.playerId === viewer.playerId;
+      if (d.visibilityScope === "CHARACTER_FILTERED") {
+        return (d.contentJson as { characterId?: string } | null)?.characterId === viewer.characterId;
+      }
+      return false;
+    })
+    .map((d) => ({
+      id: d.objectId,
+      title: (d.contentJson as { title?: string } | null)?.title ?? d.objectId,
+      body: (d.contentJson as { body?: string } | null)?.body ?? "",
+    }));
+  const tasks = data.taskStates.map((t) => {
+    const td = def.tasks.find((x) => x.id === t.taskId);
+    return { id: t.taskId, title: td?.title ?? t.taskId, state: t.state };
+  });
+  return {
+    stageId: data.scenarioState.stageId,
+    mapVersionId,
+    mapLocations: map?.locations ?? [],
+    clues,
+    tasks,
+    conditions: data.conditions.map((c) => c.conditionId),
+  };
 }
 
 export function buildPlayerProjection(
@@ -231,6 +302,16 @@ export function buildPlayerProjection(
     myVoteIntent: n.votes.find((v) => v.playerId === viewerPlayerId)?.rawIntent ?? null,
   }));
 
+  const scenario = buildPlayerScenario(
+    {
+      scenarioState: extras.scenarioState ?? null,
+      discoveries: extras.discoveries ?? [],
+      taskStates: extras.taskStates ?? [],
+      conditions: extras.conditions ?? [],
+    },
+    { playerId: viewerPlayerId, characterId: extras.secret?.trueCharacterId ?? null },
+  );
+
   return {
     ...base,
     me: {
@@ -246,6 +327,7 @@ export function buildPlayerProjection(
     deliveredInfo,
     investigation,
     nominations,
+    scenario,
   };
 }
 
@@ -254,6 +336,11 @@ export interface StorytellerProjectionExtras {
   operational?: (OperationalPhase & { actions: OperationalAction[] }) | null;
   investigation?: InvestigationState | null;
   nominations?: (Nomination & { votes: Vote[] })[];
+  scenarioState?: ScenarioState | null;
+  discoveries?: ScenarioDiscovery[];
+  taskStates?: TaskState[];
+  conditions?: ScenarioCondition[];
+  scans?: QrScan[];
 }
 
 export function buildStorytellerProjection(
@@ -338,5 +425,28 @@ export function buildStorytellerProjection(
     operational,
     investigation,
     nominations,
+    scenario: {
+      ...(buildPlayerScenario(
+        {
+          scenarioState: extras.scenarioState ?? null,
+          discoveries: extras.discoveries ?? [],
+          taskStates: extras.taskStates ?? [],
+          conditions: extras.conditions ?? [],
+        },
+        { playerId: null, characterId: null },
+      ) ?? {
+        stageId: null,
+        mapVersionId: null,
+        mapLocations: [],
+        clues: [],
+        tasks: [],
+        conditions: [],
+      }),
+      scans: (extras.scans ?? []).map((s) => ({
+        qrTokenId: s.qrTokenId,
+        playerId: s.playerId,
+        playerName: nameById.get(s.playerId) ?? null,
+      })),
+    },
   };
 }

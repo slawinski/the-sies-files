@@ -10,8 +10,8 @@ export async function GET(
   try {
     const { gameId } = await params;
     const { playerId } = await resolvePlayer(gameId);
-    const { game, players, secret, candidate, myActions, investigation, nominations } = await loadPlayerData(gameId, playerId);
-    return jsonOk(buildPlayerProjection(game, players, playerId, { secret, candidate, myActions, investigation, nominations }));
+    const { game, players, secret, candidate, myActions, investigation, nominations, scenarioState, discoveries, taskStates, conditions } = await loadPlayerData(gameId, playerId);
+    return jsonOk(buildPlayerProjection(game, players, playerId, { secret, candidate, myActions, investigation, nominations, scenarioState, discoveries, taskStates, conditions }));
   } catch (err) {
     return jsonError(err);
   }

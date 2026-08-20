@@ -18,12 +18,12 @@ export async function GET() {
     if (!session || !session.playerId || !session.player) {
       throw new DomainError("UNAUTHORIZED", "Not authenticated");
     }
-    const { game, players, secret, candidate, myActions, investigation, nominations } = await loadPlayerData(
+    const { game, players, secret, candidate, myActions, investigation, nominations, scenarioState, discoveries, taskStates, conditions } = await loadPlayerData(
       session.player.gameId,
       session.playerId,
     );
     return jsonOk(
-      buildPlayerProjection(game, players, session.playerId, { secret, candidate, myActions, investigation, nominations }),
+      buildPlayerProjection(game, players, session.playerId, { secret, candidate, myActions, investigation, nominations, scenarioState, discoveries, taskStates, conditions }),
     );
   } catch (err) {
     return jsonError(err);
