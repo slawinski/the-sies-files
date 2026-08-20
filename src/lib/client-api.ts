@@ -76,6 +76,14 @@ export function friendlyMessage(code: string, fallback: string): string {
       return "Lista osiągnęła już maksimum 16 uczestników.";
     case "ROSTER_SIZE_INVALID":
       return "Sprawa wymaga od 13 do 16 uczestników.";
+    case "VIRTUAL_CIRCLE_LOCKED":
+      return "Skład i krąg są już zablokowane po zatwierdzeniu układu.";
+    case "SETUP_NOT_COMMITTED":
+      return "Układ nie został jeszcze zatwierdzony.";
+    case "ACTION_NOT_ACTIVE":
+      return "Ta akcja nie jest teraz dostępna.";
+    case "INVALID_SESSION_STATE":
+      return "Nie można tego teraz zrobić w tej fazie gry.";
     case "CLAIM_ALREADY_USED":
       return "Ten link do odbioru został już użyty lub wygasł.";
     case "NETWORK":

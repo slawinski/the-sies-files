@@ -16,6 +16,7 @@ import {
 import { loadStorytellerData, loadPlayerData } from "@/modules/projections/load";
 import { buildPlayerProjection } from "@/modules/projections/projections";
 import { addPlayer } from "@/modules/game-session/game-session.service";
+import { issueClaimToken, newClaimToken } from "@/modules/game-session/game-session.service";
 import { computeAdjacentEvilPairs } from "@/modules/operational/info-resolver";
 import type { SetupCandidate } from "@/modules/setup/types";
 
@@ -162,6 +163,20 @@ describe("Slice 2 — setup + first Operational", () => {
       return;
     }
     throw new Error("Drunk never appeared in 30 setup attempts");
+  });
+
+  it("claim links remain issuable after setup commit", async () => {
+    const { gameId, playerIds, version } = await setupCommittedGame(15);
+    const { token, tokenHash, expiresAt } = newClaimToken();
+    const r = await issueClaimToken({
+      gameId,
+      playerId: playerIds[0],
+      commandId: randomUUID(),
+      expectedVersion: version,
+      tokenHash,
+      expiresAt,
+    });
+    expect(r.duplicate).toBe(false);
   });
 
   it("player projection never exposes another player's role", async () => {

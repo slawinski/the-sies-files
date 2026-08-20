@@ -265,7 +265,11 @@ export async function issueClaimToken({
     expectedVersion,
     actor: "storyteller",
     handler: async ({ tx, game, appendEvent }) => {
-      assertRosterEditable(game.status);
+      // Claim tokens are about player access (incl. re-issue), not roster edits —
+      // so they remain issuable after setup commit / during the game.
+      if (game.status === "ENDED") {
+        throw new DomainError("INVALID_SESSION_STATE", "Cannot issue a claim token after the game has ended");
+      }
       const player = await tx.player.findFirst({ where: { id: playerId, gameId } });
       if (!player) throw new DomainError("PLAYER_NOT_FOUND", "Player not found");
       const claim = await tx.playerClaim.upsert({
