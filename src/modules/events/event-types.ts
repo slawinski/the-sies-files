@@ -1,0 +1,15 @@
+// Canonical domain event type names for Slice 1 (docs/04 §7).
+// No magic strings elsewhere in domain code.
+
+export const EVENTS = {
+  GAME_CREATED: "GAME_CREATED",
+  PLAYER_ADDED: "PLAYER_ADDED",
+  PLAYER_UPDATED: "PLAYER_UPDATED",
+  PLAYER_REMOVED: "PLAYER_REMOVED",
+  VIRTUAL_CIRCLE_REORDERED: "VIRTUAL_CIRCLE_REORDERED",
+  PLAYER_CLAIM_TOKEN_ISSUED: "PLAYER_CLAIM_TOKEN_ISSUED",
+  PLAYER_CLAIMED: "PLAYER_CLAIMED",
+  PLAYER_SESSION_REVOKED: "PLAYER_SESSION_REVOKED",
+} as const;
+
+export type EventType = (typeof EVENTS)[keyof typeof EVENTS];

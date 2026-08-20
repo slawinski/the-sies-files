@@ -1,0 +1,146 @@
+// The Sieś Files — Prisma schema (Milestone 0 + Slice 1)
+//
+// This schema intentionally contains only what the current slice needs.
+// Slices 2–6 will add PlayerSecret, SetupDraft, OperationalPhase, Effect,
+// DeathRecord, InvestigationState, Nomination, Vote, ScenarioState, etc.
+//
+// Semantics are canonical (see docs/03_MVP_TECHNICAL_SPECIFICATION_v1.md §5);
+// exact table/column naming may differ from the spec.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SessionStatus {
+  LOBBY
+  SETUP
+  ROLE_REVEAL
+  ACTIVE
+  ENDED
+}
+
+enum GamePhase {
+  OPERATIONAL
+  INVESTIGATION
+}
+
+enum ParticipantKind {
+  NORMAL
+  TRAVELLER
+}
+
+enum CommandReceiptStatus {
+  APPLIED
+}
+
+model GameSession {
+  id              String        @id @default(uuid())
+  name            String
+  status          SessionStatus @default(LOBBY)
+  phase           GamePhase?
+  cycleNumber     Int           @default(0)
+  version         Int           @default(0)
+  eventSequence   Int           @default(0)
+  scriptId        String?
+  scriptVersion   Int?
+  scenarioId      String?
+  scenarioVersion Int?
+  winner          String?
+  winReason       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  players            Player[]
+  events             DomainEvent[]
+  commands           CommandReceipt[]
+  storytellerSession BrowserSession[]
+
+  @@map("game_sessions")
+}
+
+model Player {
+  id                 String          @id @default(uuid())
+  gameId             String
+  game               GameSession     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  displayName        String
+  virtualSeat        Int
+  participantKind    ParticipantKind @default(NORMAL)
+  alive              Boolean         @default(true)
+  ghostVoteAvailable Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  claim    PlayerClaim?
+  sessions BrowserSession[]
+
+  @@unique([gameId, virtualSeat])
+  @@unique([gameId, displayName])
+  @@map("players")
+}
+
+model PlayerClaim {
+  id        String    @id @default(uuid())
+  playerId  String    @unique
+  player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  claimedAt DateTime?
+  commandId String?
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("player_claims")
+}
+
+model BrowserSession {
+  id                String       @id @default(uuid())
+  playerId          String?
+  player            Player?      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  storytellerGameId String?
+  storytellerGame   GameSession? @relation(fields: [storytellerGameId], references: [id], onDelete: Cascade)
+  sessionTokenHash  String       @unique
+  createdAt         DateTime     @default(now())
+  expiresAt         DateTime
+  revokedAt         DateTime?
+
+  @@index([playerId])
+  @@index([storytellerGameId])
+  @@map("browser_sessions")
+}
+
+model DomainEvent {
+  id          String      @id @default(uuid())
+  gameId      String
+  game        GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  sequence    Int
+  gameVersion Int
+  eventType   String
+  actor       String?
+  commandId   String?
+  payload     Json?
+  createdAt   DateTime    @default(now())
+
+  @@unique([gameId, sequence])
+  @@index([gameId, createdAt])
+  @@index([commandId])
+  @@map("domain_events")
+}
+
+model CommandReceipt {
+  id               String      @id @default(uuid())
+  commandId        String
+  gameId           String
+  game             GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  resultingVersion Int
+  status           CommandReceiptStatus @default(APPLIED)
+  resultJson       Json?
+  createdAt        DateTime    @default(now())
+
+  @@unique([gameId, commandId])
+  @@map("command_receipts")
+}

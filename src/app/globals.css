@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* ============================================================
+   The Sieś Files — Rural Neo-Noir + Bento Grid design tokens
+   Canonical: docs/11_VISUAL_DESIGN_SYSTEM.md §3–§6
+   ============================================================ */
+
+:root {
+  --bg-canvas: #11130f;
+  --bg-elevated: #181b16;
+  --bg-card: #20231c;
+  --bg-card-soft: #292b22;
+  --paper: #d8c9aa;
+  --paper-bright: #eee3c9;
+  --ink: #171814;
+  --text-primary: #eee9dc;
+  --text-secondary: #b9b5a8;
+  --text-muted: #858477;
+  --moss: #7b8450;
+  --brass: #a6925f;
+  --rust: #9a4f3e;
+  --danger: #b95c4b;
+  --success: #7c9460;
+  --border: #3a3c31;
+}
+
+@theme inline {
+  --color-canvas: var(--bg-canvas);
+  --color-elevated: var(--bg-elevated);
+  --color-card: var(--bg-card);
+  --color-card-soft: var(--bg-card-soft);
+  --color-paper: var(--paper);
+  --color-paper-bright: var(--paper-bright);
+  --color-ink: var(--ink);
+  --color-ink-primary: var(--text-primary);
+  --color-ink-secondary: var(--text-secondary);
+  --color-ink-muted: var(--text-muted);
+  --color-moss: var(--moss);
+  --color-brass: var(--brass);
+  --color-rust: var(--rust);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-line: var(--border);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Semantic card system (docs/11 §5) */
+.card {
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  padding: 16px;
+}
+.system-card {
+  background: var(--bg-card);
+}
+.paper-card {
+  background: var(--paper);
+  color: var(--ink);
+}
+.critical-card {
+  background: var(--bg-card);
+  border-color: var(--rust);
+}
+.secret-card {
+  background: var(--bg-elevated);
+  border-color: var(--brass);
+}
+.map-card {
+  background: var(--bg-elevated);
+  padding: 0;
+  overflow: hidden;
+}
+.status-card {
+  background: var(--bg-card-soft);
+}
+
+/* Display / dossier heading accent */
+.display {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Visible focus (docs/11 §15) */
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

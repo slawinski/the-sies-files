@@ -1,0 +1,87 @@
+// Injectable RNG. Production code uses crypto; tests and Slice 2 setup
+// generation use a deterministic seeded generator so setup is reproducible.
+
+import { randomBytes, randomUUID } from "node:crypto";
+
+export interface Rng {
+  /** Returns `length` random bytes. */
+  randomBytes(length: number): Uint8Array;
+  /** Returns a random UUID v4 string. */
+  randomUuid(): string;
+  /** Returns a uniformly random integer in [min, max] inclusive. */
+  randomInt(min: number, max: number): number;
+}
+
+export class CryptoSecureRng implements Rng {
+  randomBytes(length: number): Uint8Array {
+    return randomBytes(length);
+  }
+
+  randomUuid(): string {
+    return randomUUID();
+  }
+
+  randomInt(min: number, max: number): number {
+    const range = max - min + 1;
+    const buf = Buffer.alloc(4);
+    // Rejection sampling to avoid modulo bias.
+    const limit = Math.floor(2 ** 32 / range) * range;
+    let val: number;
+    do {
+      randomBytes(4).copy(buf);
+      val = buf.readUInt32BE(0);
+    } while (val >= limit);
+    return min + (val % range);
+  }
+}
+
+export const cryptoSecureRng: Rng = new CryptoSecureRng();
+
+/** Deterministic xorshift32-based generator for tests and seeded setup. */
+export class SeededRng implements Rng {
+  private state: number;
+
+  constructor(seed: number) {
+    this.state = seed >>> 0 || 0x9e3779b9;
+  }
+
+  private next(): number {
+    let x = this.state;
+    x ^= x << 13;
+    x >>>= 0;
+    x ^= x >> 17;
+    x ^= x << 5;
+    x >>>= 0;
+    this.state = x;
+    return x;
+  }
+
+  randomBytes(length: number): Uint8Array {
+    const out = new Uint8Array(length);
+    for (let i = 0; i < length; i += 1) {
+      out[i] = this.next() & 0xff;
+    }
+    return out;
+  }
+
+  randomUuid(): string {
+    const b = this.randomBytes(16);
+    b[6] = (b[6] & 0x0f) | 0x40; // version 4
+    b[8] = (b[8] & 0x3f) | 0x80; // variant 10
+    const hex = Array.from(b)
+      .map((n) => n.toString(16).padStart(2, "0"))
+      .join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  randomInt(min: number, max: number): number {
+    const range = max - min + 1;
+    // Rejection sampling to avoid modulo bias (matches CryptoSecureRng).
+    const limit = Math.floor(2 ** 32 / range) * range;
+    let val: number;
+    do {
+      val = this.next();
+    } while (val >= limit);
+    return min + (val % range);
+  }
+}
