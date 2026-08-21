@@ -44,6 +44,8 @@ export interface PublicGameProjection {
   participantCount: number;
   isReady: boolean;
   players: PlayerPublicDto[];
+  /** Terminal result (authoritative, survives reload) — null unless ENDED. */
+  result: { winner: string; reason: string } | null;
 }
 
 export interface ActiveActionDto {
@@ -119,6 +121,8 @@ export interface NominationDto {
   rawTotal: number;
   effectiveTotal: number;
   qualified: boolean;
+  passStatus: string;
+  currentVirtualSeat: number | null;
   votes: VoteDto[];
 }
 
@@ -132,6 +136,8 @@ export interface PlayerNominationDto {
   effectiveTotal: number;
   qualified: boolean;
   myVoteIntent: boolean | null;
+  passStatus: string;
+  currentVirtualSeat: number | null;
 }
 
 export interface PlayerScenarioDto {
@@ -194,6 +200,10 @@ export function buildPublicProjection(
     participantCount: sorted.length,
     isReady: isRosterReady(sorted.length),
     players: sorted.map(toPlayerPublicDto),
+    result:
+      game.status === "ENDED" && game.winner
+        ? { winner: game.winner, reason: game.winReason ?? "" }
+        : null,
   };
 }
 
@@ -300,6 +310,8 @@ export function buildPlayerProjection(
     effectiveTotal: n.effectiveTotal,
     qualified: n.qualified,
     myVoteIntent: n.votes.find((v) => v.playerId === viewerPlayerId)?.rawIntent ?? null,
+    passStatus: n.passStatus,
+    currentVirtualSeat: n.currentVirtualSeat,
   }));
 
   const scenario = buildPlayerScenario(
@@ -400,6 +412,8 @@ export function buildStorytellerProjection(
     rawTotal: n.rawTotal,
     effectiveTotal: n.effectiveTotal,
     qualified: n.qualified,
+    passStatus: n.passStatus,
+    currentVirtualSeat: n.currentVirtualSeat,
     votes: n.votes.map((v) => ({
       playerId: v.playerId,
       playerName: nameById.get(v.playerId) ?? null,

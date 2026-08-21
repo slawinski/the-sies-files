@@ -34,16 +34,29 @@ function assertRosterEditable(status: SessionStatus): void {
   }
 }
 
+export const GAME_NAME_MAX_LENGTH = 80;
+
+function normalizeGameName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    throw new DomainError("INVALID_DISPLAY_NAME", "Game name is required");
+  }
+  if (trimmed.length > GAME_NAME_MAX_LENGTH) {
+    throw new DomainError("INVALID_DISPLAY_NAME", `Game name must be at most ${GAME_NAME_MAX_LENGTH} characters`);
+  }
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) {
+    throw new DomainError("INVALID_DISPLAY_NAME", "Game name contains control characters");
+  }
+  return trimmed;
+}
+
 export interface CreateGameResult {
   gameId: string;
   storytellerSessionToken: string;
 }
 
 export async function createGame(name: string): Promise<CreateGameResult> {
-  const trimmed = name.trim();
-  if (trimmed.length === 0) {
-    throw new DomainError("INVALID_DISPLAY_NAME", "Game name is required");
-  }
+  const trimmed = normalizeGameName(name);
 
   const storytellerSessionToken = generateToken(cryptoSecureRng);
   const storytellerSessionHash = hashToken(storytellerSessionToken);
@@ -82,6 +95,32 @@ interface BaseCommand {
   gameId: string;
   commandId: string;
   expectedVersion: number;
+}
+
+export async function renameGame({
+  gameId,
+  commandId,
+  expectedVersion,
+  name,
+}: BaseCommand & { name: string }): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, game, appendEvent }) => {
+      if (game.status !== "LOBBY" && game.status !== "SETUP") {
+        throw new DomainError("INVALID_SESSION_STATE", `Game cannot be renamed in status ${game.status}`);
+      }
+      const normalized = normalizeGameName(name);
+      const before = game.name;
+      await tx.gameSession.update({ where: { id: gameId }, data: { name: normalized } });
+      await appendEvent(EVENTS.GAME_RENAMED, { before, after: normalized });
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
 }
 
 export async function addPlayer({

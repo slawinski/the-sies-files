@@ -128,6 +128,14 @@ async function buildQueue(
     const playerId = byPerceived.get(charId);
     if (!playerId) continue;
 
+    // Undertaker only acts after an Investigation with an execution (audit spec 19 §7).
+    if (step === "UNDERTAKER_INFO") {
+      const exec = await tx.deathRecord.findFirst({
+        where: { gameId, source: "EXECUTION", executed: true, cycleNumber: cycle - 1 },
+      });
+      if (!exec) continue;
+    }
+
     const info = computeSecretFor(step, candidate, playerId);
     const functioning = await getFunctioning(tx, playerId, "OPERATIONAL", cycle);
     specs.push({
@@ -347,7 +355,7 @@ export async function submitAction({
 async function computeDefaultResolution(
   tx: Prisma.TransactionClient,
   gameId: string,
-  action: { kind: string; actorPlayerId: string | null; operationalPhaseId: string },
+  action: { kind: string; actorPlayerId: string | null; operationalPhaseId: string; phase: { cycleNumber: number } },
 ): Promise<InfoResult> {
   const candidate = await loadCandidate(tx, gameId);
 
@@ -360,6 +368,14 @@ async function computeDefaultResolution(
   }
   if (action.kind === "RAVENKEEPER_INFO") {
     throw new DomainError("INVALID_TARGET", "The Storyteller must provide the Ravenkeeper's answer");
+  }
+  if (action.kind === "UNDERTAKER_INFO") {
+    const exec = await tx.deathRecord.findFirst({
+      where: { gameId, source: "EXECUTION", executed: true, cycleNumber: action.phase.cycleNumber - 1 },
+    });
+    if (!exec) throw new DomainError("INVALID_SESSION_STATE", "No execution to report");
+    const secret = await tx.playerSecret.findUnique({ where: { playerId: exec.playerId } });
+    return { kind: "CHARACTER", characterId: secret?.trueCharacterId ?? "", playerId: exec.playerId };
   }
 
   const result = computeSecretFor(action.kind as StepKind, candidate, action.actorPlayerId ?? "");

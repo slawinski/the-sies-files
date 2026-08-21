@@ -349,6 +349,7 @@ export interface StorytellerGameProjection {
   participantCount: number;
   isReady: boolean;
   players: StorytellerPlayerDto[];
+  result: { winner: string; reason: string } | null;
   setup: StorytellerSetupDto | null;
   operational: StorytellerOperationalDto | null;
   investigation: InvestigationDto | null;
@@ -366,6 +367,7 @@ export interface PlayerGameProjection {
   participantCount: number;
   isReady: boolean;
   players: PublicPlayerDto[];
+  result: { winner: string; reason: string } | null;
   me: {
     playerId: string;
     displayName: string;

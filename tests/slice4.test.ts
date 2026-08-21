@@ -8,6 +8,7 @@ import {
   openNominations,
   nominate,
   voteIntent,
+  startVotingPass,
   lockVote,
   resolveExecution,
 } from "@/modules/investigation/investigation.service";
@@ -129,7 +130,13 @@ describe("Slice 4 — execution and victory (integration)", () => {
     const n = await nominate({ gameId, nominatorId: nominator, nomineeId: imp, commandId: randomUUID(), expectedVersion: v });
     v = n.version;
 
-    const players = await prisma.player.findMany({ where: { gameId, alive: true } });
+    v = (await startVotingPass({ gameId, nominationId: n.nominationId, commandId: randomUUID(), expectedVersion: v })).version;
+
+    // Sequential Virtual-Circle pass: each vote auto-advances to the next seat.
+    const players = await prisma.player.findMany({
+      where: { gameId, alive: true },
+      orderBy: { virtualSeat: "asc" },
+    });
     for (const p of players) {
       v = (await voteIntent({ gameId, nominationId: n.nominationId, playerId: p.id, intent: true, commandId: randomUUID(), expectedVersion: v })).version;
     }

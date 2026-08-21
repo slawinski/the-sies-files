@@ -347,12 +347,113 @@ export async function voteIntent({
       const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
       if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
       if (nomination.status !== "VOTING") throw new DomainError("VOTE_LOCKED", "Voting is not open for this nomination");
+
+      // Virtual-Circle voting pass (audit spec 20 §4): only the player at the
+      // current seat may cast; the pass then advances deterministically.
+      if (nomination.passStatus !== "RUNNING" || nomination.currentVirtualSeat == null) {
+        throw new DomainError("VOTE_LOCKED", "The voting pass is not at your seat");
+      }
+      const voter = await tx.player.findFirst({ where: { id: playerId, gameId } });
+      if (!voter || voter.virtualSeat !== nomination.currentVirtualSeat) {
+        throw new DomainError("FORBIDDEN", "It is not your turn in the voting pass");
+      }
+      if (!voter.alive && !(voter.participantKind === "NORMAL" && voter.ghostVoteAvailable)) {
+        throw new DomainError("GHOST_VOTE_ALREADY_USED", "No vote available");
+      }
+
       await tx.vote.upsert({
         where: { nominationId_playerId: { nominationId, playerId } },
         create: { nominationId, playerId, rawIntent: intent },
         update: { rawIntent: intent },
       });
       await appendEvent(EVENTS.VOTE_INTENT_RECORDED, { nominationId, playerId, intent });
+
+      const next = await tx.player.findFirst({
+        where: { gameId, virtualSeat: { gt: nomination.currentVirtualSeat } },
+        orderBy: { virtualSeat: "asc" },
+      });
+      if (next) {
+        await tx.nomination.update({ where: { id: nominationId }, data: { currentVirtualSeat: next.virtualSeat } });
+        await appendEvent(EVENTS.VOTE_PASS_ADVANCED, { nominationId, virtualSeat: next.virtualSeat });
+      } else {
+        await tx.nomination.update({ where: { id: nominationId }, data: { passStatus: "COMPLETE", currentVirtualSeat: null } });
+        await appendEvent(EVENTS.VOTE_PASS_COMPLETED, { nominationId });
+      }
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
+}
+
+export async function startVotingPass({
+  gameId,
+  nominationId,
+  commandId,
+  expectedVersion,
+}: {
+  gameId: string;
+  nominationId: string;
+  commandId: string;
+  expectedVersion: number;
+}): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, appendEvent }) => {
+      const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
+      if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
+      if (nomination.status !== "VOTING") throw new DomainError("VOTE_LOCKED", "Voting is not open for this nomination");
+      if (nomination.passStatus === "RUNNING") throw new DomainError("INVALID_SESSION_STATE", "Voting pass is already running");
+      // Deterministic start seat: seat 0 of the Virtual Circle.
+      const first = await tx.player.findFirst({ where: { gameId, virtualSeat: 0 } });
+      await tx.nomination.update({
+        where: { id: nominationId },
+        data: { passStatus: "RUNNING", currentVirtualSeat: first?.virtualSeat ?? 0 },
+      });
+      await appendEvent(EVENTS.VOTING_STARTED, { nominationId });
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
+}
+
+export async function advanceVotingPass({
+  gameId,
+  nominationId,
+  commandId,
+  expectedVersion,
+}: {
+  gameId: string;
+  nominationId: string;
+  commandId: string;
+  expectedVersion: number;
+}): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, appendEvent }) => {
+      const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
+      if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
+      if (nomination.passStatus !== "RUNNING" || nomination.currentVirtualSeat == null) {
+        throw new DomainError("INVALID_SESSION_STATE", "Voting pass is not running");
+      }
+      const next = await tx.player.findFirst({
+        where: { gameId, virtualSeat: { gt: nomination.currentVirtualSeat } },
+        orderBy: { virtualSeat: "asc" },
+      });
+      if (next) {
+        await tx.nomination.update({ where: { id: nominationId }, data: { currentVirtualSeat: next.virtualSeat } });
+        await appendEvent(EVENTS.VOTE_PASS_ADVANCED, { nominationId, virtualSeat: next.virtualSeat });
+      } else {
+        await tx.nomination.update({ where: { id: nominationId }, data: { passStatus: "COMPLETE", currentVirtualSeat: null } });
+        await appendEvent(EVENTS.VOTE_PASS_COMPLETED, { nominationId });
+      }
       return {};
     },
   });
@@ -380,6 +481,9 @@ export async function lockVote({
       const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
       if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
       if (nomination.status !== "VOTING") throw new DomainError("VOTE_LOCKED", "Voting is not open");
+      if (nomination.passStatus !== "COMPLETE") {
+        throw new DomainError("VOTE_LOCKED", "The voting pass must complete before locking");
+      }
 
       const cycle = game.cycleNumber;
       const players = await tx.player.findMany({ where: { gameId } });

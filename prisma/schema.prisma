@@ -296,6 +296,8 @@ model Nomination {
   effectiveTotal Int             @default(0)
   qualified      Boolean         @default(false)
   decisionJson   Json?
+  passStatus     String          @default("READY")
+  currentVirtualSeat Int?
   createdAt      DateTime        @default(now())
 
   votes Vote[]
