@@ -45,6 +45,12 @@ function nominationStatusLabel(status: string): string {
   }
 }
 
+function winnerLabel(winner: string | null): string {
+  if (winner === "GOOD") return "Koniec gry — wygrywa dobro";
+  if (winner === "EVIL") return "Koniec gry — wygrywa zło";
+  return "";
+}
+
 function mapVersionLabel(mapVersionId: string | null): string {
   return mapVersionId === "MAP_EXTENDED" ? "Mapa rozszerzona" : "Mapa główna";
 }
@@ -166,6 +172,8 @@ function renderDeliveredInfo(item: DeliveredInfoDto, nameById: Map<string, strin
             {result.candidatePlayerIds.map((id) => nameById.get(id) ?? id).join(", ")}
           </>
         );
+      case "CHARACTER":
+        return <>{titleCaseCharacterId(result.characterId)}</>;
       case "NUMBER":
         return <>Liczba: {result.value}</>;
       case "NO_OUTSIDERS":
@@ -519,6 +527,25 @@ export default function PlayerWaiting() {
               </div>
             )}
 
+            {/* Persistent terminal result (authoritative, survives reload) */}
+            {game.result && (
+              <section
+                className={`card md:col-span-3 ${
+                  game.result.winner === "EVIL"
+                    ? "border-danger/40 bg-danger/10"
+                    : "border-success/40 bg-success/10"
+                }`}
+              >
+                <p className="display text-xs tracking-[0.25em] text-ink-muted">Wynik sprawy</p>
+                <h2 className="display mt-1 text-2xl leading-tight text-ink-primary">
+                  {winnerLabel(game.result.winner)}
+                </h2>
+                {game.result.reason && (
+                  <p className="mt-1 text-sm text-ink-secondary">{game.result.reason}</p>
+                )}
+              </section>
+            )}
+
             {/* Role reveal gate */}
             {role && !game.roleAcknowledged && (
               <section className="card secret-card md:col-span-3">
@@ -785,6 +812,13 @@ export default function PlayerWaiting() {
                       {votingNominations.map((n) => {
                         const yesActive = n.myVoteIntent === true;
                         const noActive = n.myVoteIntent === false;
+                        const isMyTurn =
+                          n.passStatus === "RUNNING" &&
+                          n.currentVirtualSeat === game.me.virtualSeat;
+                        const currentVoter =
+                          n.currentVirtualSeat != null
+                            ? (roster.find((p) => p.virtualSeat === n.currentVirtualSeat) ?? null)
+                            : null;
                         return (
                           <div
                             key={n.id}
@@ -793,34 +827,54 @@ export default function PlayerWaiting() {
                             <p className="text-sm text-ink-primary">
                               {n.nominatorName ?? "—"} → {n.nomineeName ?? "—"}
                             </p>
-                            <div className="mt-2 flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleVoteIntent(n.id, true)}
-                                disabled={busy}
-                                aria-pressed={yesActive}
-                                className={`min-h-11 flex-1 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
-                                  yesActive
-                                    ? "border-success/50 bg-success/10 text-success"
-                                    : "border-line text-ink-secondary hover:border-success/40 hover:text-ink-primary"
-                                }`}
-                              >
-                                Tak
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleVoteIntent(n.id, false)}
-                                disabled={busy}
-                                aria-pressed={noActive}
-                                className={`min-h-11 flex-1 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
-                                  noActive
-                                    ? "border-danger/50 bg-danger/10 text-danger"
-                                    : "border-line text-ink-secondary hover:border-danger/40 hover:text-ink-primary"
-                                }`}
-                              >
-                                Nie
-                              </button>
-                            </div>
+
+                            {isMyTurn ? (
+                              <div className="mt-2 flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleVoteIntent(n.id, true)}
+                                  disabled={busy}
+                                  aria-pressed={yesActive}
+                                  className={`min-h-11 flex-1 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
+                                    yesActive
+                                      ? "border-success/50 bg-success/10 text-success"
+                                      : "border-line text-ink-secondary hover:border-success/40 hover:text-ink-primary"
+                                  }`}
+                                >
+                                  Tak
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleVoteIntent(n.id, false)}
+                                  disabled={busy}
+                                  aria-pressed={noActive}
+                                  className={`min-h-11 flex-1 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
+                                    noActive
+                                      ? "border-danger/50 bg-danger/10 text-danger"
+                                      : "border-line text-ink-secondary hover:border-danger/40 hover:text-ink-primary"
+                                  }`}
+                                >
+                                  Nie
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-sm text-ink-secondary">
+                                {n.passStatus === "RUNNING"
+                                  ? `Czekaj na swoją kolej — głosuje: ${currentVoter?.displayName ?? "—"}`
+                                  : n.passStatus === "READY"
+                                    ? "Głosowanie czeka na rozpoczęcie przez Mistrza Gry."
+                                    : "Głosowanie zakończone — czekaj na zamknięcie."}
+                              </p>
+                            )}
+
+                            {n.myVoteIntent !== null && (
+                              <p className="mt-1.5 text-xs text-ink-muted">
+                                Twój głos:{" "}
+                                <span className="text-ink-secondary">
+                                  {n.myVoteIntent ? "Tak" : "Nie"}
+                                </span>
+                              </p>
+                            )}
                           </div>
                         );
                       })}

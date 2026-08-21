@@ -197,6 +197,19 @@ export interface VoteDto {
   ghostVoteConsumed: boolean;
 }
 
+/** Storyteller-only day-trigger registration decision (never sent to players). */
+export interface NominationDecisionOptionDto {
+  optionId: string;
+  description: string;
+  satisfies: boolean;
+}
+
+export interface NominationDecisionDto {
+  context: string;
+  nominatorId: string;
+  options: NominationDecisionOptionDto[];
+}
+
 export interface NominationDto {
   id: string;
   sequence: number;
@@ -208,6 +221,9 @@ export interface NominationDto {
   rawTotal: number;
   effectiveTotal: number;
   qualified: boolean;
+  passStatus: string;
+  currentVirtualSeat: number | null;
+  decision: NominationDecisionDto | null;
   votes: VoteDto[];
 }
 
@@ -221,6 +237,8 @@ export interface PlayerNominationDto {
   effectiveTotal: number;
   qualified: boolean;
   myVoteIntent: boolean | null;
+  passStatus: string;
+  currentVirtualSeat: number | null;
 }
 
 // ---- Slice 5: scenario DTOs -------------------------------------------------
@@ -390,6 +408,11 @@ export interface InfoCharacterCandidatesDto {
   characterId: string;
   candidatePlayerIds: string[];
 }
+export interface InfoCharacterDto {
+  kind: "CHARACTER";
+  characterId: string;
+  playerId: string;
+}
 export interface InfoNumberDto {
   kind: "NUMBER";
   value: number;
@@ -407,7 +430,47 @@ export interface InfoGrimoireDto {
 }
 export type InfoResultDto =
   | InfoCharacterCandidatesDto
+  | InfoCharacterDto
   | InfoNumberDto
   | InfoNoOutsidersDto
   | InfoDemonYesNoDto
   | InfoGrimoireDto;
+
+// ---- Storyteller decision context + resolution payloads (remediation) ------
+
+export interface PlayerRefDto {
+  playerId: string;
+  displayName: string;
+}
+
+export interface ImpKillDecisionDto {
+  kind: "IMP_KILL";
+  originalTarget: PlayerRefDto | null;
+  mayorRedirect: {
+    available: boolean;
+    eligibleTargets: PlayerRefDto[];
+  };
+  starPass: {
+    required: boolean;
+    eligibleSuccessors: PlayerRefDto[];
+  };
+}
+
+export interface InfoDecisionDto {
+  kind: "INFO";
+  functioning: "FUNCTIONING" | "MALFUNCTIONING";
+  info: unknown;
+  requiresFalseInformation: boolean;
+}
+
+export type ActionDecisionDto = ImpKillDecisionDto | InfoDecisionDto;
+
+/** `POST /storyteller/actions/:id/resolve` `payload.resolution` union. */
+export type StorytellerResolutionDto =
+  | { kind: "INFO"; value: InfoResultDto }
+  | {
+      kind: "IMP_KILL";
+      mayorRedirectToPlayerId?: string;
+      starPassSuccessorPlayerId?: string;
+    }
+  | { kind: "REGISTRATION"; optionId: string };

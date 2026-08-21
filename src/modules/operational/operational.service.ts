@@ -3,6 +3,7 @@
 // resolution, triggers, and Demon succession are centralized here.
 
 import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { runCommand } from "@/lib/command";
 import { DomainError } from "@/lib/errors";
 import { systemClock } from "@/lib/clock";
@@ -549,6 +550,58 @@ async function resolveImpKill(
       }
     }
   }
+}
+
+/** Server-derived Storyteller decision context for a pending action (spec 19 §9). */
+export async function getActionDecisionContext(gameId: string, actionId: string): Promise<unknown> {
+  const action = await prisma.operationalAction.findUnique({
+    where: { id: actionId },
+    include: { phase: true },
+  });
+  if (!action || action.phase.gameId !== gameId) throw new DomainError("ACTION_NOT_ACTIVE", "Action not found");
+
+  if (action.kind === "IMP_KILL") {
+    const choose = await prisma.operationalAction.findFirst({
+      where: { operationalPhaseId: action.operationalPhaseId, kind: "IMP_CHOOSE" },
+    });
+    const targetId = (choose?.resolutionJson as { targetPlayerIds?: string[] } | null)?.targetPlayerIds?.[0] ?? null;
+    const players = await prisma.player.findMany({ where: { gameId }, include: { secret: true } });
+    const target = players.find((p) => p.id === targetId) ?? null;
+    const targetEffects = target ? await prisma.effect.findMany({ where: { targetPlayerId: target.id, active: true } }) : [];
+    const targetFunctioning =
+      target?.secret != null
+        ? getAbilityFunctionState(target.secret, targetEffects, "OPERATIONAL", action.phase.cycleNumber) === "FUNCTIONING"
+        : false;
+    const redirectAvailable = target?.secret?.trueCharacterId === "MAYOR" && targetFunctioning;
+    const successors = players.filter(
+      (p) => p.alive && p.secret && CHARACTER_DEFINITIONS[p.secret.trueCharacterId as CharacterId]?.category === "MINION",
+    );
+    const selfKill = targetId != null && targetId === action.actorPlayerId;
+    return {
+      kind: "IMP_KILL",
+      originalTarget: target ? { playerId: target.id, displayName: target.displayName } : null,
+      mayorRedirect: {
+        available: redirectAvailable,
+        eligibleTargets: redirectAvailable
+          ? players.filter((p) => p.alive && p.id !== targetId).map((p) => ({ playerId: p.id, displayName: p.displayName }))
+          : [],
+      },
+      starPass: {
+        required: selfKill && successors.length >= 2,
+        eligibleSuccessors: selfKill
+          ? successors.map((p) => ({ playerId: p.id, displayName: p.displayName }))
+          : [],
+      },
+    };
+  }
+
+  const secretJson = action.secretJson as { info?: unknown; functioning?: string } | null;
+  return {
+    kind: "INFO",
+    functioning: secretJson?.functioning ?? "FUNCTIONING",
+    info: secretJson?.info ?? null,
+    requiresFalseInformation: secretJson?.functioning === "MALFUNCTIONING",
+  };
 }
 
 export async function completeOperational({

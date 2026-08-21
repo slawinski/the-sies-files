@@ -15,7 +15,9 @@ import {
   type StorytellerControlDto,
   type StorytellerGameProjection,
   type StorytellerPlayerDto,
+  type StorytellerResolutionDto,
 } from "@/lib/client-api";
+import ActionDecisionPanel from "@/components/ActionDecisionPanel";
 import PhaseBadge from "@/components/PhaseBadge";
 
 const MIN_READY = 13;
@@ -87,8 +89,8 @@ function alignmentLabel(alignment: string): string {
 }
 
 function winnerLabel(winner: string | null): string {
-  if (winner === "GOOD") return "Wygrywa dobro";
-  if (winner === "EVIL") return "Wygrywa zło";
+  if (winner === "GOOD") return "Koniec gry — wygrywa dobro";
+  if (winner === "EVIL") return "Koniec gry — wygrywa zło";
   return "";
 }
 
@@ -102,22 +104,31 @@ function nominationStatusLabel(status: string): string {
       return "rozstrzygnięto";
     case "CREATED":
       return "utworzono";
+    case "DAY_TRIGGER_RESOLUTION":
+      return "wymagana decyzja rejestracji";
     default:
       return status;
   }
 }
 
+/** Polish labels for the bounded registration option descriptions (spec 18). */
+const REGISTRATION_DESCRIPTION_LABELS: Record<string, string> = {
+  "true registration": "prawdziwa rejestracja",
+  "register as evil": "rejestruje się jako zły",
+  "register as good": "rejestruje się jako dobry",
+  "register as a Minion": "rejestruje się jako Sługus",
+  "register as the Demon": "rejestruje się jako Demon",
+  "register as a Townsfolk": "rejestruje się jako Mieszczanin",
+  "register as an Outsider": "rejestruje się jako Odludek",
+};
+
+function registrationOptionLabel(description: string): string {
+  return REGISTRATION_DESCRIPTION_LABELS[description] ?? description;
+}
+
 function isInfoResult(result: unknown): result is InfoResultDto {
   if (typeof result !== "object" || result === null) return false;
   return "kind" in result && typeof (result as { kind?: unknown }).kind === "string";
-}
-
-/** Slice 3 wraps ST context as `{ info, functioning }`; unwrap the info. */
-function unwrapSecret(secretJson: unknown): unknown {
-  if (secretJson && typeof secretJson === "object" && "info" in secretJson) {
-    return (secretJson as { info: unknown }).info;
-  }
-  return secretJson;
 }
 
 /** Readable text for a resolved secret (InfoResult or `{ targetPlayerIds }`). */
@@ -128,6 +139,8 @@ function resolutionText(result: unknown, nameById: Map<string, string>): string 
         return `${titleCaseCharacterId(result.characterId)}: ${result.candidatePlayerIds
           .map((id) => nameById.get(id) ?? id)
           .join(", ")}`;
+      case "CHARACTER":
+        return `${titleCaseCharacterId(result.characterId)} — ${nameById.get(result.playerId) ?? result.playerId}`;
       case "NUMBER":
         return `Liczba: ${result.value}`;
       case "NO_OUTSIDERS":
@@ -178,7 +191,8 @@ export default function StorytellerDashboard() {
     error: string | null;
   } | null>(null);
 
-  const [winner, setWinner] = useState<string | null>(null);
+  const [renamingGame, setRenamingGame] = useState(false);
+  const [gameNameDraft, setGameNameDraft] = useState("");
 
   const [revealClueId, setRevealClueId] = useState("clue-letter");
   const [revealTargetPlayerId, setRevealTargetPlayerId] = useState("");
@@ -452,7 +466,10 @@ export default function StorytellerDashboard() {
     );
   }
 
-  async function handleResolveAction(action: StorytellerActionDto) {
+  async function handleResolveActionWithResolution(
+    action: StorytellerActionDto,
+    resolution: StorytellerResolutionDto | undefined,
+  ) {
     if (!game) return;
     await runMutation(() =>
       api(`/api/v1/games/${gameId}/storyteller/actions/${action.id}/resolve`, {
@@ -460,10 +477,30 @@ export default function StorytellerDashboard() {
         body: JSON.stringify({
           commandId: crypto.randomUUID(),
           expectedVersion: game.version,
-          payload: { resolution: unwrapSecret(action.secretJson) },
+          payload: resolution ? { resolution } : {},
         }),
       }),
     );
+  }
+
+  async function handleRenameGame() {
+    if (!game) return;
+    const trimmed = gameNameDraft.trim();
+    if (!trimmed) return;
+    const ok = await runMutation(() =>
+      api(`/api/v1/games/${gameId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { name: trimmed },
+        }),
+      }),
+    );
+    if (ok) {
+      setRenamingGame(false);
+      setGameNameDraft("");
+    }
   }
 
   async function handleCompleteOperational() {
@@ -513,26 +550,58 @@ export default function StorytellerDashboard() {
     }
   }
 
+  async function handleStartVoting(nominationId: string) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/nominations/${nominationId}/voting/start`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleAdvanceVoting(nominationId: string) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/nominations/${nominationId}/voting/advance`, {
+        method: "POST",
+        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
+      }),
+    );
+  }
+
+  async function handleResolveTrigger(nominationId: string, optionId: string) {
+    if (!game) return;
+    await runMutation(() =>
+      api(`/api/v1/games/${gameId}/nominations/${nominationId}/triggers/resolve`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { optionId },
+        }),
+      }),
+    );
+  }
+
   async function handleResolveExecution() {
     if (!game) return;
-    const res = await runWithResult<{ version: number; winner: string | null }>(() =>
+    await runMutation(() =>
       api(`/api/v1/games/${gameId}/investigation/resolve-execution`, {
         method: "POST",
         body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
       }),
     );
-    if (res.ok) setWinner(res.value?.winner ?? null);
   }
 
   async function handleCloseInvestigation() {
     if (!game) return;
-    const res = await runWithResult<{ version: number; winner: string | null }>(() =>
+    await runMutation(() =>
       api(`/api/v1/games/${gameId}/investigation/close`, {
         method: "POST",
         body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
       }),
     );
-    if (res.ok) setWinner(res.value?.winner ?? null);
   }
 
   async function handleExileTraveller(playerId: string) {
@@ -708,6 +777,7 @@ export default function StorytellerDashboard() {
   const sorted = game ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat) : [];
   const ready = game?.isReady ?? false;
   const need = game ? Math.max(0, MIN_READY - game.participantCount) : 0;
+  const renameEnabled = game ? game.status === "LOBBY" || game.status === "SETUP" : false;
   const gateText = ready
     ? "Gotowe do konfiguracji"
     : `Dodaj jeszcze ${need} ${need === 1 ? "uczestnika" : "uczestników"}`;
@@ -814,18 +884,89 @@ export default function StorytellerDashboard() {
             )}
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+              {/* Persistent terminal result (authoritative, survives reload) */}
+              {game.result && (
+                <section
+                  className={`card md:col-span-6 ${
+                    game.result.winner === "EVIL"
+                      ? "border-danger/40 bg-danger/10"
+                      : "border-success/40 bg-success/10"
+                  }`}
+                >
+                  <p className="display text-xs tracking-[0.25em] text-ink-muted">Wynik sprawy</p>
+                  <h2 className="display mt-1 text-2xl leading-tight text-ink-primary">
+                    {winnerLabel(game.result.winner)}
+                  </h2>
+                  {game.result.reason && (
+                    <p className="mt-1 text-sm text-ink-secondary">{game.result.reason}</p>
+                  )}
+                </section>
+              )}
+
               {/* Header card */}
               <section className="card md:col-span-6">
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div className="min-w-0">
                     <p className="display text-xs tracking-[0.25em] text-moss">Akta sprawy</p>
-                    <h1 className="display mt-1 break-words text-2xl leading-tight text-ink-primary sm:text-3xl">
-                      {game.name}
-                    </h1>
+                    {renamingGame ? (
+                      <div className="mt-2 flex max-w-md flex-wrap items-center gap-2">
+                        <label htmlFor="game-name-input" className="sr-only">
+                          Nowa nazwa sprawy
+                        </label>
+                        <input
+                          id="game-name-input"
+                          value={gameNameDraft}
+                          onChange={(e) => setGameNameDraft(e.target.value)}
+                          autoFocus
+                          autoComplete="off"
+                          className="min-h-11 w-full min-w-52 flex-1 rounded-xl border border-line bg-elevated px-3 text-base text-ink-primary"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleRenameGame}
+                          disabled={busy || !gameNameDraft.trim()}
+                          className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass hover:bg-brass/20 disabled:opacity-50"
+                        >
+                          Zapisz
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenamingGame(false);
+                            setGameNameDraft("");
+                          }}
+                          className="min-h-11 rounded-xl px-3 text-ink-muted hover:text-ink-primary"
+                        >
+                          Anuluj
+                        </button>
+                      </div>
+                    ) : (
+                      <h1 className="display mt-1 break-words text-2xl leading-tight text-ink-primary sm:text-3xl">
+                        {game.name}
+                      </h1>
+                    )}
                     <p className="mt-1 text-sm text-ink-muted">
                       {statusLabel(game.status)} · {game.participantCount}{" "}
                       {game.participantCount === 1 ? "uczestnik" : "uczestników"}
                     </p>
+                    {!renamingGame && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGameNameDraft(game.name);
+                          setRenamingGame(true);
+                        }}
+                        disabled={!renameEnabled || busy}
+                        title={
+                          renameEnabled
+                            ? "Zmień nazwę sprawy"
+                            : "Nazwę można zmieniać tylko w poczekalni i konfiguracji."
+                        }
+                        className="mt-2 min-h-11 rounded-xl border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Zmień nazwę
+                      </button>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <PhaseBadge phase={game.phase} status={game.status} />
@@ -1186,26 +1327,15 @@ export default function StorytellerDashboard() {
                               </div>
 
                               {isStoryteller && (
-                                <div className="mt-2 pl-11">
-                                  <p className="text-xs text-moss">Prawdziwa odpowiedź</p>
-                                  {action.secretJson != null ? (
-                                    <p className="text-sm text-ink-secondary">
-                                      {resolutionText(unwrapSecret(action.secretJson), nameById)}
-                                    </p>
-                                  ) : (
-                                    <p className="text-sm text-ink-muted">
-                                      Odpowiedź zostanie wyliczona przy zatwierdzeniu.
-                                    </p>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleResolveAction(action)}
-                                    disabled={busy}
-                                    className="mt-2 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                                  >
-                                    Zatwierdź
-                                  </button>
-                                </div>
+                                <ActionDecisionPanel
+                                  gameId={gameId}
+                                  action={action}
+                                  players={game.players}
+                                  busy={busy}
+                                  onSubmit={(resolution) =>
+                                    void handleResolveActionWithResolution(action, resolution)
+                                  }
+                                />
                               )}
 
                               {isResolved && (
@@ -1286,6 +1416,12 @@ export default function StorytellerDashboard() {
                     <ol className="mt-3 flex flex-col gap-2">
                       {game.nominations.map((n) => {
                         const locked = n.status === "LOCKED" || n.status === "RESOLVED";
+                        const triggerPending = n.status === "DAY_TRIGGER_RESOLUTION";
+                        const voting = n.status === "VOTING";
+                        const currentVoter =
+                          n.currentVirtualSeat != null
+                            ? (sorted.find((p) => p.virtualSeat === n.currentVirtualSeat) ?? null)
+                            : null;
                         return (
                           <li
                             key={n.id}
@@ -1314,17 +1450,82 @@ export default function StorytellerDashboard() {
                                   {n.qualified ? "kandydat" : "nie przeszedł"} · {n.effectiveTotal}
                                 </span>
                               )}
-                              {n.status === "VOTING" && (
+                            </div>
+
+                            {triggerPending && n.decision && (
+                              <div className="mt-2 rounded-xl border border-brass/40 bg-brass/10 p-3 pl-11 sm:pl-11">
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brass">
+                                  Wymagana decyzja rejestracji
+                                </p>
+                                <p className="mt-1 text-xs text-ink-muted">
+                                  Jak ma zarejestrować się nominujący ({n.nominatorName ?? "—"})?
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {n.decision.options.map((option) => (
+                                    <button
+                                      key={option.optionId}
+                                      type="button"
+                                      onClick={() => handleResolveTrigger(n.id, option.optionId)}
+                                      disabled={busy || gameEnded}
+                                      className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-sm text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                                    >
+                                      {registrationOptionLabel(option.description)}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {voting && n.passStatus === "READY" && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2 pl-11">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartVoting(n.id)}
+                                  disabled={busy || gameEnded}
+                                  className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                                >
+                                  Rozpocznij głosowanie
+                                </button>
+                              </div>
+                            )}
+
+                            {voting && n.passStatus === "RUNNING" && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2 pl-11">
+                                <span className="text-sm text-ink-secondary">
+                                  Głosuje:{" "}
+                                  <span className="text-ink-primary">
+                                    {currentVoter?.displayName ??
+                                      (n.currentVirtualSeat != null
+                                        ? `miejsce ${n.currentVirtualSeat + 1}`
+                                        : "—")}
+                                  </span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdvanceVoting(n.id)}
+                                  disabled={busy || gameEnded}
+                                  className="min-h-11 rounded-xl border border-line px-4 text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
+                                >
+                                  Dalej
+                                </button>
+                              </div>
+                            )}
+
+                            {voting && n.passStatus === "COMPLETE" && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2 pl-11">
+                                <span className="text-sm text-ink-muted">
+                                  Głosowanie zakończone.
+                                </span>
                                 <button
                                   type="button"
                                   onClick={() => handleLockVote(n.id)}
                                   disabled={busy || gameEnded}
-                                  className="min-h-11 shrink-0 rounded-lg border border-brass/40 px-3 text-sm text-brass hover:bg-brass/10 disabled:opacity-50"
+                                  className="min-h-11 rounded-xl border border-brass/40 px-4 text-brass transition-colors hover:bg-brass/10 disabled:opacity-50"
                                 >
                                   Zablokuj głosowanie
                                 </button>
-                              )}
-                            </div>
+                              </div>
+                            )}
                           </li>
                         );
                       })}
@@ -1360,18 +1561,6 @@ export default function StorytellerDashboard() {
                       Zamknij śledztwo
                     </button>
                   </div>
-
-                  {winner && (
-                    <div
-                      className={`mt-4 rounded-xl border p-3 text-center ${
-                        winner === "EVIL"
-                          ? "border-danger/40 bg-danger/10"
-                          : "border-success/40 bg-success/10"
-                      }`}
-                    >
-                      <p className="display text-lg text-ink-primary">{winnerLabel(winner)}</p>
-                    </div>
-                  )}
 
                   {travellers.length > 0 && (
                     <div className="mt-4 rounded-xl border border-line bg-card-soft/60 p-3">

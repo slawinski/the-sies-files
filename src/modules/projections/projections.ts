@@ -123,6 +123,12 @@ export interface NominationDto {
   qualified: boolean;
   passStatus: string;
   currentVirtualSeat: number | null;
+  /** Storyteller-only day-trigger registration decision — never in the player projection. */
+  decision: {
+    context: string;
+    nominatorId: string;
+    options: { optionId: string; description: string; satisfies: boolean }[];
+  } | null;
   votes: VoteDto[];
 }
 
@@ -414,6 +420,7 @@ export function buildStorytellerProjection(
     qualified: n.qualified,
     passStatus: n.passStatus,
     currentVirtualSeat: n.currentVirtualSeat,
+    decision: (n.decisionJson ?? null) as unknown as NominationDto["decision"],
     votes: n.votes.map((v) => ({
       playerId: v.playerId,
       playerName: nameById.get(v.playerId) ?? null,
