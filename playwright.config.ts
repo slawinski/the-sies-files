@@ -31,6 +31,7 @@ export default defineConfig({
   // parallel execution only after isolation is proven).
   workers: 1,
   globalSetup: "./tests/e2e/global-setup.ts",
+  reporter: [["list"], ["html", { open: "never" }]],
   timeout: 60_000,
   expect: { timeout: 10_000 },
   use: {

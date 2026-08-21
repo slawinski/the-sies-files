@@ -6,7 +6,8 @@ export default async function globalSetup(): Promise<void> {
   const url =
     process.env.E2E_DATABASE_URL ??
     `postgresql://${process.env.USER || process.env.PGUSER || "postgres"}@localhost:5432/the_sies_files_test`;
-  const dbName = new URL(url).pathname.replace(/^\//, "");
+  const parsed = new URL(url);
+  const dbName = parsed.pathname.replace(/^\//, "");
 
   if (!dbName.includes("_test") && process.env.ALLOW_E2E_DB_RESET !== "1") {
     throw new Error(
@@ -15,9 +16,19 @@ export default async function globalSetup(): Promise<void> {
     );
   }
 
-  execSync(`dropdb --if-exists "${dbName}" && createdb "${dbName}"`, { stdio: "inherit" });
+  // Pass credentials via libpq env so dropdb/createdb work on any machine/CI.
+  const pgEnv = {
+    ...process.env,
+    PGHOST: parsed.hostname,
+    PGPORT: parsed.port || "5432",
+    PGUSER: parsed.username || process.env.USER || "postgres",
+    PGPASSWORD: parsed.password || "",
+  };
+
+  execSync(`dropdb --if-exists "${dbName}" && createdb "${dbName}"`, { stdio: "inherit", env: pgEnv });
   execSync(`DATABASE_URL='${url}' npx prisma migrate deploy`, {
     stdio: "inherit",
     cwd: process.cwd(),
+    env: pgEnv,
   });
 }
