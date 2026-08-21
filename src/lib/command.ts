@@ -27,8 +27,8 @@ export interface CommandContext {
   game: GameSession;
   /** Current (pre-increment) version. */
   version: number;
-  /** Append one or more domain events with monotonic per-game sequence. */
-  appendEvent: (type: string, payload?: unknown) => Promise<void>;
+  /** Append one or more domain events; resolves to the assigned sequence. */
+  appendEvent: (type: string, payload?: unknown) => Promise<number>;
 }
 
 export interface CommandResult<T> {
@@ -51,7 +51,7 @@ type Handler<T> = (ctx: CommandContext) => Promise<T>;
 
 interface LockedGame {
   game: GameSession;
-  appendEvent: (type: string, payload?: unknown) => Promise<void>;
+  appendEvent: (type: string, payload?: unknown) => Promise<number>;
   appendedCount: () => number;
   newVersion: () => number;
   finalSequence: () => number;
@@ -71,7 +71,7 @@ async function lockAndRead(
 
   let seq = game.eventSequence;
   let appended = 0;
-  const appendEvent = async (type: string, payload?: unknown): Promise<void> => {
+  const appendEvent = async (type: string, payload?: unknown): Promise<number> => {
     seq += 1;
     appended += 1;
     await tx.domainEvent.create({
@@ -86,6 +86,7 @@ async function lockAndRead(
           payload === undefined ? undefined : (payload as Prisma.InputJsonValue),
       },
     });
+    return seq;
   };
 
   return {

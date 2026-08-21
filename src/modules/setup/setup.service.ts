@@ -16,6 +16,7 @@ import {
   TROUBLE_BREWING_SCRIPT_VERSION,
 } from "@/modules/trouble-brewing/script";
 import { publish } from "@/modules/realtime/broker";
+import { autoCheckpoint } from "@/modules/recovery/recovery.service";
 import {
   generateSetupCandidate,
   SETUP_GENERATOR_VERSION,
@@ -173,6 +174,7 @@ export async function commitSetup({
         },
       });
       await appendEvent(EVENTS.SETUP_COMMITTED, { setupHash });
+      await autoCheckpoint(tx, gameId, "SETUP_COMMITTED", game.version + 1, appendEvent);
       return { setupHash };
     },
   });

@@ -24,6 +24,7 @@ import { EFFECT_BOUNDARY, type EffectType } from "./effects";
 import { demonDeathOutcome } from "./death";
 import { validateTargets } from "./targets";
 import { markPlayerDead } from "@/modules/game-session/death";
+import { autoCheckpoint } from "@/modules/recovery/recovery.service";
 import {
   computeAdjacentEvilPairs,
   computeCharacterCandidates,
@@ -451,7 +452,7 @@ async function resolveImpKill(
   cycle: number,
   action: { operationalPhaseId: string; orderIndex: number; actorPlayerId: string | null },
   payload: { mayorRedirectToPlayerId?: string; starPassSuccessorPlayerId?: string } | undefined,
-  appendEvent: (type: string, payload?: unknown) => Promise<void>,
+  appendEvent: (type: string, payload?: unknown) => Promise<number>,
 ): Promise<void> {
   const choose = await tx.operationalAction.findFirst({
     where: { operationalPhaseId: action.operationalPhaseId, kind: "IMP_CHOOSE" },
@@ -644,6 +645,7 @@ export async function completeOperational({
       await tx.gameSession.update({ where: { id: gameId }, data: { phase: "INVESTIGATION" } });
       await appendEvent(EVENTS.OPERATIONAL_COMPLETED, {});
       await appendEvent(EVENTS.INVESTIGATION_STARTED, {});
+      await autoCheckpoint(tx, gameId, "OPERATIONAL_COMPLETED", game.version + 1, appendEvent);
       return {};
     },
   });

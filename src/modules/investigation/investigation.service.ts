@@ -12,6 +12,7 @@ import { getAbilityFunctionState } from "@/modules/operational/ability";
 import { tallyVotes, qualifies, type VoterState } from "./voting";
 import { checkGenericVictory, checkMayorVictory, type Winner } from "./victory";
 import { markPlayerDead, type DeathSource } from "@/modules/game-session/death";
+import { autoCheckpoint } from "@/modules/recovery/recovery.service";
 import {
   getRegistrationOptions,
   resolveRegistrationOptions,
@@ -52,13 +53,15 @@ async function finalizeGame(
   gameId: string,
   winner: Winner,
   reason: string,
-  appendEvent: (type: string, payload?: unknown) => Promise<void>,
+  appendEvent: (type: string, payload?: unknown) => Promise<number>,
 ): Promise<void> {
   await tx.gameSession.update({
     where: { id: gameId },
     data: { status: "ENDED", winner, winReason: reason },
   });
   await appendEvent(EVENTS.GAME_ENDED, { winner, reason });
+  const game = await tx.gameSession.findUniqueOrThrow({ where: { id: gameId } });
+  await autoCheckpoint(tx, gameId, "GAME_ENDED", game.version + 1, appendEvent);
 }
 
 async function recordDeath(
@@ -70,7 +73,7 @@ async function recordDeath(
   phase: "INVESTIGATION" | "OPERATIONAL",
   executed: boolean,
   causedByPlayerId: string | undefined,
-  appendEvent: (type: string, payload?: unknown) => Promise<void>,
+  appendEvent: (type: string, payload?: unknown) => Promise<number>,
 ): Promise<{ died: boolean }> {
   return markPlayerDead(tx, {
     gameId,
@@ -563,7 +566,7 @@ async function resolveScarletWomanSuccession(
   tx: Prisma.TransactionClient,
   gameId: string,
   cycle: number,
-  appendEvent: (type: string, payload?: unknown) => Promise<void>,
+  appendEvent: (type: string, payload?: unknown) => Promise<number>,
 ): Promise<boolean> {
   const sw = await tx.player.findFirst({
     where: { gameId, alive: true, secret: { trueCharacterId: "SCARLET_WOMAN" } },
@@ -813,6 +816,7 @@ export async function closeInvestigation({
 
       await tx.investigationState.update({ where: { gameId }, data: { completedAt: systemClock.now() } });
       await appendEvent(EVENTS.INVESTIGATION_COMPLETED, {});
+      await autoCheckpoint(tx, gameId, "INVESTIGATION_COMPLETED", game.version + 1, appendEvent);
       return { winner: null };
     },
   });

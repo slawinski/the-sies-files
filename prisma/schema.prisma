@@ -416,8 +416,21 @@ model Checkpoint {
   snapshotJson      Json
   checksum          String
   reason            String?
+  boundaryKey       String?
   createdAt         DateTime    @default(now())
 
   @@index([gameId, createdAt])
+  @@unique([gameId, boundaryKey])
   @@map("checkpoints")
+}
+
+model Presence {
+  id        String    @id @default(uuid())
+  gameId    String
+  viewerId  String
+  lastSeenAt DateTime @default(now())
+
+  @@unique([gameId, viewerId])
+  @@index([gameId, lastSeenAt])
+  @@map("presence")
 }

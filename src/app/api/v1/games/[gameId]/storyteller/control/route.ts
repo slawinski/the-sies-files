@@ -1,7 +1,7 @@
 import { jsonError, jsonOk } from "@/lib/http";
 import { resolveStoryteller } from "@/lib/auth/http";
 import { prisma } from "@/lib/db";
-import { runConsistencyChecks } from "@/modules/recovery/recovery.service";
+import { runConsistencyChecks, listPresence } from "@/modules/recovery/recovery.service";
 
 export async function GET(
   _req: Request,
@@ -11,7 +11,7 @@ export async function GET(
     const { gameId } = await params;
     await resolveStoryteller(gameId);
 
-    const [game, blocking, lastEvent, latestCheckpoint, consistencyIssues, participantCount] = await Promise.all([
+    const [game, blocking, lastEvent, latestCheckpoint, consistencyIssues, participantCount, presence] = await Promise.all([
       prisma.gameSession.findUnique({ where: { id: gameId } }),
       prisma.operationalAction.findFirst({
         where: { phase: { gameId, status: { not: "COMPLETED" } }, status: { in: ["WAITING_FOR_PLAYER", "WAITING_FOR_STORYTELLER"] } },
@@ -22,6 +22,7 @@ export async function GET(
       prisma.checkpoint.findFirst({ where: { gameId }, orderBy: { createdAt: "desc" } }),
       runConsistencyChecks(gameId),
       prisma.player.count({ where: { gameId } }),
+      listPresence(gameId),
     ]);
 
     return jsonOk({
@@ -43,6 +44,7 @@ export async function GET(
         ? { id: latestCheckpoint.id, gameVersion: latestCheckpoint.gameVersion, checksum: latestCheckpoint.checksum, reason: latestCheckpoint.reason, createdAt: latestCheckpoint.createdAt.toISOString() }
         : null,
       consistencyIssues,
+      presence,
     });
   } catch (err) {
     return jsonError(err);

@@ -21,20 +21,22 @@ function publishInvalidation(gameId: string, version: number, sequence: number):
 
 // ---------- Checkpoints ----------
 
-async function buildSnapshot(gameId: string): Promise<unknown> {
+type Db = Prisma.TransactionClient | typeof prisma;
+
+async function buildSnapshot(db: Db, gameId: string): Promise<unknown> {
   const [game, players, secrets, effects, phases, actions, investigation, nominations, votes, scenarioState, conditions, tasks] = await Promise.all([
-    prisma.gameSession.findUnique({ where: { id: gameId } }),
-    prisma.player.findMany({ where: { gameId }, orderBy: { virtualSeat: "asc" } }),
-    prisma.playerSecret.findMany({ where: { player: { gameId } } }),
-    prisma.effect.findMany({ where: { gameId, active: true } }),
-    prisma.operationalPhase.findMany({ where: { gameId } }),
-    prisma.operationalAction.findMany({ where: { phase: { gameId } } }),
-    prisma.investigationState.findUnique({ where: { gameId } }),
-    prisma.nomination.findMany({ where: { gameId } }),
-    prisma.vote.findMany({ where: { nomination: { gameId } } }),
-    prisma.scenarioState.findUnique({ where: { gameId } }),
-    prisma.scenarioCondition.findMany({ where: { gameId } }),
-    prisma.taskState.findMany({ where: { gameId } }),
+    db.gameSession.findUnique({ where: { id: gameId } }),
+    db.player.findMany({ where: { gameId }, orderBy: { virtualSeat: "asc" } }),
+    db.playerSecret.findMany({ where: { player: { gameId } } }),
+    db.effect.findMany({ where: { gameId, active: true } }),
+    db.operationalPhase.findMany({ where: { gameId } }),
+    db.operationalAction.findMany({ where: { phase: { gameId } } }),
+    db.investigationState.findUnique({ where: { gameId } }),
+    db.nomination.findMany({ where: { gameId } }),
+    db.vote.findMany({ where: { nomination: { gameId } } }),
+    db.scenarioState.findUnique({ where: { gameId } }),
+    db.scenarioCondition.findMany({ where: { gameId } }),
+    db.taskState.findMany({ where: { gameId } }),
   ]);
   return {
     game,
@@ -81,7 +83,7 @@ export async function createCheckpoint({
     actor: "storyteller",
     handler: async ({ tx, game, appendEvent }) => {
       // Normalize (Dates → strings) so the stored JSON hashes identically.
-      const snapshot = JSON.parse(JSON.stringify(await buildSnapshot(gameId)));
+      const snapshot = JSON.parse(JSON.stringify(await buildSnapshot(prisma, gameId)));
       const checksum = computeCheckpointChecksum(snapshot);
       const checkpoint = await tx.checkpoint.create({
         data: {
@@ -90,7 +92,8 @@ export async function createCheckpoint({
           lastEventSequence: game.eventSequence,
           snapshotJson: snapshot as Prisma.InputJsonValue,
           checksum,
-          reason: reason ?? null,
+          reason: reason ?? "MANUAL",
+          boundaryKey: `MANUAL:${game.version + 1}:${commandId}`,
         },
       });
       await appendEvent(EVENTS.CHECKPOINT_CREATED, { checkpointId: checkpoint.id, reason: reason ?? null });
@@ -296,4 +299,239 @@ export async function recoveryOverride({
   });
   publishInvalidation(gameId, version, sequence);
   return { version };
+}
+
+// ---------- Automatic checkpoints (audit spec 21 §5) ----------
+
+export const CHECKPOINT_BOUNDARIES = [
+  "SETUP_COMMITTED",
+  "OPERATIONAL_COMPLETED",
+  "INVESTIGATION_COMPLETED",
+  "GAME_ENDED",
+  "MANUAL",
+] as const;
+export type CheckpointBoundary = (typeof CHECKPOINT_BOUNDARIES)[number];
+
+/**
+ * Create a boundary checkpoint within the authoritative transaction. The
+ * deterministic boundary key makes retries idempotent (spec 21 §5.2–5.3).
+ */
+export async function autoCheckpoint(
+  db: Prisma.TransactionClient,
+  gameId: string,
+  boundary: CheckpointBoundary,
+  gameVersion: number,
+  appendEvent: (type: string, payload?: unknown) => Promise<number>,
+): Promise<void> {
+  const boundaryKey = `${boundary}:${gameVersion}`;
+  const existing = await db.checkpoint.findUnique({
+    where: { gameId_boundaryKey: { gameId, boundaryKey } },
+  });
+  if (existing) return;
+
+  const snapshot = JSON.parse(JSON.stringify(await buildSnapshot(db, gameId)));
+  const checksum = computeCheckpointChecksum(snapshot);
+  const seq = await appendEvent(EVENTS.CHECKPOINT_CREATED, { reason: boundary, boundaryKey });
+  await db.checkpoint.create({
+    data: {
+      gameId,
+      gameVersion,
+      lastEventSequence: seq,
+      snapshotJson: snapshot as Prisma.InputJsonValue,
+      checksum,
+      reason: boundary,
+      boundaryKey,
+    },
+  });
+}
+
+// ---------- Event replay verification (audit spec 21 §6) ----------
+
+export const REPLAY_VERSION = 1;
+
+export interface ReplayDiagnostic {
+  ok: boolean;
+  checkpointId: string;
+  fromSequence: number;
+  throughSequence: number;
+  replayVersion: number;
+  divergences: { path: string; expected: unknown; actual: unknown; eventSequence?: number }[];
+}
+
+export async function verifyReplay(gameId: string, checkpointId: string): Promise<ReplayDiagnostic> {
+  const checkpoint = await prisma.checkpoint.findFirst({ where: { id: checkpointId, gameId } });
+  if (!checkpoint) throw new DomainError("GAME_NOT_FOUND", "Checkpoint not found");
+  if (!checkpoint.boundaryKey) throw new DomainError("INVALID_SESSION_STATE", "Checkpoint has no replayable boundary key");
+
+  const snapshot = checkpoint.snapshotJson as {
+    players?: Array<{ id: string; alive: boolean; ghostVoteAvailable: boolean }>;
+  };
+  const replayed = new Map(
+    (snapshot.players ?? []).map((p) => [p.id, { alive: p.alive, ghostVoteAvailable: p.ghostVoteAvailable }]),
+  );
+
+  const events = await prisma.domainEvent.findMany({
+    where: { gameId, sequence: { gt: checkpoint.lastEventSequence } },
+    orderBy: { sequence: "asc" },
+  });
+
+  const divergences: ReplayDiagnostic["divergences"] = [];
+  let expectedSeq = checkpoint.lastEventSequence;
+  for (const e of events) {
+    if (e.sequence !== expectedSeq + 1) {
+      divergences.push({ path: `events.sequence.${e.sequence}`, expected: expectedSeq + 1, actual: e.sequence, eventSequence: e.sequence });
+    }
+    expectedSeq = e.sequence;
+
+    const payload = e.payload as { playerId?: string; kind?: string; alive?: boolean } | null;
+    const p = payload?.playerId ? replayed.get(payload.playerId) : undefined;
+    if (e.eventType === "PLAYER_DIED" && p) p.alive = false;
+    else if (e.eventType === "GHOST_VOTE_GRANTED" && p) p.ghostVoteAvailable = true;
+    else if (e.eventType === "GHOST_VOTE_CONSUMED" && p) p.ghostVoteAvailable = false;
+    else if (e.eventType === "TRAVELLER_EXILED" && p) p.alive = false;
+    else if (e.eventType === "RECOVERY_OVERRIDE_APPLIED" && p) {
+      if (payload?.kind === "CORRECT_ALIVE") p.alive = payload.alive ?? p.alive;
+      if (payload?.kind === "RESTORE_GHOST_VOTE") p.ghostVoteAvailable = true;
+    }
+  }
+
+  const current = await prisma.player.findMany({ where: { gameId } });
+  for (const p of current) {
+    const r = replayed.get(p.id);
+    if (!r) continue;
+    if (r.alive !== p.alive) divergences.push({ path: `players.${p.id}.alive`, expected: r.alive, actual: p.alive });
+    if (r.ghostVoteAvailable !== p.ghostVoteAvailable) {
+      divergences.push({ path: `players.${p.id}.ghostVoteAvailable`, expected: r.ghostVoteAvailable, actual: p.ghostVoteAvailable });
+    }
+  }
+
+  return {
+    ok: divergences.length === 0,
+    checkpointId,
+    fromSequence: checkpoint.lastEventSequence,
+    throughSequence: expectedSeq,
+    replayVersion: REPLAY_VERSION,
+    divergences,
+  };
+}
+
+// ---------- Audit categories (audit spec 21 §8) ----------
+
+export const AUDIT_CATEGORIES = [
+  "GAME_ENGINE",
+  "OPERATIONAL",
+  "INVESTIGATION_VOTING",
+  "SCENARIO",
+  "ACCESS_SESSION",
+  "RECOVERY",
+] as const;
+export type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
+
+const EVENT_CATEGORY: Record<string, AuditCategory> = {
+  GAME_CREATED: "GAME_ENGINE",
+  GAME_RENAMED: "GAME_ENGINE",
+  GAME_ENDED: "GAME_ENGINE",
+  PLAYER_ADDED: "GAME_ENGINE",
+  PLAYER_UPDATED: "GAME_ENGINE",
+  PLAYER_REMOVED: "GAME_ENGINE",
+  VIRTUAL_CIRCLE_REORDERED: "GAME_ENGINE",
+  SETUP_GENERATED: "GAME_ENGINE",
+  SETUP_COMMITTED: "GAME_ENGINE",
+  ROLE_REVEALED_TO_PLAYER: "GAME_ENGINE",
+  TRAVELLER_ALIGNMENT_ASSIGNED: "GAME_ENGINE",
+  OPERATIONAL_STARTED: "OPERATIONAL",
+  ACTION_QUEUE_BUILT: "OPERATIONAL",
+  PLAYER_ACTION_SUBMITTED: "OPERATIONAL",
+  STORYTELLER_DECISION_RECORDED: "OPERATIONAL",
+  PRIVATE_INFORMATION_DELIVERED: "OPERATIONAL",
+  OPERATIONAL_COMPLETED: "OPERATIONAL",
+  DEATH_ATTEMPTED: "OPERATIONAL",
+  DEATH_PREVENTED: "OPERATIONAL",
+  DEATH_REDIRECTED: "OPERATIONAL",
+  PLAYER_DIED: "OPERATIONAL",
+  GHOST_VOTE_GRANTED: "OPERATIONAL",
+  TRIGGERED_ACTION_CREATED: "OPERATIONAL",
+  CHARACTER_CHANGED: "OPERATIONAL",
+  EFFECT_APPLIED: "OPERATIONAL",
+  EFFECT_EXPIRED: "OPERATIONAL",
+  DEMON_SUCCESSION_RESOLVED: "OPERATIONAL",
+  REGISTRATION_DECISION_REQUIRED: "OPERATIONAL",
+  REGISTRATION_DECISION_RECORDED: "OPERATIONAL",
+  VIRGIN_TRIGGER_CONSUMED: "INVESTIGATION_VOTING",
+  INVESTIGATION_STARTED: "INVESTIGATION_VOTING",
+  INVESTIGATION_COMPLETED: "INVESTIGATION_VOTING",
+  NOMINATIONS_OPENED: "INVESTIGATION_VOTING",
+  NOMINATIONS_CLOSED: "INVESTIGATION_VOTING",
+  NOMINATION_CREATED: "INVESTIGATION_VOTING",
+  VIRGIN_TRIGGER_RESOLVED: "INVESTIGATION_VOTING",
+  SLAYER_USED: "INVESTIGATION_VOTING",
+  VOTE_INTENT_RECORDED: "INVESTIGATION_VOTING",
+  VOTE_LOCKED: "INVESTIGATION_VOTING",
+  GHOST_VOTE_CONSUMED: "INVESTIGATION_VOTING",
+  VOTING_STARTED: "INVESTIGATION_VOTING",
+  VOTE_PASS_ADVANCED: "INVESTIGATION_VOTING",
+  VOTE_PASS_COMPLETED: "INVESTIGATION_VOTING",
+  NOMINATION_RESOLVED: "INVESTIGATION_VOTING",
+  PLAYER_EXECUTED: "INVESTIGATION_VOTING",
+  QR_SCANNED: "SCENARIO",
+  CLUE_DISCOVERED: "SCENARIO",
+  TASK_STARTED: "SCENARIO",
+  TASK_COMPLETED: "SCENARIO",
+  SCENARIO_STAGE_CHANGED: "SCENARIO",
+  MAP_UNLOCKED: "SCENARIO",
+  SCENARIO_CONDITION_APPLIED: "SCENARIO",
+  SCENARIO_CONDITION_CLEARED: "SCENARIO",
+  SCENARIO_OVERRIDE_APPLIED: "SCENARIO",
+  PLAYER_CLAIM_TOKEN_ISSUED: "ACCESS_SESSION",
+  PLAYER_CLAIMED: "ACCESS_SESSION",
+  PLAYER_SESSION_REVOKED: "ACCESS_SESSION",
+  PLAYER_ACCESS_RESET: "ACCESS_SESSION",
+  STORYTELLER_ACCESS_RECOVERED: "ACCESS_SESSION",
+  CHECKPOINT_CREATED: "RECOVERY",
+  RECOVERY_OVERRIDE_APPLIED: "RECOVERY",
+};
+
+/** Unknown future event types fall into a documented safe default (spec 21 §8.2). */
+export function classifyEventCategory(eventType: string): AuditCategory {
+  return EVENT_CATEGORY[eventType] ?? "GAME_ENGINE";
+}
+
+export function categoryEventTypes(categories: AuditCategory[]): string[] {
+  const set = new Set(categories);
+  return Object.entries(EVENT_CATEGORY)
+    .filter(([, cat]) => set.has(cat))
+    .map(([type]) => type);
+}
+
+// ---------- Presence (audit spec 21 §4) ----------
+
+export type PresenceConnection = "ONLINE" | "STALE" | "OFFLINE";
+
+export const PRESENCE_ONLINE_MS = 30_000;
+export const PRESENCE_STALE_MS = 120_000;
+
+export function classifyPresence(lastSeenAt: Date, now: Date): PresenceConnection {
+  const delta = now.getTime() - lastSeenAt.getTime();
+  if (delta <= PRESENCE_ONLINE_MS) return "ONLINE";
+  if (delta <= PRESENCE_STALE_MS) return "STALE";
+  return "OFFLINE";
+}
+
+export async function heartbeat(gameId: string, viewerId: string): Promise<void> {
+  await prisma.presence.upsert({
+    where: { gameId_viewerId: { gameId, viewerId } },
+    create: { gameId, viewerId, lastSeenAt: new Date() },
+    update: { lastSeenAt: new Date() },
+  });
+}
+
+export async function listPresence(gameId: string): Promise<Array<{ playerId: string | null; viewerId: string; connection: PresenceConnection; lastSeenAt: string }>> {
+  const rows = await prisma.presence.findMany({ where: { gameId } });
+  const now = new Date();
+  return rows.map((r) => ({
+    playerId: r.viewerId.startsWith("player:") ? r.viewerId.slice("player:".length) : null,
+    viewerId: r.viewerId,
+    connection: classifyPresence(r.lastSeenAt, now),
+    lastSeenAt: r.lastSeenAt.toISOString(),
+  }));
 }

@@ -18,7 +18,7 @@ export async function markPlayerDead(
     phase: "INVESTIGATION" | "OPERATIONAL";
     executed: boolean;
     causedByPlayerId?: string;
-    appendEvent: (type: string, payload?: unknown) => Promise<void>;
+    appendEvent: (type: string, payload?: unknown) => Promise<number>;
   },
 ): Promise<{ died: boolean }> {
   const player = await tx.player.findFirst({ where: { id: args.playerId, gameId: args.gameId } });

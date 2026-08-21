@@ -146,7 +146,7 @@ describe("Remediation — death/ghost votes + Virgin (integration)", () => {
     await prisma.$transaction(async (tx) => {
       await markPlayerDead(tx, {
         gameId, playerId: chef, source: "OTHER", cycleNumber: 2, phase: "OPERATIONAL", executed: false,
-        appendEvent: async () => {},
+        appendEvent: async () => 0,
       });
     });
     const after = await prisma.player.findUniqueOrThrow({ where: { id: chef } });
