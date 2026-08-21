@@ -317,6 +317,16 @@ export interface ConsistencyIssueDto {
   message: string;
 }
 
+/** Mirror of `PresenceConnection` + `listPresence` (audit spec 21 §4). */
+export type PresenceConnectionDto = "ONLINE" | "STALE" | "OFFLINE";
+
+export interface PresenceDto {
+  playerId: string | null;
+  viewerId: string;
+  connection: PresenceConnectionDto;
+  lastSeenAt: string;
+}
+
 export interface StorytellerControlDto {
   gameId: string;
   name: string | null;
@@ -330,12 +340,25 @@ export interface StorytellerControlDto {
   lastEvent: LastEventDto | null;
   latestCheckpoint: CheckpointDto | null;
   consistencyIssues: ConsistencyIssueDto[];
+  presence: PresenceDto[];
 }
+
+/** Mirror of `AUDIT_CATEGORIES` (audit spec 21 §8) — order matches the server. */
+export const AUDIT_CATEGORIES = [
+  "GAME_ENGINE",
+  "OPERATIONAL",
+  "INVESTIGATION_VOTING",
+  "SCENARIO",
+  "ACCESS_SESSION",
+  "RECOVERY",
+] as const;
+export type AuditCategoryDto = (typeof AUDIT_CATEGORIES)[number];
 
 export interface AuditEventDto {
   sequence: number;
   gameVersion: number;
   eventType: string;
+  category: AuditCategoryDto;
   actor: string | null;
   commandId: string | null;
   payload: unknown;
@@ -344,6 +367,8 @@ export interface AuditEventDto {
 
 export interface StorytellerAuditDto {
   events: AuditEventDto[];
+  categories?: AuditCategoryDto[];
+  nextCursor: number | null;
 }
 
 export interface CheckpointResponseDto {

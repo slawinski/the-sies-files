@@ -15,6 +15,8 @@ import {
 } from "@/lib/client-api";
 import MapCard from "@/components/MapCard";
 import PhaseBadge from "@/components/PhaseBadge";
+import { useGameEventStream, type RealtimeHealth } from "@/components/useGameEventStream";
+import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
 
 type View = "loading" | "ready" | "unclaimed" | "error";
 
@@ -57,6 +59,32 @@ function mapVersionLabel(mapVersionId: string | null): string {
 
 function taskStateLabel(state: string): string {
   return state === "COMPLETED" ? "ukończono" : "do zrobienia";
+}
+
+/** Light realtime dot + short label for the header — text always present. */
+function RealtimeDot({ health }: { health: RealtimeHealth }) {
+  if (health === "LIVE") {
+    return (
+      <span role="status" className="inline-flex items-center gap-1.5 text-xs text-moss">
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-moss" />
+        LIVE
+      </span>
+    );
+  }
+  if (health === "RECONNECTING") {
+    return (
+      <span role="status" className="inline-flex items-center gap-1.5 text-xs text-brass">
+        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-brass" />
+        ŁĄCZENIE…
+      </span>
+    );
+  }
+  return (
+    <span role="status" className="inline-flex items-center gap-1.5 text-xs text-danger">
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-danger" />
+      OFFLINE
+    </span>
+  );
 }
 
 /** Friendly summary of a successful QR scan, using refetched titles when known. */
@@ -253,6 +281,10 @@ export default function PlayerWaiting() {
     await apply();
   }, [apply]);
 
+  const gameId = game?.gameId ?? null;
+  const realtime = useGameEventStream(gameId, refetch);
+  usePresenceHeartbeat(gameId);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -415,6 +447,14 @@ export default function PlayerWaiting() {
   const scenario = game?.scenario ?? null;
   const scenarioVisible = game ? game.phase === "INVESTIGATION" && scenario !== null : false;
 
+  // A formal flow is underway when a decision is expected from someone in the
+  // circle: an operational action is pending, or a voting pass is running.
+  const formalFlow =
+    game !== null &&
+    (game.activeAction !== null ||
+      game.nominations.some((n) => n.status === "VOTING" && n.passStatus === "RUNNING"));
+  const connectionBlocked = formalFlow && realtime !== "LIVE";
+
   // Track newly discovered clues so only genuinely new evidence cards play the
   // one-shot dossier-insertion animation (docs/11 §13) — refetches of the
   // existing list never re-animate.
@@ -450,6 +490,7 @@ export default function PlayerWaiting() {
           </Link>
           <div className="flex items-center gap-3">
             {game && <PhaseBadge phase={game.phase} status={game.status} />}
+            {game && <RealtimeDot health={realtime} />}
             <span className="text-xs text-ink-muted">Gracz</span>
           </div>
         </div>
@@ -490,6 +531,16 @@ export default function PlayerWaiting() {
 
         {view === "ready" && game && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {connectionBlocked && (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="flex min-h-11 items-center rounded-xl border border-brass/40 bg-brass/10 px-4 py-3 text-sm text-brass md:col-span-3"
+              >
+                Brak połączenia — odświeżanie…
+              </div>
+            )}
+
             {(stale || actionError) && (
               <div className="flex flex-col gap-2 md:col-span-3">
                 {stale && (
@@ -636,7 +687,7 @@ export default function PlayerWaiting() {
                     <button
                       type="button"
                       onClick={handleSubmitAction}
-                      disabled={busy || selectedIds.length !== requiredTargets}
+                      disabled={busy || selectedIds.length !== requiredTargets || connectionBlocked}
                       className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
                     >
                       Złóż działanie
@@ -833,7 +884,7 @@ export default function PlayerWaiting() {
                                 <button
                                   type="button"
                                   onClick={() => handleVoteIntent(n.id, true)}
-                                  disabled={busy}
+                                  disabled={busy || connectionBlocked}
                                   aria-pressed={yesActive}
                                   className={`min-h-11 flex-1 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
                                     yesActive
@@ -846,7 +897,7 @@ export default function PlayerWaiting() {
                                 <button
                                   type="button"
                                   onClick={() => handleVoteIntent(n.id, false)}
-                                  disabled={busy}
+                                  disabled={busy || connectionBlocked}
                                   aria-pressed={noActive}
                                   className={`min-h-11 flex-1 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
                                     noActive

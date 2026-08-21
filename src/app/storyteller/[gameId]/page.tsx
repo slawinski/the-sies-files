@@ -6,10 +6,13 @@ import { useParams } from "next/navigation";
 import {
   api,
   ApiClientError,
+  AUDIT_CATEGORIES,
   friendlyMessage,
   type AccessResetResponseDto,
+  type AuditCategoryDto,
   type CheckpointResponseDto,
   type InfoResultDto,
+  type PresenceConnectionDto,
   type StorytellerActionDto,
   type StorytellerAuditDto,
   type StorytellerControlDto,
@@ -19,6 +22,8 @@ import {
 } from "@/lib/client-api";
 import ActionDecisionPanel from "@/components/ActionDecisionPanel";
 import PhaseBadge from "@/components/PhaseBadge";
+import { useGameEventStream, type RealtimeHealth } from "@/components/useGameEventStream";
+import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
 
 const MIN_READY = 13;
 const MAX_PLAYERS = 16;
@@ -74,6 +79,47 @@ function claimStatus(player: StorytellerPlayerDto): { label: string; className: 
   if (player.claimed) return { label: "odebrano", className: "text-success" };
   if (player.hasClaimToken) return { label: "link wydany, nieodebrany", className: "text-brass" };
   return { label: "brak linku", className: "text-ink-muted" };
+}
+
+function presenceTone(connection: PresenceConnectionDto): string {
+  if (connection === "ONLINE") return "border-success/40 text-success";
+  if (connection === "STALE") return "border-brass/40 text-brass";
+  return "border-line text-ink-muted";
+}
+
+/** Compact realtime health pill — always carries text, never color alone. */
+function RealtimeBadge({ health }: { health: RealtimeHealth }) {
+  if (health === "LIVE") {
+    return (
+      <span
+        role="status"
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-moss/40 bg-moss/10 px-3 text-xs font-medium text-moss"
+      >
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-moss" />
+        LIVE
+      </span>
+    );
+  }
+  if (health === "RECONNECTING") {
+    return (
+      <span
+        role="status"
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-brass/40 bg-brass/10 px-3 text-xs font-medium text-brass"
+      >
+        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-brass" />
+        ŁĄCZENIE…
+      </span>
+    );
+  }
+  return (
+    <span
+      role="status"
+      className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-danger/40 bg-danger/10 px-3 text-xs font-medium text-danger"
+    >
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-danger" />
+      OFFLINE
+    </span>
+  );
 }
 
 /** "WASHERWOMAN" → "Washerwoman", "FORTUNE_TELLER" → "Fortune Teller". */
@@ -200,6 +246,10 @@ export default function StorytellerDashboard() {
 
   const [control, setControl] = useState<StorytellerControlDto | null>(null);
   const [audit, setAudit] = useState<StorytellerAuditDto | null>(null);
+  const [auditCategories, setAuditCategories] = useState<AuditCategoryDto[]>([]);
+  const [auditLoadingMore, setAuditLoadingMore] = useState(false);
+  const [auditError, setAuditError] = useState(false);
+  const auditCategoriesRef = useRef<AuditCategoryDto[]>([]);
 
   const [checkpointReason, setCheckpointReason] = useState("");
   const [checkpointNote, setCheckpointNote] = useState<string | null>(null);
@@ -220,19 +270,45 @@ export default function StorytellerDashboard() {
     error: string | null;
   } | null>(null);
 
-  /** Control plane projections (Slice 6) — refreshed alongside the main load. */
+  /** Control plane projection (Slice 6) — refreshed alongside the main load. */
   const loadAux = useCallback(async () => {
     try {
-      const [controlRes, auditRes] = await Promise.all([
-        api<StorytellerControlDto>(`/api/v1/games/${gameId}/storyteller/control`),
-        api<StorytellerAuditDto>(`/api/v1/games/${gameId}/storyteller/audit`),
-      ]);
+      const controlRes = await api<StorytellerControlDto>(
+        `/api/v1/games/${gameId}/storyteller/control`,
+      );
       setControl(controlRes);
-      setAudit(auditRes);
     } catch {
       // Keep the previous snapshot; the control cards are non-critical.
     }
   }, [gameId]);
+
+  /** Audit log with category filter + cursor pagination. */
+  const loadAudit = useCallback(
+    async (categories: AuditCategoryDto[], cursor?: number) => {
+      const params = new URLSearchParams();
+      if (categories.length > 0) params.set("categories", categories.join(","));
+      if (cursor !== undefined) params.set("cursor", String(cursor));
+      const qs = params.toString();
+      try {
+        const res = await api<StorytellerAuditDto>(
+          `/api/v1/games/${gameId}/storyteller/audit${qs ? `?${qs}` : ""}`,
+        );
+        if (cursor !== undefined) {
+          setAudit((prev) => ({
+            categories: res.categories,
+            nextCursor: res.nextCursor,
+            events: [...(prev?.events ?? []), ...res.events],
+          }));
+        } else {
+          setAudit(res);
+        }
+      } catch {
+        if (cursor === undefined) setAuditError(true);
+        // Keep the previous snapshot; the audit card is non-critical.
+      }
+    },
+    [gameId],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -252,6 +328,51 @@ export default function StorytellerDashboard() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Restore the audit category filter from the URL (survives reload).
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("auditCat") ?? "";
+    const categories = param
+      .split(",")
+      .filter((c): c is AuditCategoryDto => (AUDIT_CATEGORIES as readonly string[]).includes(c));
+    auditCategoriesRef.current = categories;
+    setAuditCategories(categories);
+    void loadAudit(categories);
+  }, [loadAudit]);
+
+  function applyAuditCategories(next: AuditCategoryDto[]) {
+    auditCategoriesRef.current = next;
+    setAuditCategories(next);
+    const url = new URL(window.location.href);
+    if (next.length === 0) url.searchParams.delete("auditCat");
+    else url.searchParams.set("auditCat", next.join(","));
+    window.history.replaceState(null, "", url.toString());
+    void loadAudit(next);
+  }
+
+  function toggleAuditCategory(id: AuditCategoryDto) {
+    applyAuditCategories(
+      auditCategories.includes(id)
+        ? auditCategories.filter((c) => c !== id)
+        : [...auditCategories, id],
+    );
+  }
+
+  async function handleLoadMoreAudit() {
+    if (!audit?.nextCursor) return;
+    setAuditLoadingMore(true);
+    await loadAudit(auditCategories, audit.nextCursor);
+    setAuditLoadingMore(false);
+  }
+
+  /** One refetch of every card — coalesced upstream by the realtime hook. */
+  const refetchAll = useCallback(() => {
+    void load();
+    void loadAudit(auditCategoriesRef.current);
+  }, [load, loadAudit]);
+
+  const realtime = useGameEventStream(gameId, refetchAll);
+  usePresenceHeartbeat(gameId);
 
   // Clear the vote-lock confirmation timer on unmount.
   useEffect(() => {
@@ -1831,16 +1952,19 @@ export default function StorytellerDashboard() {
 
               {/* Control card (Slice 6) */}
               <section className="card md:col-span-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="display text-xs tracking-[0.25em] text-moss">Sterowanie</p>
-                  <button
-                    type="button"
-                    onClick={() => void loadAux()}
-                    disabled={busy}
-                    className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
-                  >
-                    Odśwież
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <RealtimeBadge health={realtime} />
+                    <button
+                      type="button"
+                      onClick={() => void loadAux()}
+                      disabled={busy}
+                      className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
+                    >
+                      Odśwież
+                    </button>
+                  </div>
                 </div>
 
                 {!control ? (
@@ -1864,6 +1988,36 @@ export default function StorytellerDashboard() {
                       <span>
                         <span className="text-ink-muted">uczestnicy:</span> {control.participantCount}
                       </span>
+                    </div>
+
+                    <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
+                      <p className="text-xs text-moss">Obecność</p>
+                      {control.presence.length === 0 ? (
+                        <p className="mt-1 text-sm text-ink-muted">brak połączeń</p>
+                      ) : (
+                        <ul className="mt-2 flex flex-col gap-1.5">
+                          {control.presence.map((p) => (
+                            <li
+                              key={p.viewerId}
+                              className="flex items-center justify-between gap-3 text-sm"
+                            >
+                              <span className="min-w-0 truncate text-ink-primary">
+                                {p.playerId ? (nameById.get(p.playerId) ?? p.playerId) : "Storyteller"}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 text-xs ${presenceTone(p.connection)}`}
+                                >
+                                  {p.connection}
+                                </span>
+                                <span className="text-xs tabular-nums text-ink-muted">
+                                  {formatTime(p.lastSeenAt)}
+                                </span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
 
                     {control.blockingAction ? (
@@ -2046,30 +2200,85 @@ export default function StorytellerDashboard() {
                   )}
                 </div>
 
-                {!audit ? (
-                  <p className="mt-3 text-sm text-ink-muted">Wczytuję dziennik zdarzeń…</p>
-                ) : audit.events.length === 0 ? (
-                  <p className="mt-3 text-sm text-ink-muted">Brak zdarzeń.</p>
-                ) : (
-                  <ol className="mt-3 flex max-h-96 flex-col gap-1 overflow-y-auto pr-1">
-                    {audit.events.map((event) => (
-                      <li
-                        key={event.sequence}
-                        className="flex flex-wrap items-baseline gap-x-3 rounded-lg px-2 py-1.5 text-sm odd:bg-card-soft/40"
+                <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Filtruj kategorie audytu">
+                  <button
+                    type="button"
+                    onClick={() => applyAuditCategories([])}
+                    aria-pressed={auditCategories.length === 0}
+                    className={`min-h-11 rounded-full border px-3.5 text-sm transition-colors ${
+                      auditCategories.length === 0
+                        ? "border-moss/60 bg-moss/15 text-moss"
+                        : "border-line text-ink-secondary hover:border-moss/40 hover:text-ink-primary"
+                    }`}
+                  >
+                    Wszystkie
+                  </button>
+                  {AUDIT_CATEGORIES.map((id) => {
+                    const active = auditCategories.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => toggleAuditCategory(id)}
+                        aria-pressed={active}
+                        className={`min-h-11 rounded-full border px-3.5 text-sm transition-colors ${
+                          active
+                            ? "border-moss/60 bg-moss/15 text-moss"
+                            : "border-line text-ink-secondary hover:border-moss/40 hover:text-ink-primary"
+                        }`}
                       >
-                        <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-ink-muted">
-                          #{event.sequence}
-                        </span>
-                        <span className="min-w-0 break-words text-ink-primary">{event.eventType}</span>
-                        <span className="min-w-0 truncate text-xs text-ink-muted">
-                          {event.actor ?? "—"}
-                        </span>
-                        <span className="ml-auto shrink-0 text-xs tabular-nums text-ink-muted">
-                          {formatTime(event.createdAt)}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
+                        {id}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {!audit && !auditError && (
+                  <p className="mt-3 text-sm text-ink-muted">Wczytuję dziennik zdarzeń…</p>
+                )}
+                {!audit && auditError && (
+                  <p className="mt-3 text-sm text-ink-muted">Nie udało się wczytać dziennika zdarzeń.</p>
+                )}
+                {audit && audit.events.length === 0 && (
+                  <p className="mt-3 text-sm text-ink-muted">Brak zdarzeń.</p>
+                )}
+                {audit && audit.events.length > 0 && (
+                  <>
+                    <ol className="mt-3 flex max-h-96 flex-col gap-1 overflow-y-auto pr-1">
+                      {audit.events.map((event) => (
+                        <li
+                          key={event.sequence}
+                          className="flex flex-wrap items-baseline gap-x-3 rounded-lg px-2 py-1.5 text-sm odd:bg-card-soft/40"
+                        >
+                          <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-ink-muted">
+                            #{event.sequence}
+                          </span>
+                          <span className="min-w-0 break-words text-ink-primary">{event.eventType}</span>
+                          <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">
+                            {event.category}
+                          </span>
+                          <span className="min-w-0 truncate text-xs text-ink-muted">
+                            {event.actor ?? "—"}
+                          </span>
+                          <span className="ml-auto shrink-0 text-xs tabular-nums text-ink-muted">
+                            {formatTime(event.createdAt)}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                    {audit.nextCursor !== null && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleLoadMoreAudit()}
+                          disabled={auditLoadingMore}
+                          className="min-h-11 rounded-xl border border-line px-4 text-sm text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
+                        >
+                          {auditLoadingMore ? "Wczytuję…" : "Więcej"}
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </section>
             </div>

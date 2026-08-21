@@ -139,7 +139,93 @@ export default function StorytellerHome() {
             </form>
           </div>
         )}
+
+        {(view === "error" || view === "form" || view === "creating") && <RecoverAccess />}
       </main>
+    </div>
+  );
+}
+
+/** Discreet storyteller access recovery (audit spec 21 §7) — never echoes the secret. */
+function RecoverAccess() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [gameId, setGameId] = useState("");
+  const [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const trimmedId = gameId.trim();
+    if (!trimmedId || !secret.trim()) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await api("/api/v1/storyteller/recover", {
+        method: "POST",
+        body: JSON.stringify({ gameId: trimmedId, recoverySecret: secret }),
+      });
+      router.replace(`/storyteller/${trimmedId}`);
+    } catch {
+      setFailed(true);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-6">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="min-h-11 rounded-xl px-3 text-sm text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
+      >
+        Odzyskaj dostęp Storytellera
+      </button>
+
+      {open && (
+        <form
+          onSubmit={handleSubmit}
+          className="mt-3 flex flex-col gap-2 rounded-xl border border-line bg-card-soft/60 p-3"
+        >
+          <label htmlFor="recover-game-id" className="sr-only">
+            Identyfikator sprawy
+          </label>
+          <input
+            id="recover-game-id"
+            value={gameId}
+            onChange={(e) => setGameId(e.target.value)}
+            placeholder="ID sprawy"
+            autoComplete="off"
+            className="min-h-11 w-full rounded-xl border border-line bg-elevated px-3 font-mono text-sm text-ink-primary placeholder:text-ink-muted"
+          />
+          <label htmlFor="recover-secret" className="sr-only">
+            Sekret odzyskiwania
+          </label>
+          <input
+            id="recover-secret"
+            type="password"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            placeholder="Sekret odzyskiwania"
+            autoComplete="off"
+            className="min-h-11 w-full rounded-xl border border-line bg-elevated px-3 text-ink-primary placeholder:text-ink-muted"
+          />
+          {failed && (
+            <p role="alert" className="text-sm text-danger">
+              Nie udało się odzyskać dostępu.
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={busy || !gameId.trim() || !secret.trim()}
+            className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+          >
+            {busy ? "Odzyskuję…" : "Odzyskaj"}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
