@@ -37,3 +37,17 @@ export async function createGameWithPlayers(
   }
   return { gameId, playerIds, version };
 }
+
+/**
+ * Sensible default targets for a player action kind, satisfying the target
+ * contracts (cardinality + self/alive rules) in a no-death test context.
+ */
+export function defaultActionTargets(
+  kind: string,
+  actorPlayerId: string,
+  playerIds: string[],
+): string[] {
+  const others = playerIds.filter((id) => id !== actorPlayerId);
+  if (kind === "FORTUNE_TELLER_CHOOSE") return others.slice(0, 2);
+  return others.slice(0, 1);
+}

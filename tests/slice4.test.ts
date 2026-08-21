@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
-import { resetDb, createGameWithPlayers } from "./helpers/db";
+import { resetDb, createGameWithPlayers, defaultActionTargets } from "./helpers/db";
 import { prisma } from "@/lib/db";
 import { tallyVotes, type VoterState } from "@/modules/investigation/voting";
 import { checkGenericVictory, checkMayorVictory } from "@/modules/investigation/victory";
@@ -115,7 +115,7 @@ describe("Slice 4 — execution and victory (integration)", () => {
       const active = (st.operational?.actions ?? []).find((a) => a.status === "WAITING_FOR_PLAYER" || a.status === "WAITING_FOR_STORYTELLER");
       if (!active) break;
       if (active.status === "WAITING_FOR_PLAYER") {
-        v = (await submitAction({ gameId, playerId: active.actorPlayerId!, actionId: active.id, commandId: randomUUID(), expectedVersion: v, targetPlayerIds: ["x"] })).version;
+        v = (await submitAction({ gameId, playerId: active.actorPlayerId!, actionId: active.id, commandId: randomUUID(), expectedVersion: v, targetPlayerIds: defaultActionTargets(active.kind, active.actorPlayerId!, playerIds) })).version;
       } else {
         v = (await resolveAction({ gameId, actionId: active.id, commandId: randomUUID(), expectedVersion: v })).version;
       }

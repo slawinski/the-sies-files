@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import { resetDb, createGameWithPlayers } from "./helpers/db";
+import { resetDb, createGameWithPlayers, defaultActionTargets } from "./helpers/db";
 import { prisma } from "@/lib/db";
 import { generateSetup, commitSetup } from "@/modules/setup/setup.service";
 import { startOperational, submitAction, resolveAction, completeOperational } from "@/modules/operational/operational.service";
@@ -11,7 +11,7 @@ import { getScriptDefinition } from "@/modules/trouble-brewing/script";
 
 beforeEach(resetDb);
 
-async function runFullOperationalCycle(gameId: string, version: number): Promise<number> {
+async function runFullOperationalCycle(gameId: string, version: number, playerIds: string[]): Promise<number> {
   let v = (await startOperational({ gameId, commandId: randomUUID(), expectedVersion: version })).version;
   for (let g = 0; g < 200; g += 1) {
     const st = await loadStorytellerData(gameId);
@@ -20,7 +20,7 @@ async function runFullOperationalCycle(gameId: string, version: number): Promise
     );
     if (!active) break;
     if (active.status === "WAITING_FOR_PLAYER") {
-      v = (await submitAction({ gameId, playerId: active.actorPlayerId!, actionId: active.id, commandId: randomUUID(), expectedVersion: v, targetPlayerIds: ["x"] })).version;
+      v = (await submitAction({ gameId, playerId: active.actorPlayerId!, actionId: active.id, commandId: randomUUID(), expectedVersion: v, targetPlayerIds: defaultActionTargets(active.kind, active.actorPlayerId!, playerIds) })).version;
     } else {
       v = (await resolveAction({ gameId, actionId: active.id, commandId: randomUUID(), expectedVersion: v })).version;
     }
@@ -30,14 +30,14 @@ async function runFullOperationalCycle(gameId: string, version: number): Promise
 
 describe("Milestone 8 — release hardening", () => {
   it("13-player golden path: setup → first Operational → Investigation", async () => {
-    const { gameId, version } = await createGameWithPlayers(13);
+    const { gameId, version, playerIds } = await createGameWithPlayers(13);
     let v = (await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: version })).version;
     v = (await commitSetup({ gameId, commandId: randomUUID(), expectedVersion: v })).version;
 
     const game = await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } });
     expect(game.status).toBe("ROLE_REVEAL");
 
-    await runFullOperationalCycle(gameId, v);
+    await runFullOperationalCycle(gameId, v, playerIds);
     const after = await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } });
     expect(after.status).toBe("ACTIVE");
     expect(after.phase).toBe("INVESTIGATION");

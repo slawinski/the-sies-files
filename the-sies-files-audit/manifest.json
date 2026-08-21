@@ -1,0 +1,52 @@
+{
+  "auditBaseline": "main@9099836",
+  "auditDate": "2026-08-21",
+  "repository": "https://github.com/slawinski/the-sies-files",
+  "files": [
+    "17_AUDIT_AND_REMEDIATION_INDEX_v1.md",
+    "18_RULES_CORRECTNESS_AND_REGISTRATION_SPEC_v1.md",
+    "19_OPERATIONAL_STORYTELLER_ROLE_UX_SPEC_v1.md",
+    "20_INVESTIGATION_VOTING_AND_SESSION_UX_SPEC_v1.md",
+    "21_REALTIME_CONTROL_PLANE_AND_RECOVERY_SPEC_v1.md",
+    "22_SECURITY_AND_DATA_DURABILITY_SPEC_v1.md",
+    "23_PRODUCTION_CONTENT_CAMERA_AND_LOCALIZATION_SPEC_v1.md",
+    "24_RELEASE_TESTING_DETERMINISM_AND_VISUAL_QA_SPEC_v1.md"
+  ],
+  "reportedGapsCovered": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "additionalFindings": [
+    "X1",
+    "X2"
+  ]
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
-import { resetDb, createGameWithPlayers } from "./helpers/db";
+import { resetDb, createGameWithPlayers, defaultActionTargets } from "./helpers/db";
 import { prisma } from "@/lib/db";
 import { scanQr } from "@/modules/scenario/scenario.service";
 import { startOperational, submitAction, resolveAction, completeOperational } from "@/modules/operational/operational.service";
@@ -38,14 +38,14 @@ async function commitCustomSetup() {
   return { gameId, playerIds, version: game.version };
 }
 
-async function runFirstCycle(gameId: string, version: number): Promise<number> {
+async function runFirstCycle(gameId: string, version: number, playerIds: string[]): Promise<number> {
   let v = (await startOperational({ gameId, commandId: randomUUID(), expectedVersion: version })).version;
   for (let g = 0; g < 200; g += 1) {
     const st = await loadStorytellerData(gameId);
     const active = (st.operational?.actions ?? []).find((a) => a.status === "WAITING_FOR_PLAYER" || a.status === "WAITING_FOR_STORYTELLER");
     if (!active) break;
     if (active.status === "WAITING_FOR_PLAYER") {
-      v = (await submitAction({ gameId, playerId: active.actorPlayerId!, actionId: active.id, commandId: randomUUID(), expectedVersion: v, targetPlayerIds: ["x"] })).version;
+      v = (await submitAction({ gameId, playerId: active.actorPlayerId!, actionId: active.id, commandId: randomUUID(), expectedVersion: v, targetPlayerIds: defaultActionTargets(active.kind, active.actorPlayerId!, playerIds) })).version;
     } else {
       v = (await resolveAction({ gameId, actionId: active.id, commandId: randomUUID(), expectedVersion: v })).version;
     }
@@ -64,7 +64,7 @@ describe("Slice 5 — scenario engine", () => {
 
   it("scan reveals a clue, issues a task, and is one-per-player", async () => {
     const { gameId, playerIds, version } = await commitCustomSetup();
-    let v = await runFirstCycle(gameId, version);
+    let v = await runFirstCycle(gameId, version, playerIds);
     const p = playerIds[0];
 
     const commandId = randomUUID();
@@ -87,7 +87,7 @@ describe("Slice 5 — scenario engine", () => {
 
   it("annex QR unlocks the extended map and does not change core game state", async () => {
     const { gameId, playerIds, version } = await commitCustomSetup();
-    const v = await runFirstCycle(gameId, version);
+    const v = await runFirstCycle(gameId, version, playerIds);
     const before = await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } });
 
     await scanQr({ gameId, playerId: playerIds[0], token: "tsf-qr-annex-001", commandId: randomUUID(), expectedVersion: v });
@@ -104,7 +104,7 @@ describe("Slice 5 — scenario engine", () => {
 
   it("trap QR applies INJURED, first-aid clears it", async () => {
     const { gameId, playerIds, version } = await commitCustomSetup();
-    const v = await runFirstCycle(gameId, version);
+    const v = await runFirstCycle(gameId, version, playerIds);
     const p = playerIds[0];
 
     const afterTrap = (await scanQr({ gameId, playerId: p, token: "tsf-qr-trap-001", commandId: randomUUID(), expectedVersion: v })).version;

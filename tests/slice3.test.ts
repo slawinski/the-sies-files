@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
-import { resetDb, createGameWithPlayers } from "./helpers/db";
+import { resetDb, createGameWithPlayers, defaultActionTargets } from "./helpers/db";
 import { prisma } from "@/lib/db";
 import {
   startOperational,
@@ -63,7 +63,13 @@ async function setupCustomRoles(roles: CharacterId[]) {
 }
 
 // Resolve the current Operational phase in order, completing it at the end.
-async function driveCycle(gameId: string, version: number, kindTargets: Record<string, string[]> = {}): Promise<number> {
+async function driveCycle(
+  gameId: string,
+  version: number,
+  playerIds: string[],
+  kindTargets: Record<string, string[]> = {},
+  kindResolutions: Record<string, { kind: "IMP_KILL"; starPassSuccessorPlayerId?: string; mayorRedirectToPlayerId?: string }> = {},
+): Promise<number> {
   let v = version;
   for (let guard = 0; guard < 200; guard += 1) {
     const st = await loadStorytellerData(gameId);
@@ -74,7 +80,8 @@ async function driveCycle(gameId: string, version: number, kindTargets: Record<s
     if (!active) break;
 
     if (active.status === "WAITING_FOR_PLAYER") {
-      const targets = kindTargets[active.kind] ?? ["other-player-placeholder"];
+      const targets =
+        kindTargets[active.kind] ?? defaultActionTargets(active.kind, active.actorPlayerId!, playerIds);
       v = (await submitAction({
         gameId,
         playerId: active.actorPlayerId!,
@@ -84,15 +91,16 @@ async function driveCycle(gameId: string, version: number, kindTargets: Record<s
         targetPlayerIds: targets,
       })).version;
     } else {
-      v = (await resolveAction({ gameId, actionId: active.id, commandId: randomUUID(), expectedVersion: v })).version;
+      const resolution = kindResolutions[active.kind];
+      v = (await resolveAction({ gameId, actionId: active.id, commandId: randomUUID(), expectedVersion: v, resolution })).version;
     }
   }
   return (await completeOperational({ gameId, commandId: randomUUID(), expectedVersion: v })).version;
 }
 
-async function runFirstCycle(gameId: string, version: number): Promise<number> {
+async function runFirstCycle(gameId: string, version: number, playerIds: string[]): Promise<number> {
   const v = (await startOperational({ gameId, commandId: randomUUID(), expectedVersion: version })).version;
-  return driveCycle(gameId, v);
+  return driveCycle(gameId, v, playerIds);
 }
 
 const ROLES13: CharacterId[] = [
@@ -114,7 +122,7 @@ const ROLES13: CharacterId[] = [
 describe("Slice 3 — recurring Operational engine", () => {
   it("second cycle applies a Demon kill but Monk protection saves the target", async () => {
     const { gameId, playerIds, version } = await setupCustomRoles(ROLES13);
-    let v = await runFirstCycle(gameId, version);
+    let v = await runFirstCycle(gameId, version, playerIds);
 
     let game = await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } });
     expect(game.phase).toBe("INVESTIGATION");
@@ -129,7 +137,7 @@ describe("Slice 3 — recurring Operational engine", () => {
     const empath = playerIds[ROLES13.indexOf("EMPATH")];
 
     // Poison the Soldier; Monk protects the Empath; Imp kills the Empath.
-    await driveCycle(gameId, v, {
+    await driveCycle(gameId, v, playerIds, {
       POISONER_CHOOSE: [soldier],
       MONK_CHOOSE: [empath],
       IMP_CHOOSE: [empath],
@@ -145,11 +153,11 @@ describe("Slice 3 — recurring Operational engine", () => {
 
   it("kills an unprotected target", async () => {
     const { gameId, playerIds, version } = await setupCustomRoles(ROLES13);
-    let v = await runFirstCycle(gameId, version);
+    let v = await runFirstCycle(gameId, version, playerIds);
     v = (await startOperational({ gameId, commandId: randomUUID(), expectedVersion: v })).version;
 
     const chef = playerIds[ROLES13.indexOf("CHEF")];
-    await driveCycle(gameId, v, { IMP_CHOOSE: [chef] });
+    await driveCycle(gameId, v, playerIds, { IMP_CHOOSE: [chef] });
 
     const chefRow = await prisma.player.findUniqueOrThrow({ where: { id: chef } });
     expect(chefRow.alive).toBe(false);
@@ -157,13 +165,20 @@ describe("Slice 3 — recurring Operational engine", () => {
 
   it("Imp self-kill triggers star-pass to the Scarlet Woman", async () => {
     const { gameId, playerIds, version } = await setupCustomRoles(ROLES13);
-    let v = await runFirstCycle(gameId, version);
+    let v = await runFirstCycle(gameId, version, playerIds);
     v = (await startOperational({ gameId, commandId: randomUUID(), expectedVersion: v })).version;
 
     const imp = playerIds[ROLES13.indexOf("IMP")];
     const scarlet = playerIds[ROLES13.indexOf("SCARLET_WOMAN")];
 
-    await driveCycle(gameId, v, { IMP_CHOOSE: [imp] });
+    // Multiple living Minions → the Storyteller must choose the successor.
+    await driveCycle(
+      gameId,
+      v,
+      playerIds,
+      { IMP_CHOOSE: [imp] },
+      { IMP_KILL: { kind: "IMP_KILL", starPassSuccessorPlayerId: scarlet } },
+    );
 
     const impRow = await prisma.player.findUniqueOrThrow({ where: { id: imp } });
     expect(impRow.alive).toBe(false);

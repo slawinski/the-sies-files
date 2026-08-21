@@ -15,11 +15,14 @@ import {
   type Occurrence,
   type StepKind,
 } from "@/modules/trouble-brewing/script";
+import { CHARACTER_DEFINITIONS, type CharacterId } from "@/modules/trouble-brewing/characters";
 import type { SetupCandidate } from "@/modules/setup/types";
 import { publish } from "@/modules/realtime/broker";
 import { getAbilityFunctionState } from "./ability";
 import { EFFECT_BOUNDARY, type EffectType } from "./effects";
 import { demonDeathOutcome } from "./death";
+import { validateTargets } from "./targets";
+import { markPlayerDead } from "@/modules/game-session/death";
 import {
   computeAdjacentEvilPairs,
   computeCharacterCandidates,
@@ -307,6 +310,18 @@ export async function submitAction({
       if (action.actorPlayerId !== playerId) throw new DomainError("FORBIDDEN", "This action belongs to another player");
       if (action.status !== "WAITING_FOR_PLAYER") throw new DomainError("ACTION_NOT_ACTIVE", "This action is not awaiting a player");
 
+      // Server-side target contract (audit spec 18 §8): cardinality, same-game
+      // membership, role-specific self/alive constraints.
+      const targets = await tx.player.findMany({
+        where: { gameId, id: { in: targetPlayerIds } },
+      });
+      validateTargets({
+        kind: action.kind as StepKind,
+        actorPlayerId: playerId,
+        targetPlayerIds,
+        targets: targets.map((t) => ({ playerId: t.id, alive: t.alive })),
+      });
+
       await applyChoiceEffect(
         tx,
         gameId,
@@ -352,6 +367,11 @@ async function computeDefaultResolution(
   return result;
 }
 
+export type StorytellerActionResolution =
+  | { kind: "INFO"; value: InfoResult }
+  | { kind: "IMP_KILL"; mayorRedirectToPlayerId?: string; starPassSuccessorPlayerId?: string }
+  | { kind: "REGISTRATION"; optionId: string };
+
 export async function resolveAction({
   gameId,
   actionId,
@@ -363,7 +383,7 @@ export async function resolveAction({
   actionId: string;
   commandId: string;
   expectedVersion: number;
-  resolution?: InfoResult;
+  resolution?: StorytellerActionResolution;
 }): Promise<{ version: number }> {
   const { version, sequence } = await runCommand({
     gameId,
@@ -382,7 +402,8 @@ export async function resolveAction({
       const cycle = action.phase.cycleNumber;
 
       if (action.kind === "IMP_KILL") {
-        await resolveImpKill(tx, gameId, cycle, action, resolution as { redirectToPlayerId?: string; successionPlayerId?: string } | undefined, appendEvent);
+        const payload = resolution && resolution.kind === "IMP_KILL" ? resolution : undefined;
+        await resolveImpKill(tx, gameId, cycle, action, payload, appendEvent);
         await tx.operationalAction.update({
           where: { id: actionId },
           data: { status: "RESOLVED", resolutionJson: { resolved: true } as Prisma.InputJsonValue },
@@ -391,7 +412,8 @@ export async function resolveAction({
         return {};
       }
 
-      const finalResolution = resolution ?? (await computeDefaultResolution(tx, gameId, action));
+      const finalResolution =
+        resolution && resolution.kind === "INFO" ? resolution.value : await computeDefaultResolution(tx, gameId, action);
       await tx.operationalAction.update({
         where: { id: actionId },
         data: { status: "RESOLVED", resolutionJson: finalResolution as unknown as Prisma.InputJsonValue },
@@ -411,7 +433,7 @@ async function resolveImpKill(
   gameId: string,
   cycle: number,
   action: { operationalPhaseId: string; orderIndex: number; actorPlayerId: string | null },
-  payload: { redirectToPlayerId?: string; successionPlayerId?: string } | undefined,
+  payload: { mayorRedirectToPlayerId?: string; starPassSuccessorPlayerId?: string } | undefined,
   appendEvent: (type: string, payload?: unknown) => Promise<void>,
 ): Promise<void> {
   const choose = await tx.operationalAction.findFirst({
@@ -429,10 +451,18 @@ async function resolveImpKill(
     getAbilityFunctionState(targetSecret!, targetEffects, "OPERATIONAL", cycle) === "FUNCTIONING";
   const targetChar = targetSecret!.trueCharacterId ?? "";
 
-  // Mayor redirect: only when the target is a functioning Mayor.
+  // Mayor redirect: only when the target is a functioning Mayor, and the
+  // redirect target must be a living member of this game (audit finding X1).
   let deathTargetId = targetId;
-  if (targetChar === "MAYOR" && targetFunctioning && payload?.redirectToPlayerId) {
-    deathTargetId = payload.redirectToPlayerId;
+  if (payload?.mayorRedirectToPlayerId) {
+    if (!(targetChar === "MAYOR" && targetFunctioning)) {
+      throw new DomainError("INVALID_TARGET", "Mayor redirect is not available for this target");
+    }
+    const redirectTarget = await tx.player.findFirst({
+      where: { id: payload.mayorRedirectToPlayerId, gameId, alive: true },
+    });
+    if (!redirectTarget) throw new DomainError("INVALID_TARGET", "Invalid redirect target");
+    deathTargetId = payload.mayorRedirectToPlayerId;
     await appendEvent(EVENTS.DEATH_REDIRECTED, { from: targetId, to: deathTargetId });
   }
 
@@ -450,21 +480,47 @@ async function resolveImpKill(
     return;
   }
 
-  // Apply the death to the final target.
-  await tx.player.update({ where: { id: deathTargetId }, data: { alive: false } });
-  await appendEvent(EVENTS.PLAYER_DIED, { playerId: deathTargetId, source: "DEMON", cycleNumber: cycle });
+  // Apply the death to the final target (grants the ghost vote, emits events).
+  const death = await markPlayerDead(tx, {
+    gameId,
+    playerId: deathTargetId,
+    source: "DEMON",
+    cycleNumber: cycle,
+    phase: "OPERATIONAL",
+    executed: false,
+    appendEvent,
+  });
+  if (!death.died) return; // already dead — no succession/triggers
 
-  // Demon self-kill → star-pass succession.
+  // Demon self-kill → star-pass succession (audit spec 19 §5). Successors are
+  // living Minions in this game; Scarlet Woman is NOT a generic default here.
   if (deathTargetId === action.actorPlayerId) {
-    const successorId =
-      payload?.successionPlayerId ??
-      (await pickScarletWoman(tx, gameId, cycle));
-    if (!successorId) throw new DomainError("INVALID_TARGET", "No valid living Minion to become the Demon");
-    await tx.playerSecret.update({
-      where: { playerId: successorId },
-      data: { trueCharacterId: "IMP", perceivedCharacterId: "IMP" },
+    const minionSecrets = await tx.playerSecret.findMany({
+      where: { player: { gameId, alive: true } },
     });
-    await appendEvent(EVENTS.CHARACTER_CHANGED, { playerId: successorId, to: "IMP", reason: "STAR_PASS" });
+    const legalSuccessors = minionSecrets
+      .filter((s) => CHARACTER_DEFINITIONS[s.trueCharacterId as CharacterId]?.category === "MINION")
+      .map((s) => s.playerId);
+
+    let successorId: string | null = null;
+    if (payload?.starPassSuccessorPlayerId) {
+      if (!legalSuccessors.includes(payload.starPassSuccessorPlayerId)) {
+        throw new DomainError("INVALID_TARGET", "Not a legal star-pass successor");
+      }
+      successorId = payload.starPassSuccessorPlayerId;
+    } else if (legalSuccessors.length === 1) {
+      successorId = legalSuccessors[0];
+    } else if (legalSuccessors.length > 1) {
+      throw new DomainError("INVALID_TARGET", "Multiple legal successors — the Storyteller must choose one");
+    }
+    if (successorId) {
+      await tx.playerSecret.update({
+        where: { playerId: successorId },
+        data: { trueCharacterId: "IMP", perceivedCharacterId: "IMP" },
+      });
+      await appendEvent(EVENTS.CHARACTER_CHANGED, { playerId: successorId, to: "IMP", reason: "STAR_PASS" });
+    }
+    // Zero legal successors: the Demon stays dead (victory rules handle it).
   } else {
     // Ravenkeeper trigger: insert a Storyteller-resolved info action.
     const rkSecret = await tx.playerSecret.findUnique({ where: { playerId: deathTargetId } });
@@ -477,17 +533,6 @@ async function resolveImpKill(
       }
     }
   }
-}
-
-async function pickScarletWoman(tx: Prisma.TransactionClient, gameId: string, cycle: number): Promise<string | null> {
-  const secrets = await tx.playerSecret.findMany({ where: { player: { gameId, alive: true } } });
-  const sw = secrets.find((s) => s.trueCharacterId === "SCARLET_WOMAN");
-  if (sw) {
-    const functioning =
-      getAbilityFunctionState(sw, await tx.effect.findMany({ where: { targetPlayerId: sw.playerId, active: true } }), "OPERATIONAL", cycle) === "FUNCTIONING";
-    if (functioning) return sw.playerId;
-  }
-  return null;
 }
 
 export async function completeOperational({

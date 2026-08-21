@@ -62,6 +62,7 @@ enum NominationState {
 
 enum NominationStatus {
   CREATED
+  DAY_TRIGGER_RESOLUTION
   VOTING
   LOCKED
   RESOLVED
@@ -294,6 +295,7 @@ model Nomination {
   rawTotal       Int             @default(0)
   effectiveTotal Int             @default(0)
   qualified      Boolean         @default(false)
+  decisionJson   Json?
   createdAt      DateTime        @default(now())
 
   votes Vote[]

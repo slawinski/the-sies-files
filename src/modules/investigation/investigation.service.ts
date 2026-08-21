@@ -6,11 +6,17 @@ import { runCommand } from "@/lib/command";
 import { DomainError } from "@/lib/errors";
 import { systemClock } from "@/lib/clock";
 import { EVENTS } from "@/modules/events/event-types";
-import { CHARACTER_DEFINITIONS, type CharacterId } from "@/modules/trouble-brewing/characters";
+import type { CharacterId } from "@/modules/trouble-brewing/characters";
 import { publish } from "@/modules/realtime/broker";
 import { getAbilityFunctionState } from "@/modules/operational/ability";
 import { tallyVotes, qualifies, type VoterState } from "./voting";
 import { checkGenericVictory, checkMayorVictory, type Winner } from "./victory";
+import { markPlayerDead, type DeathSource } from "@/modules/game-session/death";
+import {
+  getRegistrationOptions,
+  resolveRegistrationOptions,
+  type RegistrationOption,
+} from "@/modules/trouble-brewing/registration";
 
 function publishInvalidation(gameId: string, version: number, sequence: number): void {
   publish(gameId, { type: "invalidate", version, sequence });
@@ -60,14 +66,21 @@ async function recordDeath(
   gameId: string,
   cycle: number,
   playerId: string,
-  source: string,
+  source: DeathSource,
   phase: "INVESTIGATION" | "OPERATIONAL",
   executed: boolean,
-  causedByPlayerId?: string,
-): Promise<void> {
-  await tx.player.update({ where: { id: playerId }, data: { alive: false } });
-  await tx.deathRecord.create({
-    data: { gameId, playerId, cycleNumber: cycle, source, phase, executed, causedByPlayerId },
+  causedByPlayerId: string | undefined,
+  appendEvent: (type: string, payload?: unknown) => Promise<void>,
+): Promise<{ died: boolean }> {
+  return markPlayerDead(tx, {
+    gameId,
+    playerId,
+    source,
+    cycleNumber: cycle,
+    phase,
+    executed,
+    causedByPlayerId,
+    appendEvent,
   });
 }
 
@@ -177,34 +190,137 @@ export async function nominate({
           nominatorId,
           nomineeId,
           sequence: count,
-          status: "VOTING",
+          status: "DAY_TRIGGER_RESOLUTION",
         },
       });
       await appendEvent(EVENTS.NOMINATION_CREATED, { nominationId: nomination.id, nominatorId, nomineeId });
 
-      // Virgin trigger: first nomination of a functioning Virgin by a Townsfolk.
+      // Day-trigger resolution (audit specs 18 §6, 20 §2–§3): Virgin hook.
+      let finalStatus: "VOTING" | "RESOLVED" | "DAY_TRIGGER_RESOLUTION" = "VOTING";
       const nomineeSecret = await tx.playerSecret.findUnique({ where: { playerId: nomineeId } });
       if (nomineeSecret?.trueCharacterId === "VIRGIN") {
         const virginState = (nomineeSecret.abilityStateJson as { virginNominated?: boolean } | null) ?? {};
         if (!virginState.virginNominated) {
-          const nominatorSecret = await tx.playerSecret.findUnique({ where: { playerId: nominatorId } });
-          const isTownsfolk = nominatorSecret && CHARACTER_DEFINITIONS[nominatorSecret.trueCharacterId as CharacterId]?.category === "TOWNSFOLK";
+          // Functioning gate: a poisoned/Drunk Virgin never triggers.
+          const virginEffects = await tx.effect.findMany({ where: { targetPlayerId: nomineeId, active: true } });
+          const virginFunctioning =
+            getAbilityFunctionState(nomineeSecret, virginEffects, "INVESTIGATION", cycle) === "FUNCTIONING";
+          // Consume the once-only trigger opportunity regardless of outcome.
           await tx.playerSecret.update({
             where: { playerId: nomineeId },
             data: { abilityStateJson: { ...virginState, virginNominated: true } },
           });
-          if (isTownsfolk) {
-            await recordDeath(tx, gameId, cycle, nominatorId, "VIRGIN", "INVESTIGATION", false, nomineeId);
-            await appendEvent(EVENTS.VIRGIN_TRIGGER_RESOLVED, { nominatorId, nomineeId });
+          await appendEvent(EVENTS.VIRGIN_TRIGGER_CONSUMED, { nomineeId, nominatorId });
+
+          if (virginFunctioning) {
+            const nominatorSecret = await tx.playerSecret.findUnique({ where: { playerId: nominatorId } });
+            const nominatorEffects = await tx.effect.findMany({ where: { targetPlayerId: nominatorId, active: true } });
+            const nominatorFunctioning = nominatorSecret
+              ? getAbilityFunctionState(nominatorSecret, nominatorEffects, "INVESTIGATION", cycle) === "FUNCTIONING"
+              : false;
+            const options = getRegistrationOptions(
+              {
+                playerId: nominatorId,
+                trueCharacterId: nominatorSecret!.trueCharacterId as CharacterId,
+                trueAlignment: nominatorSecret!.trueAlignment as "GOOD" | "EVIL",
+              },
+              { kind: "CATEGORY", category: "TOWNSFOLK" },
+              nominatorFunctioning,
+            );
+            const resolution = resolveRegistrationOptions(options);
+            if (resolution.kind === "AUTO") {
+              if (resolution.satisfies) {
+                await recordDeath(tx, gameId, cycle, nominatorId, "VIRGIN", "INVESTIGATION", false, nomineeId, appendEvent);
+                await appendEvent(EVENTS.VIRGIN_TRIGGER_RESOLVED, { nominatorId, nomineeId });
+                finalStatus = "RESOLVED"; // terminal — no vote opens
+              }
+            } else {
+              await tx.nomination.update({
+                where: { id: nomination.id },
+                data: {
+                  decisionJson: {
+                    context: "VIRGIN_NOMINATOR_TOWNSFOLK",
+                    nominatorId,
+                    options: resolution.options,
+                  } as unknown as Prisma.InputJsonValue,
+                },
+              });
+              await appendEvent(EVENTS.REGISTRATION_DECISION_REQUIRED, {
+                nominationId: nomination.id,
+                context: "VIRGIN_NOMINATOR_TOWNSFOLK",
+              });
+              finalStatus = "DAY_TRIGGER_RESOLUTION";
+            }
           }
         }
       }
+
+      await tx.nomination.update({
+        where: { id: nomination.id },
+        data: { status: finalStatus },
+      });
 
       return { nominationId: nomination.id };
     },
   });
   publishInvalidation(gameId, version, sequence);
   return { version, nominationId: result.nominationId };
+}
+
+export async function resolveNominationTrigger({
+  gameId,
+  nominationId,
+  optionId,
+  commandId,
+  expectedVersion,
+}: {
+  gameId: string;
+  nominationId: string;
+  optionId: string;
+  commandId: string;
+  expectedVersion: number;
+}): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, game, appendEvent }) => {
+      const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
+      if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
+      if (nomination.status !== "DAY_TRIGGER_RESOLUTION") {
+        throw new DomainError("INVALID_SESSION_STATE", "No pending day-trigger decision");
+      }
+      const decision = nomination.decisionJson as {
+        context: string;
+        nominatorId: string;
+        options: RegistrationOption[];
+      } | null;
+      if (!decision) throw new DomainError("INVALID_SESSION_STATE", "No pending registration decision");
+      const option = decision.options.find((o) => o.optionId === optionId);
+      if (!option) throw new DomainError("INVALID_TARGET", "Not a legal registration option");
+
+      await tx.nomination.update({ where: { id: nominationId }, data: { decisionJson: Prisma.JsonNull } });
+      await appendEvent(EVENTS.REGISTRATION_DECISION_RECORDED, {
+        nominationId,
+        context: decision.context,
+        optionId,
+      });
+
+      if (decision.context === "VIRGIN_NOMINATOR_TOWNSFOLK") {
+        if (option.satisfies) {
+          await recordDeath(tx, gameId, game.cycleNumber, decision.nominatorId, "VIRGIN", "INVESTIGATION", false, nomination.nomineeId, appendEvent);
+          await appendEvent(EVENTS.VIRGIN_TRIGGER_RESOLVED, { nominatorId: decision.nominatorId, nomineeId: nomination.nomineeId });
+          await tx.nomination.update({ where: { id: nominationId }, data: { status: "RESOLVED" } });
+        } else {
+          await tx.nomination.update({ where: { id: nominationId }, data: { status: "VOTING" } });
+        }
+      }
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
 }
 
 export async function voteIntent({
@@ -385,7 +501,7 @@ export async function resolveExecution({
       if (candidateId) {
         const candidate = await tx.player.findFirst({ where: { id: candidateId, gameId } });
         if (candidate && candidate.alive) {
-          await recordDeath(tx, gameId, game.cycleNumber, candidateId, "EXECUTION", "INVESTIGATION", true);
+          await recordDeath(tx, gameId, game.cycleNumber, candidateId, "EXECUTION", "INVESTIGATION", true, undefined, appendEvent);
           await appendEvent(EVENTS.PLAYER_EXECUTED, { playerId: candidateId });
 
           const candidateSecret = await tx.playerSecret.findUnique({ where: { playerId: candidateId } });
@@ -504,16 +620,44 @@ export async function slayer({
       });
       await appendEvent(EVENTS.SLAYER_USED, { playerId, targetPlayerId });
 
+      // Functioning gate: a poisoned/Drunk Slayer consumes the use but kills nobody.
+      const slayerEffects = await tx.effect.findMany({ where: { targetPlayerId: playerId, active: true } });
+      const slayerFunctioning = getAbilityFunctionState(secret, slayerEffects, "INVESTIGATION", game.cycleNumber) === "FUNCTIONING";
+      if (!slayerFunctioning) return { winner: null };
+
+      // SLAYER_TARGET_DEMON through the registration resolver.
       const targetSecret = await tx.playerSecret.findUnique({ where: { playerId: targetPlayerId } });
+      if (!targetSecret) throw new DomainError("INVALID_TARGET", "Invalid Slayer target");
+      const targetEffects = await tx.effect.findMany({ where: { targetPlayerId, active: true } });
+      const targetFunctioning =
+        getAbilityFunctionState(targetSecret, targetEffects, "INVESTIGATION", game.cycleNumber) === "FUNCTIONING";
+      const options = getRegistrationOptions(
+        {
+          playerId: targetPlayerId,
+          trueCharacterId: targetSecret.trueCharacterId as CharacterId,
+          trueAlignment: targetSecret.trueAlignment as "GOOD" | "EVIL",
+        },
+        { kind: "CHARACTER", characterId: "IMP" },
+        targetFunctioning,
+      );
+      const registration = resolveRegistrationOptions(options);
+      if (registration.kind === "DECISION_REQUIRED") {
+        // Recluse can register as the Demon — requires a bounded Storyteller
+        // decision; until resolved, no death occurs (never assume either way).
+        await appendEvent(EVENTS.REGISTRATION_DECISION_REQUIRED, { context: "SLAYER_TARGET_DEMON", targetPlayerId });
+        return { winner: null };
+      }
+
       let winner: Winner | null = null;
-      if (targetSecret?.trueCharacterId === "IMP") {
-        await recordDeath(tx, gameId, game.cycleNumber, targetPlayerId, "SLAYER", "INVESTIGATION", false, playerId);
-        await appendEvent(EVENTS.PLAYER_DIED, { playerId: targetPlayerId, source: "SLAYER" });
-        const living = await livingNormalCount(tx, gameId);
-        const g = checkGenericVictory({ livingNormalCount: living, demonAlive: await demonAlive(tx, gameId) });
-        if (g.winner) {
-          winner = g.winner;
-          await finalizeGame(tx, gameId, g.winner, g.reason ?? "VICTORY", appendEvent);
+      if (registration.satisfies) {
+        const death = await recordDeath(tx, gameId, game.cycleNumber, targetPlayerId, "SLAYER", "INVESTIGATION", false, playerId, appendEvent);
+        if (death.died) {
+          const living = await livingNormalCount(tx, gameId);
+          const g = checkGenericVictory({ livingNormalCount: living, demonAlive: await demonAlive(tx, gameId) });
+          if (g.winner) {
+            winner = g.winner;
+            await finalizeGame(tx, gameId, g.winner, g.reason ?? "VICTORY", appendEvent);
+          }
         }
       }
       return { winner };
