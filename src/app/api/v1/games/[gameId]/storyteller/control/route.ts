@@ -11,7 +11,7 @@ export async function GET(
     const { gameId } = await params;
     await resolveStoryteller(gameId);
 
-    const [game, blocking, lastEvent, latestCheckpoint, consistencyIssues, participantCount, presence] = await Promise.all([
+    const [game, blocking, lastEvent, latestCheckpoint, consistencyIssues, participantCount, presence, pendingSecrets, roster] = await Promise.all([
       prisma.gameSession.findUnique({ where: { id: gameId } }),
       prisma.operationalAction.findFirst({
         where: { phase: { gameId, status: { not: "COMPLETED" } }, status: { in: ["WAITING_FOR_PLAYER", "WAITING_FOR_STORYTELLER"] } },
@@ -23,7 +23,25 @@ export async function GET(
       runConsistencyChecks(gameId),
       prisma.player.count({ where: { gameId } }),
       listPresence(gameId),
+      prisma.playerSecret.findMany({ where: { player: { gameId } } }),
+      prisma.player.findMany({ where: { gameId }, orderBy: { virtualSeat: "asc" } }),
     ]);
+
+    const nameById = new Map(roster.map((p) => [p.id, p.displayName]));
+    const pendingDecisions = pendingSecrets
+      .map((s) => {
+        const pending = (s.abilityStateJson as { pendingSlayerDecision?: { targetPlayerId: string; options: Array<{ optionId: string; description: string; satisfies: boolean }> } } | null)?.pendingSlayerDecision;
+        return pending
+          ? {
+              context: "SLAYER_TARGET_DEMON",
+              slayerPlayerId: s.playerId,
+              slayerName: nameById.get(s.playerId) ?? null,
+              targetName: nameById.get(pending.targetPlayerId) ?? null,
+              options: pending.options,
+            }
+          : null;
+      })
+      .filter((d): d is NonNullable<typeof d> => d !== null);
 
     return jsonOk({
       gameId,
@@ -45,6 +63,7 @@ export async function GET(
         : null,
       consistencyIssues,
       presence,
+      pendingDecisions,
     });
   } catch (err) {
     return jsonError(err);

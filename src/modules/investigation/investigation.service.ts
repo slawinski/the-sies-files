@@ -704,7 +704,7 @@ export async function slayer({
   targetPlayerId: string;
   commandId: string;
   expectedVersion: number;
-}): Promise<{ version: number; winner: Winner | null }> {
+}): Promise<{ version: number; winner: Winner | null; decisionRequired?: boolean }> {
   const { result, version, sequence } = await runCommand({
     gameId,
     commandId,
@@ -749,15 +749,97 @@ export async function slayer({
       );
       const registration = resolveRegistrationOptions(options);
       if (registration.kind === "DECISION_REQUIRED") {
-        // Recluse can register as the Demon — requires a bounded Storyteller
-        // decision; until resolved, no death occurs (never assume either way).
+        // Recluse can register as the Demon — persist a bounded Storyteller
+        // decision (audit spec 18 §5.5/§7.2). No death until adjudicated.
+        await tx.playerSecret.update({
+          where: { playerId },
+          data: {
+            abilityStateJson: {
+              ...state,
+              slayerSpent: true,
+              pendingSlayerDecision: {
+                context: "SLAYER_TARGET_DEMON",
+                targetPlayerId,
+                options: registration.options,
+              },
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
         await appendEvent(EVENTS.REGISTRATION_DECISION_REQUIRED, { context: "SLAYER_TARGET_DEMON", targetPlayerId });
-        return { winner: null };
+        return { winner: null, decisionRequired: true };
       }
 
       let winner: Winner | null = null;
       if (registration.satisfies) {
         const death = await recordDeath(tx, gameId, game.cycleNumber, targetPlayerId, "SLAYER", "INVESTIGATION", false, playerId, appendEvent);
+        if (death.died) {
+          const living = await livingNormalCount(tx, gameId);
+          const g = checkGenericVictory({ livingNormalCount: living, demonAlive: await demonAlive(tx, gameId) });
+          if (g.winner) {
+            winner = g.winner;
+            await finalizeGame(tx, gameId, g.winner, g.reason ?? "VICTORY", appendEvent);
+          }
+        }
+      }
+      return { winner };
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version, winner: result.winner, decisionRequired: result.decisionRequired };
+}
+
+export async function resolveSlayerDecision({
+  gameId,
+  slayerPlayerId,
+  optionId,
+  commandId,
+  expectedVersion,
+}: {
+  gameId: string;
+  slayerPlayerId: string;
+  optionId: string;
+  commandId: string;
+  expectedVersion: number;
+}): Promise<{ version: number; winner: Winner | null }> {
+  const { result, version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, game, appendEvent }) => {
+      const secret = await tx.playerSecret.findUnique({ where: { playerId: slayerPlayerId } });
+      if (!secret) throw new DomainError("PLAYER_NOT_FOUND", "Slayer not found");
+      const state = (secret.abilityStateJson as {
+        pendingSlayerDecision?: { targetPlayerId: string; options: RegistrationOption[] };
+      } | null) ?? {};
+      const pending = state.pendingSlayerDecision;
+      if (!pending) throw new DomainError("INVALID_SESSION_STATE", "No pending Slayer decision");
+      const option = pending.options.find((o) => o.optionId === optionId);
+      if (!option) throw new DomainError("INVALID_TARGET", "Not a legal registration option");
+
+      await tx.playerSecret.update({
+        where: { playerId: slayerPlayerId },
+        data: { abilityStateJson: { slayerSpent: true } as Prisma.InputJsonValue },
+      });
+      await appendEvent(EVENTS.REGISTRATION_DECISION_RECORDED, {
+        context: "SLAYER_TARGET_DEMON",
+        optionId,
+        targetPlayerId: pending.targetPlayerId,
+      });
+
+      let winner: Winner | null = null;
+      if (option.satisfies) {
+        const death = await recordDeath(
+          tx,
+          gameId,
+          game.cycleNumber,
+          pending.targetPlayerId,
+          "SLAYER",
+          "INVESTIGATION",
+          false,
+          slayerPlayerId,
+          appendEvent,
+        );
         if (death.died) {
           const living = await livingNormalCount(tx, gameId);
           const g = checkGenericVictory({ livingNormalCount: living, demonAlive: await demonAlive(tx, gameId) });

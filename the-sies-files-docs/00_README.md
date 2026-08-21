@@ -88,6 +88,23 @@ A different internal library may be substituted only if it preserves all public 
 | `15_LLM_IMPLEMENTATION_HANDOFF.md` | Rules for using this documentation as an autonomous implementation brief |
 | `assets/map-reference.png` | Non-final map reference supplied on 2026-08-20 |
 
+## 5b. Audit & remediation documents
+
+The post-implementation audit and its remediation program live in
+[`../the-sies-files-audit/`](../the-sies-files-audit/) (baseline `main@9099836`). They are
+amendments/clarifications to this canonical set, not replacements:
+
+| File | Purpose |
+|---|---|
+| `17_AUDIT_AND_REMEDIATION_INDEX_v1.md` | Gap verification matrix, severity model, milestones R0–R5 |
+| `18_RULES_CORRECTNESS_AND_REGISTRATION_SPEC_v1.md` | Death/ghost-vote lifecycle, registration resolver, target contracts, Virgin/Slayer |
+| `19_OPERATIONAL_STORYTELLER_ROLE_UX_SPEC_v1.md` | Typed Storyteller resolutions, Mayor/star-pass, malfunction visibility, Undertaker |
+| `20_INVESTIGATION_VOTING_AND_SESSION_UX_SPEC_v1.md` | Nomination trigger stage, Virtual-Circle vote pass, winner projection, rename |
+| `21_REALTIME_CONTROL_PLANE_AND_RECOVERY_SPEC_v1.md` | SSE wiring, presence, auto-checkpoints, replay verification, access recovery, audit filters |
+| `22_SECURITY_AND_DATA_DURABILITY_SPEC_v1.md` | CSP, rate limiting, audit retention, validated receipts, DB invariant |
+| `23_PRODUCTION_CONTENT_CAMERA_AND_LOCALIZATION_SPEC_v1.md` | Camera QR, map assets, scenario prose, Polish names, i18n |
+| `24_RELEASE_TESTING_DETERMINISM_AND_VISUAL_QA_SPEC_v1.md` | Portable E2E, eight scenarios, RNG v2, typography, CI gate |
+
 ## 6. Definition of “implementation complete”
 
 The MVP is complete only when:

@@ -14,6 +14,8 @@ import {
 import {
   openNominations,
   nominate,
+  slayer,
+  resolveSlayerDecision,
 } from "@/modules/investigation/investigation.service";
 import { loadStorytellerData } from "@/modules/projections/load";
 import { alignmentOf, type CharacterId } from "@/modules/trouble-brewing/characters";
@@ -179,5 +181,44 @@ describe("Remediation — death/ghost votes + Virgin (integration)", () => {
     expect(death).not.toBeNull();
     const nomination = await prisma.nomination.findFirst({ where: { gameId, nomineeId: virgin } });
     expect(nomination!.status).toBe("RESOLVED"); // terminal — no vote opens
+  });
+
+  it("Slayer vs functioning Recluse produces a bounded Storyteller decision", async () => {
+    const roles: CharacterId[] = [
+      "MONK", "SOLDIER", "EMPATH", "CHEF", "FORTUNE_TELLER", "WASHERWOMAN",
+      "INVESTIGATOR", "SLAYER", "RAVENKEEPER", "RECLUSE", "POISONER", "SPY", "IMP",
+    ];
+    const { gameId, playerIds, version } = await setupCustom(roles);
+    let v = (await startOperational({ gameId, commandId: randomUUID(), expectedVersion: version })).version;
+    for (let g = 0; g < 200; g += 1) {
+      const st = await loadStorytellerData(gameId);
+      const active = (st.operational?.actions ?? []).find((a) => a.status === "WAITING_FOR_PLAYER" || a.status === "WAITING_FOR_STORYTELLER");
+      if (!active) break;
+      if (active.status === "WAITING_FOR_PLAYER") {
+        v = (await submitAction({ gameId, playerId: active.actorPlayerId!, actionId: active.id, commandId: randomUUID(), expectedVersion: v, targetPlayerIds: defaultActionTargets(active.kind, active.actorPlayerId!, playerIds) })).version;
+      } else {
+        v = (await resolveAction({ gameId, actionId: active.id, commandId: randomUUID(), expectedVersion: v })).version;
+      }
+    }
+    v = (await completeOperational({ gameId, commandId: randomUUID(), expectedVersion: v })).version;
+
+    const slayerId = playerIds[roles.indexOf("SLAYER")];
+    const recluseId = playerIds[roles.indexOf("RECLUSE")];
+
+    // The shot is ambiguous: no death, decision persisted.
+    const shot = await slayer({ gameId, playerId: slayerId, targetPlayerId: recluseId, commandId: randomUUID(), expectedVersion: v });
+    v = shot.version;
+    expect(shot.winner).toBeNull();
+    expect(shot.decisionRequired).toBe(true);
+
+    const recluseRow = await prisma.player.findUniqueOrThrow({ where: { id: recluseId } });
+    expect(recluseRow.alive).toBe(true); // no death until adjudicated
+
+    // Storyteller chooses "register as Demon" → the Recluse dies by Slayer.
+    await resolveSlayerDecision({ gameId, slayerPlayerId: slayerId, optionId: "AS_DEMON", commandId: randomUUID(), expectedVersion: v });
+    const after = await prisma.player.findUniqueOrThrow({ where: { id: recluseId } });
+    expect(after.alive).toBe(false);
+    const death = await prisma.deathRecord.findFirst({ where: { gameId, playerId: recluseId, source: "SLAYER" } });
+    expect(death).not.toBeNull();
   });
 });

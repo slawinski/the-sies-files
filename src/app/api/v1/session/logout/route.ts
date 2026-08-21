@@ -4,9 +4,13 @@ import { hashToken } from "@/lib/auth/tokens";
 import { clearSessionCookies } from "@/lib/auth/http";
 import { COOKIE_PLAYER_SESSION, COOKIE_STORYTELLER_SESSION } from "@/lib/auth/cookies";
 import { revokeSessionByHash } from "@/modules/auth/session";
+import { clientIp, hashKeyPart, rateLimit } from "@/lib/rate-limit";
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    // Rate limit the anonymous-ish logout surface (audit spec 22 §3.1).
+    await rateLimit(`logout:ip:${hashKeyPart(clientIp(req))}`, 30, 5 * 60 * 1000);
+
     const store = await cookies();
     const tokens = [
       store.get(COOKIE_STORYTELLER_SESSION)?.value,
