@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/db";
 import { runCommand, runGameTransaction } from "@/lib/command";
+import { z } from "zod";
 import { DomainError } from "@/lib/errors";
 import { systemClock } from "@/lib/clock";
 import { cryptoSecureRng } from "@/lib/rng";
@@ -134,6 +135,7 @@ export async function addPlayer({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    resultSchema: z.object({ playerId: z.string() }),
     handler: async ({ tx, game, appendEvent }) => {
       assertRosterEditable(game.status);
       const count = await tx.player.count({ where: { gameId } });

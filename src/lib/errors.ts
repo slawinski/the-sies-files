@@ -31,6 +31,8 @@ export const DOMAIN_ERROR_CODES = [
   "PLAYER_NOT_FOUND",
   "CLAIM_ALREADY_USED",
   "ROSTER_FULL",
+  "RATE_LIMITED",
+  "COMMAND_RECEIPT_INVALID",
 ] as const;
 
 export type DomainErrorCode = (typeof DOMAIN_ERROR_CODES)[number];
@@ -59,6 +61,10 @@ export function httpStatusFor(code: DomainErrorCode): number {
     case "VERSION_CONFLICT":
     case "DUPLICATE_COMMAND":
       return 409;
+    case "RATE_LIMITED":
+      return 429;
+    case "COMMAND_RECEIPT_INVALID":
+      return 500;
     default:
       return 400;
   }

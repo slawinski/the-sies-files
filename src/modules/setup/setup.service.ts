@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { runCommand } from "@/lib/command";
 import { DomainError } from "@/lib/errors";
@@ -57,6 +58,7 @@ export async function generateSetup({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    resultSchema: z.object({ regenerationIndex: z.number() }),
     handler: async ({ tx, game, appendEvent }) => {
       if (game.status !== "LOBBY" && game.status !== "SETUP") {
         throw new DomainError("INVALID_SESSION_STATE", `Cannot generate setup in status ${game.status}`);
@@ -125,6 +127,7 @@ export async function commitSetup({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    resultSchema: z.object({ setupHash: z.string() }),
     handler: async ({ tx, game, appendEvent }) => {
       if (game.status !== "SETUP") {
         throw new DomainError("INVALID_SESSION_STATE", `Cannot commit setup in status ${game.status}`);

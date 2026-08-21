@@ -8,6 +8,7 @@ import { SESSION_TTL_SECONDS } from "@/lib/auth/cookies";
 import { prisma } from "@/lib/db";
 import { DomainError } from "@/lib/errors";
 import { EVENTS } from "@/modules/events/event-types";
+import { clientIp, hashKeyPart, rateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({
   gameId: z.string().min(1),
@@ -27,6 +28,9 @@ export async function POST(req: Request) {
   try {
     assertSameOrigin(req);
     const { gameId, recoverySecret } = await parseBody(req, schema);
+
+    // Strict rate limit on the anonymous recovery surface (spec 21 §7.3, 22 §3).
+    await rateLimit(`recover:ip:${hashKeyPart(clientIp(req))}`, 5, 15 * 60 * 1000);
 
     const configured = process.env.STORYTELLER_RECOVERY_SECRET;
     if (!configured) {

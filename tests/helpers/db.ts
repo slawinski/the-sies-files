@@ -9,6 +9,8 @@ const TABLES = [
   "domain_events",
   "command_receipts",
   "game_sessions",
+  "presence",
+  "rate_limit_buckets",
 ] as const;
 
 /** Wipe all tables between tests so each test is isolated + deterministic. */

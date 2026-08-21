@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { DomainError, httpStatusFor } from "./errors";
+import { RateLimitError } from "./rate-limit";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
@@ -13,6 +14,12 @@ export function jsonOk(data: unknown, status = 200): NextResponse {
 }
 
 export function jsonError(err: unknown): NextResponse {
+  if (err instanceof RateLimitError) {
+    return NextResponse.json(
+      { error: { code: "RATE_LIMITED", message: "Too many requests" } },
+      { status: 429, headers: { ...NO_STORE, "Retry-After": String(err.retryAfterSeconds) } },
+    );
+  }
   if (err instanceof DomainError) {
     return NextResponse.json(
       { error: { code: err.code, message: err.message } },

@@ -82,6 +82,7 @@ model GameSession {
   scenarioVersion Int?
   winner          String?
   winReason       String?
+  archivedAt      DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -159,7 +160,7 @@ model BrowserSession {
 model DomainEvent {
   id          String      @id @default(uuid())
   gameId      String
-  game        GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  game        GameSession @relation(fields: [gameId], references: [id], onDelete: Restrict)
   sequence    Int
   gameVersion Int
   eventType   String
@@ -178,7 +179,7 @@ model CommandReceipt {
   id               String      @id @default(uuid())
   commandId        String
   gameId           String
-  game             GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  game             GameSession @relation(fields: [gameId], references: [id], onDelete: Restrict)
   resultingVersion Int
   status           CommandReceiptStatus @default(APPLIED)
   resultJson       Json?
@@ -410,7 +411,7 @@ model ScenarioCondition {
 model Checkpoint {
   id                String      @id @default(uuid())
   gameId            String
-  game              GameSession @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  game              GameSession @relation(fields: [gameId], references: [id], onDelete: Restrict)
   gameVersion       Int
   lastEventSequence Int
   snapshotJson      Json
@@ -433,4 +434,14 @@ model Presence {
   @@unique([gameId, viewerId])
   @@index([gameId, lastSeenAt])
   @@map("presence")
+}
+
+model RateLimitBucket {
+  id          String   @id @default(uuid())
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@unique([key, windowStart])
+  @@map("rate_limit_buckets")
 }

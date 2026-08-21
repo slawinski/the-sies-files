@@ -18,6 +18,7 @@
 
 import { Prisma } from "@prisma/client";
 import type { GameSession } from "@prisma/client";
+import type { ZodType } from "zod";
 import { prisma } from "./db";
 import { DomainError } from "./errors";
 
@@ -115,12 +116,15 @@ export async function runCommand<T>({
   expectedVersion,
   actor,
   handler,
+  resultSchema,
 }: {
   gameId: string;
   commandId: string;
   expectedVersion: number;
   actor?: string;
   handler: Handler<T>;
+  /** Optional runtime codec for the persisted result (audit spec 22 §5). */
+  resultSchema?: ZodType<T>;
 }): Promise<CommandResult<T>> {
   return prisma.$transaction(async (tx) => {
     const locked = await lockAndRead(tx, gameId, { actor, commandId });
@@ -131,6 +135,22 @@ export async function runCommand<T>({
       where: { gameId_commandId: { gameId, commandId } },
     });
     if (existing) {
+      if (resultSchema) {
+        const parsed = resultSchema.safeParse(existing.resultJson);
+        if (!parsed.success) {
+          // Fail closed — never re-run the handler, never cast through.
+          throw new DomainError(
+            "COMMAND_RECEIPT_INVALID",
+            `Stored receipt for command ${commandId} is incompatible`,
+          );
+        }
+        return {
+          result: parsed.data,
+          version: existing.resultingVersion,
+          sequence: -1,
+          duplicate: true,
+        };
+      }
       return {
         result: (existing.resultJson ?? null) as T,
         version: existing.resultingVersion,
