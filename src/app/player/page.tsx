@@ -15,18 +15,18 @@ import {
 } from "@/lib/client-api";
 import MapCard from "@/components/MapCard";
 import PhaseBadge from "@/components/PhaseBadge";
+import QrScanner from "@/components/QrScanner";
 import { useGameEventStream, type RealtimeHealth } from "@/components/useGameEventStream";
 import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
+import { characterDisplayName, type CharacterId } from "@/modules/trouble-brewing/characters";
 
 type View = "loading" | "ready" | "unclaimed" | "error";
 
-/** "WASHERWOMAN" → "Washerwoman", "FORTUNE_TELLER" → "Fortune Teller". */
-function titleCaseCharacterId(id: string): string {
-  return id
-    .split("_")
-    .map((word) => (word.length > 0 ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word))
-    .join(" ");
-}
+/**
+ * Manual token entry is a development/test affordance only (spec 23 §2.1) —
+ * it is absent from the normal production UI.
+ */
+const DEV_SCAN_INPUT = process.env.NEXT_PUBLIC_DEV_SCAN_INPUT === "1";
 
 function alignmentLabel(alignment: string): string {
   return alignment === "EVIL" ? "Zło" : "Dobro";
@@ -152,7 +152,7 @@ function RoleCard({ role, nameById }: { role: RoleRevealDto; nameById: Map<strin
     <div className="rounded-xl border border-brass/40 bg-elevated p-4">
       <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Twoja rola</p>
       <p className="display mt-1 text-3xl leading-tight text-ink-primary">
-        {titleCaseCharacterId(role.characterId)}
+        {characterDisplayName(role.characterId)}
       </p>
       <p className="mt-1 text-sm text-ink-secondary">
         {alignmentLabel(role.alignment)}
@@ -180,7 +180,7 @@ function RoleCard({ role, nameById }: { role: RoleRevealDto; nameById: Map<strin
         <div className="mt-4 rounded-lg border border-line bg-card-soft p-3">
           <p className="text-meta uppercase tracking-[0.2em] text-moss">Bluffy Demona</p>
           <p className="mt-1 text-sm text-ink-secondary">
-            {role.bluffs.map(titleCaseCharacterId).join(", ")}
+            {role.bluffs.map((id) => characterDisplayName(id as CharacterId)).join(", ")}
           </p>
         </div>
       )}
@@ -195,13 +195,13 @@ function renderDeliveredInfo(item: DeliveredInfoDto, nameById: Map<string, strin
       case "CHARACTER_CANDIDATES":
         return (
           <>
-            <span className="text-ink-secondary">{titleCaseCharacterId(result.characterId)}</span>
+            <span className="text-ink-secondary">{characterDisplayName(result.characterId)}</span>
             {" — "}
             {result.candidatePlayerIds.map((id) => nameById.get(id) ?? id).join(", ")}
           </>
         );
       case "CHARACTER":
-        return <>{titleCaseCharacterId(result.characterId)}</>;
+        return <>{characterDisplayName(result.characterId)}</>;
       case "NUMBER":
         return <>Liczba: {result.value}</>;
       case "NO_OUTSIDERS":
@@ -215,7 +215,7 @@ function renderDeliveredInfo(item: DeliveredInfoDto, nameById: Map<string, strin
               .sort((a, b) => a.virtualSeat - b.virtualSeat)
               .map((a) => (
                 <li key={a.playerId} className="text-sm text-ink-secondary">
-                  {nameById.get(a.playerId) ?? a.playerId}: {titleCaseCharacterId(a.trueCharacterId)}
+                  {nameById.get(a.playerId) ?? a.playerId}: {characterDisplayName(a.trueCharacterId)}
                 </li>
               ))}
           </ul>
@@ -382,9 +382,8 @@ export default function PlayerWaiting() {
     );
   }
 
-  async function handleScan() {
-    if (!game || !scanToken.trim()) return;
-    const token = scanToken.trim();
+  async function scanWithToken(token: string): Promise<void> {
+    if (!game) return;
     setBusy(true);
     setActionError(null);
     setScanMessage(null);
@@ -635,7 +634,7 @@ export default function PlayerWaiting() {
               <section className="card md:col-span-3">
                 <p className="display text-meta tracking-[0.25em] text-moss">Działanie</p>
                 <h2 className="display mt-2 text-xl leading-tight text-ink-primary">
-                  {titleCaseCharacterId(game.activeAction.kind)}
+                  {characterDisplayName(game.activeAction.kind)}
                 </h2>
 
                 {requiredTargets === null ? (
@@ -711,7 +710,7 @@ export default function PlayerWaiting() {
                 <div className="mt-4 rounded-xl border border-brass/40 bg-elevated p-3">
                   <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Twoja rola</p>
                   <p className="display mt-1 text-xl leading-tight text-ink-primary">
-                    {titleCaseCharacterId(role.characterId)}
+                    {characterDisplayName(role.characterId)}
                   </p>
                   <p className="mt-1 text-sm text-ink-secondary">{alignmentLabel(role.alignment)}</p>
                   <p className="mt-2 text-meta text-success">rola potwierdzona</p>
@@ -762,7 +761,7 @@ export default function PlayerWaiting() {
                 <ol className="mt-3 flex flex-col gap-2">
                   {game.deliveredInfo.map((item) => (
                     <li key={item.actionId} className="rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-meta text-ink-muted">{titleCaseCharacterId(item.kind)}</p>
+                      <p className="text-meta text-ink-muted">{characterDisplayName(item.kind)}</p>
                       <div className="mt-1 text-sm text-ink-primary">
                         {renderDeliveredInfo(item, nameById)}
                       </div>
@@ -1043,32 +1042,42 @@ export default function PlayerWaiting() {
                     <p className="mt-2 text-meta text-ink-muted">
                       Skanuj kody QR znalezione na terenie śledztwa.
                     </p>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void handleScan();
-                      }}
-                      className="mt-3 flex flex-col gap-2"
-                    >
-                      <label htmlFor="qr-token" className="sr-only">
-                        Kod QR
-                      </label>
-                      <input
-                        id="qr-token"
-                        value={scanToken}
-                        onChange={(e) => setScanToken(e.target.value)}
-                        placeholder="Wpisz kod QR"
-                        autoComplete="off"
-                        className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
-                      />
-                      <button
-                        type="submit"
-                        disabled={busy || !scanToken.trim()}
-                        className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                      >
-                        Skanuj
-                      </button>
-                    </form>
+                    <div className="mt-3">
+                      <QrScanner onScan={scanWithToken} />
+                    </div>
+                    {DEV_SCAN_INPUT && (
+                      <div className="mt-4 border-t border-line pt-3">
+                        <p className="text-meta text-ink-muted">Tryb deweloperski</p>
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const token = scanToken.trim();
+                            if (!token || busy) return;
+                            void scanWithToken(token);
+                          }}
+                          className="mt-2 flex flex-col gap-2"
+                        >
+                          <label htmlFor="qr-token" className="sr-only">
+                            Kod QR
+                          </label>
+                          <input
+                            id="qr-token"
+                            value={scanToken}
+                            onChange={(e) => setScanToken(e.target.value)}
+                            placeholder="Wpisz kod QR"
+                            autoComplete="off"
+                            className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
+                          />
+                          <button
+                            type="submit"
+                            disabled={busy || !scanToken.trim()}
+                            className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+                          >
+                            Skanuj
+                          </button>
+                        </form>
+                      </div>
+                    )}
                     {scanMessage && (
                       <p
                         role="status"

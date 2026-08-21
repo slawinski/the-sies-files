@@ -16,14 +16,7 @@ import {
   type StorytellerPlayerDto,
   type StorytellerResolutionDto,
 } from "@/lib/client-api";
-
-/** "WASHERWOMAN" → "Washerwoman", "FORTUNE_TELLER" → "Fortune Teller". */
-function titleCaseCharacterId(id: string): string {
-  return id
-    .split("_")
-    .map((word) => (word.length > 0 ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word))
-    .join(" ");
-}
+import { characterDisplayName } from "@/modules/trouble-brewing/characters";
 
 function isInfoResult(value: unknown): value is InfoResultDto {
   if (typeof value !== "object" || value === null) return false;
@@ -34,11 +27,11 @@ function isInfoResult(value: unknown): value is InfoResultDto {
 function infoText(info: InfoResultDto, nameById: Map<string, string>): string {
   switch (info.kind) {
     case "CHARACTER_CANDIDATES":
-      return `${titleCaseCharacterId(info.characterId)}: ${info.candidatePlayerIds
+      return `${characterDisplayName(info.characterId)}: ${info.candidatePlayerIds
         .map((id) => nameById.get(id) ?? id)
         .join(", ")}`;
     case "CHARACTER":
-      return `${titleCaseCharacterId(info.characterId)} — ${nameById.get(info.playerId) ?? info.playerId}`;
+      return `${characterDisplayName(info.characterId)} — ${nameById.get(info.playerId) ?? info.playerId}`;
     case "NUMBER":
       return `Liczba: ${info.value}`;
     case "NO_OUTSIDERS":
@@ -385,7 +378,7 @@ export default function ActionDecisionPanel({
               />
               {trimmedCharacterId && (
                 <span className="mt-1 block text-meta text-ink-muted">
-                  → {titleCaseCharacterId(trimmedCharacterId)}
+                  → {characterDisplayName(trimmedCharacterId)}
                 </span>
               )}
             </label>
@@ -424,7 +417,7 @@ export default function ActionDecisionPanel({
               />
               {trimmedCharacterId && (
                 <span className="mt-1 block text-meta text-ink-muted">
-                  → {titleCaseCharacterId(trimmedCharacterId)}
+                  → {characterDisplayName(trimmedCharacterId)}
                 </span>
               )}
             </label>

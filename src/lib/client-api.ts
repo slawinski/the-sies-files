@@ -5,6 +5,8 @@
 // Server responses already carry `Cache-Control: no-store` (docs/03 §17/§19);
 // the extra `cache: "no-store"` is belt-and-suspenders for the browser.
 
+import { t } from "@/i18n/t";
+
 export class ApiClientError extends Error {
   readonly code: string;
   readonly status: number;
@@ -54,40 +56,43 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Map a domain error code to friendly, non-leaky copy. Callers can override
- * the fallback to keep copy context-specific (e.g. the claim page).
+ * Map a domain error code to localized, non-leaky copy through the typed i18n
+ * layer (audit spec 23 §6.5). Callers can override the fallback to keep copy
+ * context-specific (e.g. the claim page).
  */
 export function friendlyMessage(code: string, fallback: string): string {
   switch (code) {
     case "UNAUTHORIZED":
-      return "Nie masz dostępu do tych akt sprawy.";
+      return t("errors.UNAUTHORIZED");
     case "FORBIDDEN":
-      return "Nie masz uprawnień, aby to zrobić.";
+      return t("errors.FORBIDDEN");
     case "GAME_NOT_FOUND":
     case "PLAYER_NOT_FOUND":
-      return "Te akta sprawy już nie istnieją.";
+      return t("errors.GAME_NOT_FOUND");
     case "VERSION_CONFLICT":
-      return "Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Spróbuj ponownie.";
+      return t("errors.VERSION_CONFLICT");
     case "INVALID_DISPLAY_NAME":
-      return "Imię jest wymagane.";
+      return t("errors.INVALID_DISPLAY_NAME");
     case "DISPLAY_NAME_TAKEN":
-      return "To imię jest już w kręgu.";
+      return t("errors.DISPLAY_NAME_TAKEN");
     case "ROSTER_FULL":
-      return "Lista osiągnęła już maksimum 16 uczestników.";
+      return t("errors.ROSTER_FULL");
     case "ROSTER_SIZE_INVALID":
-      return "Sprawa wymaga od 13 do 16 uczestników.";
+      return t("errors.ROSTER_SIZE_INVALID");
     case "VIRTUAL_CIRCLE_LOCKED":
-      return "Skład i krąg są już zablokowane po zatwierdzeniu układu.";
+      return t("errors.VIRTUAL_CIRCLE_LOCKED");
     case "SETUP_NOT_COMMITTED":
-      return "Układ nie został jeszcze zatwierdzony.";
+      return t("errors.SETUP_NOT_COMMITTED");
     case "ACTION_NOT_ACTIVE":
-      return "Ta akcja nie jest teraz dostępna.";
+      return t("errors.ACTION_NOT_ACTIVE");
     case "INVALID_SESSION_STATE":
-      return "Nie można tego teraz zrobić w tej fazie gry.";
+      return t("errors.INVALID_SESSION_STATE");
     case "CLAIM_ALREADY_USED":
-      return "Ten link do odbioru został już użyty lub wygasł.";
+      return t("errors.CLAIM_ALREADY_USED");
+    case "RATE_LIMITED":
+      return t("errors.RATE_LIMITED");
     case "NETWORK":
-      return "Nie mogę połączyć się z serwerem. Sprawdź połączenie i spróbuj ponownie.";
+      return t("errors.NETWORK");
     default:
       return fallback;
   }

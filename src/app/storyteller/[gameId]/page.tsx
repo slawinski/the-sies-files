@@ -24,6 +24,8 @@ import ActionDecisionPanel from "@/components/ActionDecisionPanel";
 import PhaseBadge from "@/components/PhaseBadge";
 import { useGameEventStream, type RealtimeHealth } from "@/components/useGameEventStream";
 import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
+import { characterDisplayName, type CharacterId } from "@/modules/trouble-brewing/characters";
+import { STEP_CHARACTER, type StepKind } from "@/modules/trouble-brewing/script";
 
 const MIN_READY = 13;
 const MAX_PLAYERS = 16;
@@ -122,14 +124,6 @@ function RealtimeBadge({ health }: { health: RealtimeHealth }) {
   );
 }
 
-/** "WASHERWOMAN" → "Washerwoman", "FORTUNE_TELLER" → "Fortune Teller". */
-function titleCaseCharacterId(id: string): string {
-  return id
-    .split("_")
-    .map((word) => (word.length > 0 ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word))
-    .join(" ");
-}
-
 function alignmentLabel(alignment: string): string {
   return alignment === "EVIL" ? "Zło" : "Dobro";
 }
@@ -182,11 +176,11 @@ function resolutionText(result: unknown, nameById: Map<string, string>): string 
   if (isInfoResult(result)) {
     switch (result.kind) {
       case "CHARACTER_CANDIDATES":
-        return `${titleCaseCharacterId(result.characterId)}: ${result.candidatePlayerIds
+        return `${characterDisplayName(result.characterId)}: ${result.candidatePlayerIds
           .map((id) => nameById.get(id) ?? id)
           .join(", ")}`;
       case "CHARACTER":
-        return `${titleCaseCharacterId(result.characterId)} — ${nameById.get(result.playerId) ?? result.playerId}`;
+        return `${characterDisplayName(result.characterId)} — ${nameById.get(result.playerId) ?? result.playerId}`;
       case "NUMBER":
         return `Liczba: ${result.value}`;
       case "NO_OUTSIDERS":
@@ -1298,11 +1292,11 @@ export default function StorytellerDashboard() {
                                   {nameById.get(a.playerId) ?? a.playerId}
                                 </span>
                                 <span className="min-w-0 text-right text-sm text-ink-secondary">
-                                  {titleCaseCharacterId(a.trueCharacterId)}
+                                  {characterDisplayName(a.trueCharacterId)}
                                   {isDrunk && a.perceivedCharacterId !== a.trueCharacterId && (
                                     <span className="text-ink-muted">
                                       {" "}
-                                      → {titleCaseCharacterId(a.perceivedCharacterId)}
+                                      → {characterDisplayName(a.perceivedCharacterId)}
                                     </span>
                                   )}
                                 </span>
@@ -1327,7 +1321,7 @@ export default function StorytellerDashboard() {
                       <div className="mt-4 rounded-xl border border-line bg-card-soft/60 p-3">
                         <p className="text-meta text-moss">Bluffy Demona</p>
                         <p className="mt-1 text-sm text-ink-secondary">
-                          {candidate.demonBluffs.map(titleCaseCharacterId).join(", ")}
+                          {candidate.demonBluffs.map((id) => characterDisplayName(id as CharacterId)).join(", ")}
                         </p>
                       </div>
 
@@ -1422,7 +1416,7 @@ export default function StorytellerDashboard() {
                                 </span>
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate text-base text-ink-primary">
-                                    {titleCaseCharacterId(action.kind)}
+                                    {characterDisplayName(STEP_CHARACTER[action.kind as StepKind] ?? action.kind)}
                                   </p>
                                   <p className="truncate text-meta text-ink-muted">
                                     {action.actorDisplayName ?? "—"}
@@ -2024,7 +2018,7 @@ export default function StorytellerDashboard() {
                       <div className="mt-3 rounded-xl border border-brass/40 bg-brass/10 p-3">
                         <p className="text-meta text-moss">Blokująca akcja</p>
                         <p className="mt-1 text-sm text-ink-primary">
-                          {titleCaseCharacterId(control.blockingAction.kind)}{" "}
+                          {characterDisplayName(control.blockingAction.kind)}{" "}
                           <span className="text-brass">· {control.blockingAction.status}</span>
                         </p>
                         {control.blockingAction.actorPlayerId && (

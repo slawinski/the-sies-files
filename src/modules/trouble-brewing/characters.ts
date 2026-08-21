@@ -2,6 +2,8 @@
 //
 // Character IDs are stable strings — never magic strings elsewhere in domain
 // code. Role behavior is versioned data + resolvers, not UI switch statements.
+// Polish display names are reviewed metadata (audit spec 23 §5); UI must never
+// derive them from IDs.
 
 export type CharacterCategory =
   | "TOWNSFOLK"
@@ -74,33 +76,41 @@ export interface CharacterDefinition {
   defaultAlignment: Alignment | null;
   /** True when the character is public knowledge (Bureaucrat only in MVP). */
   publicCharacter: boolean;
+  /** Reviewed Polish display names (audit spec 23 §5). "Pełnomocnik" is canonical. */
+  displayName: { pl: string };
 }
 
 export const CHARACTER_DEFINITIONS: Record<CharacterId, CharacterDefinition> = {
-  WASHERWOMAN: { id: "WASHERWOMAN", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  LIBRARIAN: { id: "LIBRARIAN", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  INVESTIGATOR: { id: "INVESTIGATOR", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  CHEF: { id: "CHEF", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  EMPATH: { id: "EMPATH", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  FORTUNE_TELLER: { id: "FORTUNE_TELLER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  UNDERTAKER: { id: "UNDERTAKER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  MONK: { id: "MONK", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  RAVENKEEPER: { id: "RAVENKEEPER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  VIRGIN: { id: "VIRGIN", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  SLAYER: { id: "SLAYER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  SOLDIER: { id: "SOLDIER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  MAYOR: { id: "MAYOR", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false },
-  BUTLER: { id: "BUTLER", category: "OUTSIDER", defaultAlignment: "GOOD", publicCharacter: false },
-  DRUNK: { id: "DRUNK", category: "OUTSIDER", defaultAlignment: "GOOD", publicCharacter: false },
-  RECLUSE: { id: "RECLUSE", category: "OUTSIDER", defaultAlignment: "GOOD", publicCharacter: false },
-  SAINT: { id: "SAINT", category: "OUTSIDER", defaultAlignment: "GOOD", publicCharacter: false },
-  POISONER: { id: "POISONER", category: "MINION", defaultAlignment: "EVIL", publicCharacter: false },
-  SPY: { id: "SPY", category: "MINION", defaultAlignment: "EVIL", publicCharacter: false },
-  SCARLET_WOMAN: { id: "SCARLET_WOMAN", category: "MINION", defaultAlignment: "EVIL", publicCharacter: false },
-  BARON: { id: "BARON", category: "MINION", defaultAlignment: "EVIL", publicCharacter: false },
-  IMP: { id: "IMP", category: "DEMON", defaultAlignment: "EVIL", publicCharacter: false },
-  BUREAUCRAT: { id: "BUREAUCRAT", category: "TRAVELLER", defaultAlignment: null, publicCharacter: true },
+  WASHERWOMAN: { id: "WASHERWOMAN", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Praczka" } },
+  LIBRARIAN: { id: "LIBRARIAN", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Bibliotekarka" } },
+  INVESTIGATOR: { id: "INVESTIGATOR", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Śledczy" } },
+  CHEF: { id: "CHEF", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Kucharz" } },
+  EMPATH: { id: "EMPATH", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Empata" } },
+  FORTUNE_TELLER: { id: "FORTUNE_TELLER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Wróżbitka" } },
+  UNDERTAKER: { id: "UNDERTAKER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Grabarz" } },
+  MONK: { id: "MONK", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Mnich" } },
+  RAVENKEEPER: { id: "RAVENKEEPER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Strażnik Kruka" } },
+  VIRGIN: { id: "VIRGIN", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Dziewica" } },
+  SLAYER: { id: "SLAYER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Pogromca" } },
+  SOLDIER: { id: "SOLDIER", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Żołnierz" } },
+  MAYOR: { id: "MAYOR", category: "TOWNSFOLK", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Burmistrz" } },
+  BUTLER: { id: "BUTLER", category: "OUTSIDER", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Lokaj" } },
+  DRUNK: { id: "DRUNK", category: "OUTSIDER", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Pijak" } },
+  RECLUSE: { id: "RECLUSE", category: "OUTSIDER", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Samotnik" } },
+  SAINT: { id: "SAINT", category: "OUTSIDER", defaultAlignment: "GOOD", publicCharacter: false, displayName: { pl: "Święty" } },
+  POISONER: { id: "POISONER", category: "MINION", defaultAlignment: "EVIL", publicCharacter: false, displayName: { pl: "Truciciel" } },
+  SPY: { id: "SPY", category: "MINION", defaultAlignment: "EVIL", publicCharacter: false, displayName: { pl: "Szpieg" } },
+  SCARLET_WOMAN: { id: "SCARLET_WOMAN", category: "MINION", defaultAlignment: "EVIL", publicCharacter: false, displayName: { pl: "Szkarłatna Kobieta" } },
+  BARON: { id: "BARON", category: "MINION", defaultAlignment: "EVIL", publicCharacter: false, displayName: { pl: "Baron" } },
+  IMP: { id: "IMP", category: "DEMON", defaultAlignment: "EVIL", publicCharacter: false, displayName: { pl: "Diabełek" } },
+  BUREAUCRAT: { id: "BUREAUCRAT", category: "TRAVELLER", defaultAlignment: null, publicCharacter: true, displayName: { pl: "Pełnomocnik" } },
 };
+
+/** Reviewed Polish display name for a character (never a derived string). */
+export function characterDisplayName(id: string): string {
+  const def = CHARACTER_DEFINITIONS[id as CharacterId];
+  return def?.displayName.pl ?? id;
+}
 
 export function alignmentOf(id: CharacterId): Alignment {
   const def = CHARACTER_DEFINITIONS[id];
