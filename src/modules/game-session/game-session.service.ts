@@ -124,6 +124,36 @@ export async function renameGame({
   return { version };
 }
 
+export async function setParticipantKind({
+  gameId,
+  playerId,
+  participantKind,
+  commandId,
+  expectedVersion,
+}: BaseCommand & { playerId: string; participantKind: "NORMAL" | "TRAVELLER" }): Promise<{ version: number }> {
+  const { version, sequence } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    handler: async ({ tx, game, appendEvent }) => {
+      assertRosterEditable(game.status);
+      const player = await tx.player.findFirst({ where: { id: playerId, gameId } });
+      if (!player) throw new DomainError("PLAYER_NOT_FOUND", "Player not found");
+      if (participantKind === "TRAVELLER") {
+        const existing = await tx.player.findFirst({ where: { gameId, participantKind: "TRAVELLER" } });
+        if (existing) throw new DomainError("ROSTER_SIZE_INVALID", "Only one Traveller is supported");
+      }
+      const before = player.participantKind;
+      await tx.player.update({ where: { id: playerId }, data: { participantKind } });
+      await appendEvent(EVENTS.PLAYER_UPDATED, { playerId, participantKind: { before, after: participantKind } });
+      return {};
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { version };
+}
+
 export async function addPlayer({
   gameId,
   commandId,

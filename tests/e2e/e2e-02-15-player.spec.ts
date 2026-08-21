@@ -7,12 +7,11 @@ import {
   executeDemonToEnd,
 } from "./fixtures";
 
-// E2E-01 — 13-player complete fixture (audit spec 24 §4): create → roster →
-// claim → role reveal → Operational + Investigation → nomination/vote →
-// execution → ordinary game end.
-test("E2E-01: 13-player complete lifecycle ends through an ordinary path", async ({ page, browser }) => {
+// E2E-02 — 15-player complete fixture (audit spec 24 §4): same lifecycle at 15
+// players with composition/ordering differences.
+test("E2E-02: 15-player complete lifecycle ends through an ordinary path", async ({ page, browser }) => {
   const st = page.request;
-  const { gameId, playerIds, version: rosterVersion } = await createStorytellerGame(st, "E2E-01", 13);
+  const { gameId, playerIds, version: rosterVersion } = await createStorytellerGame(st, "E2E-02", 15);
   const { candidate } = await generateAndCommitSetup(st, gameId, rosterVersion);
 
   let version = (await (await st.get(`/api/v1/games/${gameId}/storyteller`)).json()).version;

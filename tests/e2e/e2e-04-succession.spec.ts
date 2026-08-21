@@ -53,6 +53,9 @@ test("E2E-04: Imp self-kill star-pass to a legal Minion; invalid successor rejec
           payload: { resolution: { kind: "IMP_KILL", starPassSuccessorPlayerId: townsfolk } },
         },
       });
+      if (invalid.ok()) {
+        console.log("invalid successor accepted:", invalid.status(), await invalid.text());
+      }
       expect(invalid.ok(), "invalid successor rejected").toBeFalsy();
 
       // Valid successor resolves the star-pass.

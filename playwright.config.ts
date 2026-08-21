@@ -27,6 +27,9 @@ const e2eDatabaseUrl = resolveDatabaseUrl();
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
+  // Serial execution: all specs share one PostgreSQL database (spec 24 §5.4 —
+  // parallel execution only after isolation is proven).
+  workers: 1,
   globalSetup: "./tests/e2e/global-setup.ts",
   timeout: 60_000,
   expect: { timeout: 10_000 },

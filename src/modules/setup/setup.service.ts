@@ -48,10 +48,13 @@ export async function generateSetup({
   gameId,
   commandId,
   expectedVersion,
+  seed,
 }: {
   gameId: string;
   commandId: string;
   expectedVersion: number;
+  /** Optional fixed seed (Storyteller/test use) for deterministic fixtures. */
+  seed?: string;
 }): Promise<{ version: number; regenerationIndex: number }> {
   const { result, version, sequence } = await runCommand({
     gameId,
@@ -71,14 +74,14 @@ export async function generateSetup({
         throw new DomainError("ROSTER_SIZE_INVALID", "Setup requires 13–16 participants");
       }
 
-      const seed = newSetupSeed();
+      const finalSeed = seed ?? newSetupSeed();
       const candidate = generateSetupCandidate({
         players: players.map((p) => ({
           playerId: p.id,
           virtualSeat: p.virtualSeat,
           participantKind: p.participantKind,
         })),
-        rng: new SeededRngV2(seed),
+        rng: new SeededRngV2(finalSeed),
       });
 
       const existing = await tx.setupDraft.findUnique({ where: { gameId } });
@@ -88,13 +91,13 @@ export async function generateSetup({
         create: {
           gameId,
           generatorVersion: SETUP_GENERATOR_VERSION,
-          seed,
+          seed: finalSeed,
           candidateJson: candidate as unknown as Prisma.InputJsonValue,
           regenerationIndex,
         },
         update: {
           generatorVersion: SETUP_GENERATOR_VERSION,
-          seed,
+          seed: finalSeed,
           candidateJson: candidate as unknown as Prisma.InputJsonValue,
           regenerationIndex,
           committedAt: null,

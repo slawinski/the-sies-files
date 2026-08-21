@@ -794,11 +794,18 @@ export async function closeInvestigation({
 
       const mayor = await tx.player.findFirst({
         where: { gameId, alive: true, secret: { trueCharacterId: "MAYOR" } },
+        include: { secret: true },
       });
+      let mayorFunctioning = false;
+      if (mayor?.secret) {
+        const mayorEffects = await tx.effect.findMany({ where: { targetPlayerId: mayor.id, active: true } });
+        mayorFunctioning =
+          getAbilityFunctionState(mayor.secret, mayorEffects, "INVESTIGATION", game.cycleNumber) === "FUNCTIONING";
+      }
       const living = await livingNormalCount(tx, gameId);
       const mayorWin = checkMayorVictory({
         livingNormalCount: living,
-        mayorAlive: mayor != null,
+        mayorAlive: mayorFunctioning,
         executionOccurred: inv.executionOccurred,
       });
       if (mayorWin.winner) {
