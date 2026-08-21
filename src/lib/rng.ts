@@ -1,7 +1,7 @@
 // Injectable RNG. Production code uses crypto; tests and Slice 2 setup
 // generation use a deterministic seeded generator so setup is reproducible.
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 
 export interface Rng {
   /** Returns `length` random bytes. */
@@ -49,6 +49,62 @@ export function hashStringToUint32(input: string): number {
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
+}
+
+/**
+ * RNG v2 (audit spec 24 §6): counter-based HMAC-SHA256 construction preserving
+ * >=128 bits of effective deterministic state from the seed string. Rejection
+ * sampling avoids modulo bias. Legacy `SeededRng` (xorshift32) remains for
+ * generator-version-1 compatibility and must never be mixed with v2 seeds.
+ */
+export class SeededRngV2 implements Rng {
+  private counter = 0;
+  private readonly seed: Buffer;
+
+  constructor(seed: string) {
+    this.seed = Buffer.from(seed, "utf8");
+  }
+
+  private block(): Buffer {
+    const c = this.counter;
+    this.counter += 1;
+    const counterBytes = Buffer.alloc(8);
+    counterBytes.writeBigUInt64BE(BigInt(c));
+    return createHmac("sha256", this.seed).update(counterBytes).digest();
+  }
+
+  randomBytes(length: number): Uint8Array {
+    const out = new Uint8Array(length);
+    let offset = 0;
+    while (offset < length) {
+      const block = this.block();
+      const take = Math.min(block.length, length - offset);
+      out.set(block.subarray(0, take), offset);
+      offset += take;
+    }
+    return out;
+  }
+
+  randomUuid(): string {
+    const b = this.randomBytes(16);
+    b[6] = (b[6] & 0x0f) | 0x40; // version 4
+    b[8] = (b[8] & 0x3f) | 0x80; // variant 10
+    const hex = Array.from(b)
+      .map((n) => n.toString(16).padStart(2, "0"))
+      .join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  randomInt(min: number, max: number): number {
+    const range = max - min + 1;
+    // Rejection sampling over 32 bits to avoid modulo bias.
+    const limit = Math.floor(2 ** 32 / range) * range;
+    let val: number;
+    do {
+      val = this.block().readUInt32BE(0);
+    } while (val >= limit);
+    return min + (val % range);
+  }
 }
 
 /** Deterministic xorshift32-based generator for tests and seeded setup. */

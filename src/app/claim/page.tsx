@@ -65,13 +65,13 @@ export default function ClaimIdentity() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Odbierz tożsamość</span>
+          <span className="text-meta text-ink-muted">Odbierz tożsamość</span>
         </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10">
         <div className="card">
-          <p className="display text-xs tracking-[0.25em] text-moss">Tożsamość</p>
+          <p className="display text-meta tracking-[0.25em] text-moss">Tożsamość</p>
           <h1 className="display mt-2 text-2xl leading-tight text-ink-primary">
             Odbierz swoje miejsce
           </h1>

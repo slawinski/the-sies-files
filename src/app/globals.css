@@ -99,6 +99,13 @@ body {
   text-transform: uppercase;
 }
 
+/* Semantic meta typography token (audit spec 24 §7): 13px minimum for
+   user-facing metadata; critical body copy stays >= 16px. */
+.text-meta {
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.25rem; /* 20px */
+}
+
 /* Visible focus (docs/11 §15) */
 :focus-visible {
   outline: 2px solid var(--brass);

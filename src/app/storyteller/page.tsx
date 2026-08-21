@@ -74,7 +74,7 @@ export default function StorytellerHome() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Storyteller</span>
+          <span className="text-meta text-ink-muted">Storyteller</span>
         </div>
       </header>
 
@@ -107,7 +107,7 @@ export default function StorytellerHome() {
 
         {(view === "form" || view === "creating") && (
           <div className="card">
-            <p className="display text-xs tracking-[0.25em] text-moss">Nowe akta sprawy</p>
+            <p className="display text-meta tracking-[0.25em] text-moss">Nowe akta sprawy</p>
             <h1 className="display mt-2 text-2xl leading-tight text-ink-primary">
               Otwórz sprawę
             </h1>

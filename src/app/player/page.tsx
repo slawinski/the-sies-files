@@ -65,7 +65,7 @@ function taskStateLabel(state: string): string {
 function RealtimeDot({ health }: { health: RealtimeHealth }) {
   if (health === "LIVE") {
     return (
-      <span role="status" className="inline-flex items-center gap-1.5 text-xs text-moss">
+      <span role="status" className="inline-flex items-center gap-1.5 text-meta text-moss">
         <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-moss" />
         LIVE
       </span>
@@ -73,14 +73,14 @@ function RealtimeDot({ health }: { health: RealtimeHealth }) {
   }
   if (health === "RECONNECTING") {
     return (
-      <span role="status" className="inline-flex items-center gap-1.5 text-xs text-brass">
+      <span role="status" className="inline-flex items-center gap-1.5 text-meta text-brass">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-brass" />
         ŁĄCZENIE…
       </span>
     );
   }
   return (
-    <span role="status" className="inline-flex items-center gap-1.5 text-xs text-danger">
+    <span role="status" className="inline-flex items-center gap-1.5 text-meta text-danger">
       <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-danger" />
       OFFLINE
     </span>
@@ -150,7 +150,7 @@ function requiredTargetCount(kind: string): number | null {
 function RoleCard({ role, nameById }: { role: RoleRevealDto; nameById: Map<string, string> }) {
   return (
     <div className="rounded-xl border border-brass/40 bg-elevated p-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Twoja rola</p>
+      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Twoja rola</p>
       <p className="display mt-1 text-3xl leading-tight text-ink-primary">
         {titleCaseCharacterId(role.characterId)}
       </p>
@@ -161,7 +161,7 @@ function RoleCard({ role, nameById }: { role: RoleRevealDto; nameById: Map<strin
 
       {role.teamKnowledge && (
         <div className="mt-4 rounded-lg border border-danger/30 bg-danger/5 p-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-danger">Drużyna Zła</p>
+          <p className="text-meta uppercase tracking-[0.2em] text-danger">Drużyna Zła</p>
           <p className="mt-1 text-sm text-ink-secondary">
             Demon: {nameById.get(role.teamKnowledge.demonId) ?? role.teamKnowledge.demonId}
           </p>
@@ -178,7 +178,7 @@ function RoleCard({ role, nameById }: { role: RoleRevealDto; nameById: Map<strin
 
       {role.bluffs && role.bluffs.length > 0 && (
         <div className="mt-4 rounded-lg border border-line bg-card-soft p-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-moss">Bluffy Demona</p>
+          <p className="text-meta uppercase tracking-[0.2em] text-moss">Bluffy Demona</p>
           <p className="mt-1 text-sm text-ink-secondary">
             {role.bluffs.map(titleCaseCharacterId).join(", ")}
           </p>
@@ -491,7 +491,7 @@ export default function PlayerWaiting() {
           <div className="flex items-center gap-3">
             {game && <PhaseBadge phase={game.phase} status={game.status} />}
             {game && <RealtimeDot health={realtime} />}
-            <span className="text-xs text-ink-muted">Gracz</span>
+            <span className="text-meta text-ink-muted">Gracz</span>
           </div>
         </div>
       </header>
@@ -516,7 +516,7 @@ export default function PlayerWaiting() {
 
         {view === "unclaimed" && (
           <div className="card mx-auto max-w-md text-center">
-            <p className="display text-xs tracking-[0.25em] text-moss">Tożsamość</p>
+            <p className="display text-meta tracking-[0.25em] text-moss">Tożsamość</p>
             <p className="mt-3 text-base text-ink-primary">
               Nie odebrano jeszcze twojej tożsamości — otwórz link do odbioru.
             </p>
@@ -587,7 +587,7 @@ export default function PlayerWaiting() {
                     : "border-success/40 bg-success/10"
                 }`}
               >
-                <p className="display text-xs tracking-[0.25em] text-ink-muted">Wynik sprawy</p>
+                <p className="display text-meta tracking-[0.25em] text-ink-muted">Wynik sprawy</p>
                 <h2 className="display mt-1 text-2xl leading-tight text-ink-primary">
                   {winnerLabel(game.result.winner)}
                 </h2>
@@ -600,7 +600,7 @@ export default function PlayerWaiting() {
             {/* Role reveal gate */}
             {role && !game.roleAcknowledged && (
               <section className="card secret-card md:col-span-3">
-                <p className="display text-xs tracking-[0.25em] text-brass">Informacje prywatne</p>
+                <p className="display text-meta tracking-[0.25em] text-brass">Informacje prywatne</p>
                 {!revealed ? (
                   <div className="mt-3">
                     <p className="text-sm text-ink-secondary">
@@ -633,7 +633,7 @@ export default function PlayerWaiting() {
             {/* Operational action — current action sits first, full width (docs/11 §6) */}
             {game.activeAction && (
               <section className="card md:col-span-3">
-                <p className="display text-xs tracking-[0.25em] text-moss">Działanie</p>
+                <p className="display text-meta tracking-[0.25em] text-moss">Działanie</p>
                 <h2 className="display mt-2 text-xl leading-tight text-ink-primary">
                   {titleCaseCharacterId(game.activeAction.kind)}
                 </h2>
@@ -670,12 +670,12 @@ export default function PlayerWaiting() {
                                 {player.displayName}
                               </span>
                               {isSelf && (
-                                <span className="shrink-0 rounded-full border border-moss/40 bg-moss/10 px-2.5 py-0.5 text-xs text-moss">
+                                <span className="shrink-0 rounded-full border border-moss/40 bg-moss/10 px-2.5 py-0.5 text-meta text-moss">
                                   ty
                                 </span>
                               )}
                               {selected && (
-                                <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-xs text-ink-primary">
+                                <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-meta text-ink-primary">
                                   wybrano
                                 </span>
                               )}
@@ -699,7 +699,7 @@ export default function PlayerWaiting() {
 
             {/* Identity card */}
             <section className="card md:col-span-1">
-              <p className="display text-xs tracking-[0.25em] text-moss">Ty</p>
+              <p className="display text-meta tracking-[0.25em] text-moss">Ty</p>
               <h1 className="display mt-2 break-words text-2xl leading-tight text-ink-primary">
                 {game.me.displayName}
               </h1>
@@ -709,12 +709,12 @@ export default function PlayerWaiting() {
 
               {role && game.roleAcknowledged && (
                 <div className="mt-4 rounded-xl border border-brass/40 bg-elevated p-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Twoja rola</p>
+                  <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Twoja rola</p>
                   <p className="display mt-1 text-xl leading-tight text-ink-primary">
                     {titleCaseCharacterId(role.characterId)}
                   </p>
                   <p className="mt-1 text-sm text-ink-secondary">{alignmentLabel(role.alignment)}</p>
-                  <p className="mt-2 text-xs text-success">rola potwierdzona</p>
+                  <p className="mt-2 text-meta text-success">rola potwierdzona</p>
                 </div>
               )}
               {!role && (
@@ -727,8 +727,8 @@ export default function PlayerWaiting() {
             {/* Roster card */}
             <section className="card md:col-span-2">
               <div className="flex items-center justify-between gap-3">
-                <p className="display text-xs tracking-[0.25em] text-moss">Wirtualny Krąg</p>
-                <span className="text-xs text-ink-muted">
+                <p className="display text-meta tracking-[0.25em] text-moss">Wirtualny Krąg</p>
+                <span className="text-meta text-ink-muted">
                   {game.participantCount} osób · {game.name}
                 </span>
               </div>
@@ -746,7 +746,7 @@ export default function PlayerWaiting() {
                       {player.displayName}
                     </span>
                     {player.id === game.me.playerId && (
-                      <span className="shrink-0 rounded-full border border-moss/40 bg-moss/10 px-2.5 py-0.5 text-xs text-moss">
+                      <span className="shrink-0 rounded-full border border-moss/40 bg-moss/10 px-2.5 py-0.5 text-meta text-moss">
                         ty
                       </span>
                     )}
@@ -758,11 +758,11 @@ export default function PlayerWaiting() {
             {/* Delivered info */}
             {game.deliveredInfo.length > 0 && (
               <section className="card md:col-span-3">
-                <p className="display text-xs tracking-[0.25em] text-moss">Otrzymane informacje</p>
+                <p className="display text-meta tracking-[0.25em] text-moss">Otrzymane informacje</p>
                 <ol className="mt-3 flex flex-col gap-2">
                   {game.deliveredInfo.map((item) => (
                     <li key={item.actionId} className="rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-xs text-ink-muted">{titleCaseCharacterId(item.kind)}</p>
+                      <p className="text-meta text-ink-muted">{titleCaseCharacterId(item.kind)}</p>
                       <div className="mt-1 text-sm text-ink-primary">
                         {renderDeliveredInfo(item, nameById)}
                       </div>
@@ -775,10 +775,10 @@ export default function PlayerWaiting() {
             {/* Investigation */}
             {investigationVisible && (
               <section className="card md:col-span-3">
-                <p className="display text-xs tracking-[0.25em] text-moss">Śledztwo</p>
+                <p className="display text-meta tracking-[0.25em] text-moss">Śledztwo</p>
 
                 <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                  <p className="text-xs text-moss">Kandydat do egzekucji</p>
+                  <p className="text-meta text-moss">Kandydat do egzekucji</p>
                   {candidateId ? (
                     <p className="mt-1 text-base text-ink-primary">
                       {candidateName}{" "}
@@ -792,7 +792,7 @@ export default function PlayerWaiting() {
                 </div>
 
                 {!game.me.alive && (
-                  <p className="mt-2 text-xs text-ink-muted">
+                  <p className="mt-2 text-meta text-ink-muted">
                     Jesteś martwy — głosujesz jako duch
                     {game.me.ghostVoteAvailable ? " (głos ducha dostępny)" : " (głos ducha zużyty)"}.
                   </p>
@@ -829,7 +829,7 @@ export default function PlayerWaiting() {
                                     {player.displayName}
                                   </span>
                                   {selected && (
-                                    <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-xs text-ink-primary">
+                                    <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2.5 py-0.5 text-meta text-ink-primary">
                                       wybrano
                                     </span>
                                   )}
@@ -847,7 +847,7 @@ export default function PlayerWaiting() {
                           Nominuj
                         </button>
                         {!game.me.alive && (
-                          <p className="mt-1 text-xs text-ink-muted">
+                          <p className="mt-1 text-meta text-ink-muted">
                             Martwi gracze nie mogą nominować.
                           </p>
                         )}
@@ -858,7 +858,7 @@ export default function PlayerWaiting() {
 
                 {votingNominations.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-xs text-moss">Głosowanie</p>
+                    <p className="text-meta text-moss">Głosowanie</p>
                     <div className="mt-2 flex flex-col gap-2">
                       {votingNominations.map((n) => {
                         const yesActive = n.myVoteIntent === true;
@@ -919,7 +919,7 @@ export default function PlayerWaiting() {
                             )}
 
                             {n.myVoteIntent !== null && (
-                              <p className="mt-1.5 text-xs text-ink-muted">
+                              <p className="mt-1.5 text-meta text-ink-muted">
                                 Twój głos:{" "}
                                 <span className="text-ink-secondary">
                                   {n.myVoteIntent ? "Tak" : "Nie"}
@@ -935,7 +935,7 @@ export default function PlayerWaiting() {
 
                 {resolvedNominations.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-xs text-moss">Rozstrzygnięte nominacje</p>
+                    <p className="text-meta text-moss">Rozstrzygnięte nominacje</p>
                     <div className="mt-2 flex flex-col gap-2">
                       {resolvedNominations.map((n) => (
                         <div
@@ -945,7 +945,7 @@ export default function PlayerWaiting() {
                           <p className="text-sm text-ink-primary">
                             {n.nominatorName ?? "—"} → {n.nomineeName ?? "—"}
                           </p>
-                          <p className="mt-1 flex items-center gap-2 text-xs">
+                          <p className="mt-1 flex items-center gap-2 text-meta">
                             <span className="text-ink-muted">
                               {nominationStatusLabel(n.status)} · {n.effectiveTotal} głosów
                             </span>
@@ -971,14 +971,14 @@ export default function PlayerWaiting() {
             {scenarioVisible && scenario && (
               <section className="md:col-span-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="display text-xs tracking-[0.25em] text-moss">Scenariusz</p>
-                  <span className="text-xs text-ink-muted">etap: {scenario.stageId ?? "—"}</span>
+                  <p className="display text-meta tracking-[0.25em] text-moss">Scenariusz</p>
+                  <span className="text-meta text-ink-muted">etap: {scenario.stageId ?? "—"}</span>
                 </div>
 
                 <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
                   {/* Evidence */}
                   <div className="card paper-card md:col-span-2">
-                    <p className="display text-xs tracking-[0.25em] text-ink">Dowody</p>
+                    <p className="display text-meta tracking-[0.25em] text-ink">Dowody</p>
                     {scenario.clues.length === 0 ? (
                       <p className="mt-3 text-sm text-ink/70">Brak dowodów</p>
                     ) : (
@@ -1000,7 +1000,7 @@ export default function PlayerWaiting() {
 
                   {/* Tasks */}
                   <div className="card md:col-span-1">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Zadania</p>
+                    <p className="display text-meta tracking-[0.25em] text-moss">Zadania</p>
                     {scenario.tasks.length === 0 ? (
                       <p className="mt-3 text-sm text-ink-muted">Brak zadań</p>
                     ) : (
@@ -1013,7 +1013,7 @@ export default function PlayerWaiting() {
                               className="rounded-xl border border-line bg-card-soft/60 p-3"
                             >
                               <p className="text-sm text-ink-primary">{task.title}</p>
-                              <p className={`mt-1 text-xs ${done ? "text-success" : "text-brass"}`}>
+                              <p className={`mt-1 text-meta ${done ? "text-success" : "text-brass"}`}>
                                 {taskStateLabel(task.state)}
                               </p>
                             </li>
@@ -1026,8 +1026,8 @@ export default function PlayerWaiting() {
                   {/* Map */}
                   <div className="card map-card md:col-span-2">
                     <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-                      <p className="display text-xs tracking-[0.25em] text-moss">Mapa</p>
-                      <span className="text-xs text-ink-muted">
+                      <p className="display text-meta tracking-[0.25em] text-moss">Mapa</p>
+                      <span className="text-meta text-ink-muted">
                         {mapVersionLabel(scenario.mapVersionId)}
                       </span>
                     </div>
@@ -1039,8 +1039,8 @@ export default function PlayerWaiting() {
 
                   {/* Scanner */}
                   <div className="card md:col-span-1">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Skaner</p>
-                    <p className="mt-2 text-xs text-ink-muted">
+                    <p className="display text-meta tracking-[0.25em] text-moss">Skaner</p>
+                    <p className="mt-2 text-meta text-ink-muted">
                       Skanuj kody QR znalezione na terenie śledztwa.
                     </p>
                     <form

@@ -82,7 +82,7 @@ export default function MapCard({
         {mapLocations.map((location) => (
           <span
             key={location.id}
-            className="rounded-lg border border-line bg-card-soft px-2.5 py-2 text-center text-xs text-ink-secondary"
+            className="rounded-lg border border-line bg-card-soft px-2.5 py-2 text-center text-meta text-ink-secondary"
           >
             {titleCaseLocation(location.id)}
           </span>
@@ -94,7 +94,7 @@ export default function MapCard({
   return (
     <div className="p-4">
       {mapVersionId === "MAP_EXTENDED" && (
-        <p className="mb-3 text-xs text-brass">aneks dołączony do akt</p>
+        <p className="mb-3 text-meta text-brass">aneks dołączony do akt</p>
       )}
 
       <div className={annexing ? "annex-in" : undefined}>

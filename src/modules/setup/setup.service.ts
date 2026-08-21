@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { runCommand } from "@/lib/command";
 import { DomainError } from "@/lib/errors";
 import { systemClock } from "@/lib/clock";
-import { cryptoSecureRng, hashStringToUint32, SeededRng } from "@/lib/rng";
+import { cryptoSecureRng, SeededRngV2 } from "@/lib/rng";
 import { EVENTS } from "@/modules/events/event-types";
 import { isRosterReady } from "@/modules/game-session/roster.rules";
 import {
@@ -28,9 +28,9 @@ function publishInvalidation(gameId: string, version: number, sequence: number):
   publish(gameId, { type: "invalidate", version, sequence });
 }
 
-/** A 128-bit (unguessable) seed; the PRNG state is derived from it. */
+/** A >=128-bit (unguessable) seed; the RNG state is derived from it (v2). */
 export function newSetupSeed(): string {
-  return cryptoSecureRng.randomUuid();
+  return Buffer.from(cryptoSecureRng.randomBytes(16)).toString("hex");
 }
 
 export function computeSetupHash(candidate: SetupCandidate): string {
@@ -78,7 +78,7 @@ export async function generateSetup({
           virtualSeat: p.virtualSeat,
           participantKind: p.participantKind,
         })),
-        rng: new SeededRng(hashStringToUint32(seed)),
+        rng: new SeededRngV2(seed),
       });
 
       const existing = await tx.setupDraft.findUnique({ where: { gameId } });

@@ -177,7 +177,7 @@ export default function ActionDecisionPanel({
     return (
       <div className="mt-2 flex flex-col gap-3 pl-11">
         <div>
-          <p className="text-xs text-moss">Cel Demona</p>
+          <p className="text-meta text-moss">Cel Demona</p>
           <p className="mt-0.5 text-sm text-ink-primary">
             {decision.originalTarget?.displayName ?? "—"}
           </p>
@@ -185,7 +185,7 @@ export default function ActionDecisionPanel({
 
         {decision.mayorRedirect.available && (
           <label>
-            <span className="mb-1 block text-xs text-ink-muted">Przekieruj śmierć (Mayor)</span>
+            <span className="mb-1 block text-meta text-ink-muted">Przekieruj śmierć (Mayor)</span>
             <select
               value={mayorRedirectId}
               onChange={(e) => setMayorRedirectId(e.target.value)}
@@ -203,7 +203,7 @@ export default function ActionDecisionPanel({
 
         {decision.starPass.required && (
           <label>
-            <span className="mb-1 block text-xs text-ink-muted">Następca Demona (wymagany)</span>
+            <span className="mb-1 block text-meta text-ink-muted">Następca Demona (wymagany)</span>
             <select
               value={starPassId}
               onChange={(e) => setStarPassId(e.target.value)}
@@ -222,7 +222,7 @@ export default function ActionDecisionPanel({
         )}
         {!decision.starPass.required && decision.starPass.eligibleSuccessors.length > 0 && (
           <label>
-            <span className="mb-1 block text-xs text-ink-muted">Następca Demona (opcjonalnie)</span>
+            <span className="mb-1 block text-meta text-ink-muted">Następca Demona (opcjonalnie)</span>
             <select
               value={starPassId}
               onChange={(e) => setStarPassId(e.target.value)}
@@ -247,7 +247,7 @@ export default function ActionDecisionPanel({
           Zatwierdź
         </button>
         {successorNeeded && (
-          <p className="text-xs text-ink-muted">Wybierz następcę Demona, aby zatwierdzić.</p>
+          <p className="text-meta text-ink-muted">Wybierz następcę Demona, aby zatwierdzić.</p>
         )}
       </div>
     );
@@ -321,7 +321,7 @@ export default function ActionDecisionPanel({
       case "NUMBER":
         return (
           <label>
-            <span className="mb-1 block text-xs text-ink-muted">
+            <span className="mb-1 block text-meta text-ink-muted">
               {falseMode ? "Fałszywa liczba" : "Liczba"}
             </span>
             <input
@@ -338,7 +338,7 @@ export default function ActionDecisionPanel({
       case "DEMON_YES_NO":
         return (
           <div>
-            <span className="mb-1 block text-xs text-ink-muted">
+            <span className="mb-1 block text-meta text-ink-muted">
               {falseMode ? "Fałszywa odpowiedź" : "Odpowiedź"}
             </span>
             <div className="flex gap-2">
@@ -373,7 +373,7 @@ export default function ActionDecisionPanel({
         return (
           <div className="flex flex-col gap-2">
             <label>
-              <span className="mb-1 block text-xs text-ink-muted">
+              <span className="mb-1 block text-meta text-ink-muted">
                 {falseMode ? "Fałszywa rola" : "Rola"}
               </span>
               <input
@@ -384,13 +384,13 @@ export default function ActionDecisionPanel({
                 className="min-h-11 w-full max-w-64 rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
               />
               {trimmedCharacterId && (
-                <span className="mt-1 block text-xs text-ink-muted">
+                <span className="mt-1 block text-meta text-ink-muted">
                   → {titleCaseCharacterId(trimmedCharacterId)}
                 </span>
               )}
             </label>
             <label>
-              <span className="mb-1 block text-xs text-ink-muted">Który gracz</span>
+              <span className="mb-1 block text-meta text-ink-muted">Który gracz</span>
               <select
                 value={characterPlayerId}
                 onChange={(e) => setCharacterPlayerId(e.target.value)}
@@ -412,7 +412,7 @@ export default function ActionDecisionPanel({
         return (
           <div className="flex flex-col gap-2">
             <label>
-              <span className="mb-1 block text-xs text-ink-muted">
+              <span className="mb-1 block text-meta text-ink-muted">
                 {falseMode ? "Fałszywa rola" : "Rola"}
               </span>
               <input
@@ -423,13 +423,13 @@ export default function ActionDecisionPanel({
                 className="min-h-11 w-full max-w-64 rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
               />
               {trimmedCharacterId && (
-                <span className="mt-1 block text-xs text-ink-muted">
+                <span className="mt-1 block text-meta text-ink-muted">
                   → {titleCaseCharacterId(trimmedCharacterId)}
                 </span>
               )}
             </label>
             <div>
-              <span className="mb-1 block text-xs text-ink-muted">
+              <span className="mb-1 block text-meta text-ink-muted">
                 Wskazani gracze: {candidateIds.length} / {candidateMax}
               </span>
               <div className="flex max-w-80 flex-col gap-1.5">
@@ -453,14 +453,14 @@ export default function ActionDecisionPanel({
                           : "border-line bg-card-soft/60 hover:border-brass/40"
                       }`}
                     >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-xs tabular-nums text-ink-secondary">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-meta tabular-nums text-ink-secondary">
                         {p.virtualSeat + 1}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-sm text-ink-primary">
                         {p.displayName}
                       </span>
                       {selected && (
-                        <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2 py-0.5 text-xs text-ink-primary">
+                        <span className="shrink-0 rounded-full border border-brass/40 bg-brass/10 px-2 py-0.5 text-meta text-ink-primary">
                           wybrano
                         </span>
                       )}
@@ -475,7 +475,7 @@ export default function ActionDecisionPanel({
       case "GRIMOIRE":
         return (
           <label>
-            <span className="mb-1 block text-xs text-ink-muted">
+            <span className="mb-1 block text-meta text-ink-muted">
               {falseMode ? "Fałszywa informacja (notatka)" : "Informacja (notatka)"}
             </span>
             <textarea
@@ -503,15 +503,15 @@ export default function ActionDecisionPanel({
 
       {truthfulInfo && (
         <div>
-          <p className="text-xs text-moss">Prawdziwa odpowiedź</p>
+          <p className="text-meta text-moss">Prawdziwa odpowiedź</p>
           <p className="mt-0.5 text-sm text-ink-secondary">{infoText(truthfulInfo, nameById)}</p>
         </div>
       )}
 
       {manualEntry && action.kind === "RAVENKEEPER_INFO" && (
         <div>
-          <p className="text-xs text-moss">Podaj odpowiedź (Kruk)</p>
-          <p className="mt-0.5 text-xs text-ink-muted">
+          <p className="text-meta text-moss">Podaj odpowiedź (Kruk)</p>
+          <p className="mt-0.5 text-meta text-ink-muted">
             Ta informacja wymaga wpisania roli zmarłego gracza.
           </p>
         </div>
@@ -519,7 +519,7 @@ export default function ActionDecisionPanel({
 
       {manualEntry && action.kind !== "RAVENKEEPER_INFO" && (
         <div>
-          <p className="text-xs text-moss">Prawdziwa odpowiedź</p>
+          <p className="text-meta text-moss">Prawdziwa odpowiedź</p>
           <p className="mt-0.5 text-sm text-ink-muted">
             Odpowiedź zostanie wyliczona przy zatwierdzeniu.
           </p>

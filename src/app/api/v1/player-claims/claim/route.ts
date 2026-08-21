@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
     const result = await claimPlayer({ token, commandId });
     await setPlayerSessionCookie(result.sessionToken);
-    return jsonOk({ ok: true, gameId: result.gameId, playerId: result.playerId });
+    return jsonOk({ ok: true, gameId: result.gameId, playerId: result.playerId, version: result.version });
   } catch (err) {
     return jsonError(err);
   }

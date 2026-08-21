@@ -93,7 +93,7 @@ function RealtimeBadge({ health }: { health: RealtimeHealth }) {
     return (
       <span
         role="status"
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-moss/40 bg-moss/10 px-3 text-xs font-medium text-moss"
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-moss/40 bg-moss/10 px-3 text-meta font-medium text-moss"
       >
         <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-moss" />
         LIVE
@@ -104,7 +104,7 @@ function RealtimeBadge({ health }: { health: RealtimeHealth }) {
     return (
       <span
         role="status"
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-brass/40 bg-brass/10 px-3 text-xs font-medium text-brass"
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-brass/40 bg-brass/10 px-3 text-meta font-medium text-brass"
       >
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-brass" />
         ŁĄCZENIE…
@@ -114,7 +114,7 @@ function RealtimeBadge({ health }: { health: RealtimeHealth }) {
   return (
     <span
       role="status"
-      className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-danger/40 bg-danger/10 px-3 text-xs font-medium text-danger"
+      className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-danger/40 bg-danger/10 px-3 text-meta font-medium text-danger"
     >
       <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-danger" />
       OFFLINE
@@ -940,7 +940,7 @@ export default function StorytellerDashboard() {
           <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-xs text-ink-muted">Storyteller</span>
+          <span className="text-meta text-ink-muted">Storyteller</span>
         </div>
       </header>
 
@@ -1014,7 +1014,7 @@ export default function StorytellerDashboard() {
                       : "border-success/40 bg-success/10"
                   }`}
                 >
-                  <p className="display text-xs tracking-[0.25em] text-ink-muted">Wynik sprawy</p>
+                  <p className="display text-meta tracking-[0.25em] text-ink-muted">Wynik sprawy</p>
                   <h2 className="display mt-1 text-2xl leading-tight text-ink-primary">
                     {winnerLabel(game.result.winner)}
                   </h2>
@@ -1028,7 +1028,7 @@ export default function StorytellerDashboard() {
               <section className="card md:col-span-6">
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Akta sprawy</p>
+                    <p className="display text-meta tracking-[0.25em] text-moss">Akta sprawy</p>
                     {renamingGame ? (
                       <div className="mt-2 flex max-w-md flex-wrap items-center gap-2">
                         <label htmlFor="game-name-input" className="sr-only">
@@ -1100,7 +1100,7 @@ export default function StorytellerDashboard() {
 
               {/* Add participant card */}
               <section className="card md:col-span-2">
-                <p className="display text-xs tracking-[0.25em] text-moss">Dodaj uczestnika</p>
+                <p className="display text-meta tracking-[0.25em] text-moss">Dodaj uczestnika</p>
                 <form onSubmit={handleAdd} className="mt-3 flex flex-col gap-2">
                   <label htmlFor="new-player-name" className="sr-only">
                     Imię uczestnika
@@ -1122,15 +1122,15 @@ export default function StorytellerDashboard() {
                   </button>
                 </form>
                 {game.participantCount >= MAX_PLAYERS && (
-                  <p className="mt-2 text-xs text-ink-muted">Lista pełna — maksimum 16 uczestników.</p>
+                  <p className="mt-2 text-meta text-ink-muted">Lista pełna — maksimum 16 uczestników.</p>
                 )}
               </section>
 
               {/* Virtual Circle card */}
               <section className="card md:col-span-4">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="display text-xs tracking-[0.25em] text-moss">Wirtualny Krąg</p>
-                  <span className="text-xs text-ink-muted">{game.participantCount} osób</span>
+                  <p className="display text-meta tracking-[0.25em] text-moss">Wirtualny Krąg</p>
+                  <span className="text-meta text-ink-muted">{game.participantCount} osób</span>
                 </div>
 
                 {sorted.length === 0 ? (
@@ -1183,7 +1183,7 @@ export default function StorytellerDashboard() {
                             ) : (
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-base text-ink-primary">{player.displayName}</p>
-                                <p className={`text-xs ${tone.className}`}>{tone.label}</p>
+                                <p className={`text-meta ${tone.className}`}>{tone.label}</p>
                               </div>
                             )}
                           </div>
@@ -1254,9 +1254,9 @@ export default function StorytellerDashboard() {
               {!setupCommitted ? (
                 <section className="card md:col-span-6">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Konfiguracja</p>
+                    <p className="display text-meta tracking-[0.25em] text-moss">Konfiguracja</p>
                     {setup && setup.regenerationIndex > 0 && (
-                      <span className="text-xs text-ink-muted">układ {setup.regenerationIndex}</span>
+                      <span className="text-meta text-ink-muted">układ {setup.regenerationIndex}</span>
                     )}
                   </div>
 
@@ -1278,7 +1278,7 @@ export default function StorytellerDashboard() {
                     </>
                   ) : (
                     <>
-                      <p className="mt-2 text-xs text-ink-muted">Grimuar — tajny układ ról</p>
+                      <p className="mt-2 text-meta text-ink-muted">Grimuar — tajny układ ról</p>
                       <ol className="mt-3 flex flex-col gap-2">
                         {grimoireAssignments.map((a) => {
                           const isRedHerring = a.playerId === candidate.fortuneTellerRedHerringPlayerId;
@@ -1307,7 +1307,7 @@ export default function StorytellerDashboard() {
                                   )}
                                 </span>
                                 <span
-                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${
+                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-meta ${
                                     a.trueAlignment === "EVIL"
                                       ? "border-danger/40 text-danger"
                                       : "border-success/40 text-success"
@@ -1317,7 +1317,7 @@ export default function StorytellerDashboard() {
                                 </span>
                               </div>
                               {isRedHerring && (
-                                <p className="mt-1 pl-11 text-xs text-ink-secondary">czerwony śledź Wróżki</p>
+                                <p className="mt-1 pl-11 text-meta text-ink-secondary">czerwony śledź Wróżki</p>
                               )}
                             </li>
                           );
@@ -1325,7 +1325,7 @@ export default function StorytellerDashboard() {
                       </ol>
 
                       <div className="mt-4 rounded-xl border border-line bg-card-soft/60 p-3">
-                        <p className="text-xs text-moss">Bluffy Demona</p>
+                        <p className="text-meta text-moss">Bluffy Demona</p>
                         <p className="mt-1 text-sm text-ink-secondary">
                           {candidate.demonBluffs.map(titleCaseCharacterId).join(", ")}
                         </p>
@@ -1357,12 +1357,12 @@ export default function StorytellerDashboard() {
                    blocker once the setup is locked (docs/11 §6). */
                 <section className="card md:col-span-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Konfiguracja</p>
-                    <span className="rounded-full border border-success/40 bg-success/10 px-3 py-1 text-xs text-success">
+                    <p className="display text-meta tracking-[0.25em] text-moss">Konfiguracja</p>
+                    <span className="rounded-full border border-success/40 bg-success/10 px-3 py-1 text-meta text-success">
                       zatwierdzono
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-ink-muted">
+                  <p className="mt-2 text-meta text-ink-muted">
                     Układ ról zatwierdzony i zablokowany.
                   </p>
                 </section>
@@ -1372,9 +1372,9 @@ export default function StorytellerDashboard() {
               {operationalCardVisible && (
                 <section className="card md:col-span-6">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Faza operacyjna</p>
+                    <p className="display text-meta tracking-[0.25em] text-moss">Faza operacyjna</p>
                     {operational && (
-                      <span className="text-xs text-ink-muted">cykl {operational.cycleNumber}</span>
+                      <span className="text-meta text-ink-muted">cykl {operational.cycleNumber}</span>
                     )}
                   </div>
 
@@ -1424,12 +1424,12 @@ export default function StorytellerDashboard() {
                                   <p className="truncate text-base text-ink-primary">
                                     {titleCaseCharacterId(action.kind)}
                                   </p>
-                                  <p className="truncate text-xs text-ink-muted">
+                                  <p className="truncate text-meta text-ink-muted">
                                     {action.actorDisplayName ?? "—"}
                                   </p>
                                 </div>
                                 <span
-                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${
+                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-meta ${
                                     isResolved
                                       ? "border-success/40 text-success"
                                       : isActive
@@ -1460,7 +1460,7 @@ export default function StorytellerDashboard() {
                               )}
 
                               {isResolved && (
-                                <p className="mt-1 pl-11 text-xs text-ink-muted">
+                                <p className="mt-1 pl-11 text-meta text-ink-muted">
                                   {resolutionText(action.resolutionJson, nameById)}
                                 </p>
                               )}
@@ -1486,9 +1486,9 @@ export default function StorytellerDashboard() {
               {investigationVisible && (
                 <section className="card md:col-span-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Śledztwo</p>
+                    <p className="display text-meta tracking-[0.25em] text-moss">Śledztwo</p>
                     {investigation && (
-                      <span className="text-xs text-ink-muted">cykl {investigation.cycleNumber}</span>
+                      <span className="text-meta text-ink-muted">cykl {investigation.cycleNumber}</span>
                     )}
                   </div>
 
@@ -1516,11 +1516,11 @@ export default function StorytellerDashboard() {
                         stan: {investigation?.nominationState ?? "—"}
                       </span>
                     )}
-                    {gameEnded && <span className="text-xs text-ink-muted">sprawa zakończona</span>}
+                    {gameEnded && <span className="text-meta text-ink-muted">sprawa zakończona</span>}
                   </div>
 
                   <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                    <p className="text-xs text-moss">Kandydat do egzekucji</p>
+                    <p className="text-meta text-moss">Kandydat do egzekucji</p>
                     {candidateId ? (
                       <p className="mt-1 text-base text-ink-primary">
                         {candidateName}{" "}
@@ -1556,13 +1556,13 @@ export default function StorytellerDashboard() {
                                 <p className="truncate text-base text-ink-primary">
                                   {n.nominatorName ?? "—"} → {n.nomineeName ?? "—"}
                                 </p>
-                                <p className="text-xs text-ink-muted">
+                                <p className="text-meta text-ink-muted">
                                   {nominationStatusLabel(n.status)}
                                 </p>
                               </div>
                               {locked && (
                                 <span
-                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${
+                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-meta ${
                                     n.qualified
                                       ? "border-success/40 text-success"
                                       : "border-line text-ink-muted"
@@ -1575,10 +1575,10 @@ export default function StorytellerDashboard() {
 
                             {triggerPending && n.decision && (
                               <div className="mt-2 rounded-xl border border-brass/40 bg-brass/10 p-3 pl-11 sm:pl-11">
-                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brass">
+                                <p className="text-meta font-semibold uppercase tracking-[0.2em] text-brass">
                                   Wymagana decyzja rejestracji
                                 </p>
-                                <p className="mt-1 text-xs text-ink-muted">
+                                <p className="mt-1 text-meta text-ink-muted">
                                   Jak ma zarejestrować się nominujący ({n.nominatorName ?? "—"})?
                                 </p>
                                 <div className="mt-2 flex flex-wrap gap-2">
@@ -1685,7 +1685,7 @@ export default function StorytellerDashboard() {
 
                   {travellers.length > 0 && (
                     <div className="mt-4 rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-xs text-moss">Podróżni</p>
+                      <p className="text-meta text-moss">Podróżni</p>
                       <ul className="mt-2 flex flex-col gap-2">
                         {travellers.map((p) => (
                           <li key={p.id} className="flex items-center justify-between gap-3">
@@ -1712,20 +1712,20 @@ export default function StorytellerDashboard() {
               {scenario && (
                 <section className="card md:col-span-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="display text-xs tracking-[0.25em] text-moss">Scenariusz</p>
-                    <span className="text-xs text-ink-muted">panel Mistrza Gry</span>
+                    <p className="display text-meta tracking-[0.25em] text-moss">Scenariusz</p>
+                    <span className="text-meta text-ink-muted">panel Mistrza Gry</span>
                   </div>
 
                   <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
                     {/* State */}
                     <div className="rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Etap</p>
+                      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Etap</p>
                       <p className="mt-1 text-base text-ink-primary">{scenario.stageId ?? "—"}</p>
-                      <p className="mt-3 text-xs uppercase tracking-[0.2em] text-ink-muted">Mapa</p>
+                      <p className="mt-3 text-meta uppercase tracking-[0.2em] text-ink-muted">Mapa</p>
                       <p className="mt-1 text-base text-ink-primary">
                         {mapVersionLabel(scenario.mapVersionId)}
                       </p>
-                      <p className="mt-3 text-xs uppercase tracking-[0.2em] text-ink-muted">Stany</p>
+                      <p className="mt-3 text-meta uppercase tracking-[0.2em] text-ink-muted">Stany</p>
                       {scenario.conditions.length === 0 ? (
                         <p className="mt-1 text-sm text-ink-muted">brak</p>
                       ) : (
@@ -1733,7 +1733,7 @@ export default function StorytellerDashboard() {
                           {scenario.conditions.map((condition) => (
                             <li
                               key={condition}
-                              className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-0.5 text-xs text-ink-primary"
+                              className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-0.5 text-meta text-ink-primary"
                             >
                               {condition}
                             </li>
@@ -1744,7 +1744,7 @@ export default function StorytellerDashboard() {
 
                     {/* Clues */}
                     <div className="rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Wskazówki</p>
+                      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Wskazówki</p>
                       {scenario.clues.length === 0 ? (
                         <p className="mt-1 text-sm text-ink-muted">Brak dowodów</p>
                       ) : (
@@ -1761,7 +1761,7 @@ export default function StorytellerDashboard() {
 
                     {/* Tasks */}
                     <div className="rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Zadania</p>
+                      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Zadania</p>
                       {scenario.tasks.length === 0 ? (
                         <p className="mt-1 text-sm text-ink-muted">Brak zadań</p>
                       ) : (
@@ -1772,7 +1772,7 @@ export default function StorytellerDashboard() {
                               <li key={task.id} className="text-sm text-ink-secondary">
                                 <span className="text-ink-primary">{task.title}</span>
                                 <span
-                                  className={`ml-1 text-xs ${done ? "text-success" : "text-brass"}`}
+                                  className={`ml-1 text-meta ${done ? "text-success" : "text-brass"}`}
                                 >
                                   · {taskStateLabel(task.state)}
                                 </span>
@@ -1785,7 +1785,7 @@ export default function StorytellerDashboard() {
 
                     {/* Scans */}
                     <div className="rounded-xl border border-line bg-card-soft/60 p-3 md:col-span-2">
-                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Skanowania</p>
+                      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Skanowania</p>
                       {scenario.scans.length === 0 ? (
                         <p className="mt-1 text-sm text-ink-muted">brak</p>
                       ) : (
@@ -1798,7 +1798,7 @@ export default function StorytellerDashboard() {
                               <span className="text-ink-primary">
                                 {scan.playerName ?? scan.playerId}
                               </span>
-                              <span className="rounded-full border border-line px-2 py-0.5 font-mono text-xs text-ink-muted">
+                              <span className="rounded-full border border-line px-2 py-0.5 font-mono text-meta text-ink-muted">
                                 {scan.qrTokenId}
                               </span>
                             </li>
@@ -1810,7 +1810,7 @@ export default function StorytellerDashboard() {
 
                   {/* Override controls — visually distinct from role/nomination controls */}
                   <div className="mt-4 rounded-xl border border-dashed border-brass/40 bg-elevated/60 p-3">
-                    <p className="display text-xs tracking-[0.25em] text-brass">
+                    <p className="display text-meta tracking-[0.25em] text-brass">
                       Nadpisania scenariusza
                     </p>
 
@@ -1818,7 +1818,7 @@ export default function StorytellerDashboard() {
                       {/* Reveal clue */}
                       <div className="flex flex-wrap items-end gap-2">
                         <label className="min-w-40 flex-1">
-                          <span className="mb-1 block text-xs text-ink-muted">Odsłoń wskazówkę</span>
+                          <span className="mb-1 block text-meta text-ink-muted">Odsłoń wskazówkę</span>
                           <select
                             value={revealClueId}
                             onChange={(e) => setRevealClueId(e.target.value)}
@@ -1832,7 +1832,7 @@ export default function StorytellerDashboard() {
                           </select>
                         </label>
                         <label className="min-w-40 flex-1">
-                          <span className="mb-1 block text-xs text-ink-muted">
+                          <span className="mb-1 block text-meta text-ink-muted">
                             Dla gracza (opcjonalnie)
                           </span>
                           <select
@@ -1860,7 +1860,7 @@ export default function StorytellerDashboard() {
 
                       {/* Complete task */}
                       <div>
-                        <p className="text-xs text-ink-muted">Ukończ zadanie</p>
+                        <p className="text-meta text-ink-muted">Ukończ zadanie</p>
                         <div className="mt-1 flex flex-wrap gap-2">
                           {availableTasks.length === 0 ? (
                             <span className="text-sm text-ink-muted">Brak dostępnych zadań.</span>
@@ -1883,7 +1883,7 @@ export default function StorytellerDashboard() {
                       {/* Set stage */}
                       <div className="flex flex-wrap items-end gap-2">
                         <label className="min-w-40 flex-1">
-                          <span className="mb-1 block text-xs text-ink-muted">Zmień etap</span>
+                          <span className="mb-1 block text-meta text-ink-muted">Zmień etap</span>
                           <input
                             value={stageInput}
                             onChange={(e) => setStageInput(e.target.value)}
@@ -1904,7 +1904,7 @@ export default function StorytellerDashboard() {
 
                       {/* Set map */}
                       <div>
-                        <p className="text-xs text-ink-muted">Odblokuj mapę</p>
+                        <p className="text-meta text-ink-muted">Odblokuj mapę</p>
                         <div className="mt-1 flex flex-wrap gap-2">
                           {MAP_OPTIONS.map((option) => {
                             const active = scenario.mapVersionId === option.id;
@@ -1930,7 +1930,7 @@ export default function StorytellerDashboard() {
 
                       {/* INJURED condition toggle */}
                       <div>
-                        <p className="text-xs text-ink-muted">Stan: INJURED</p>
+                        <p className="text-meta text-ink-muted">Stan: INJURED</p>
                         <button
                           type="button"
                           onClick={() => handleScenarioSetCondition("INJURED", !injured)}
@@ -1953,7 +1953,7 @@ export default function StorytellerDashboard() {
               {/* Control card (Slice 6) */}
               <section className="card md:col-span-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="display text-xs tracking-[0.25em] text-moss">Sterowanie</p>
+                  <p className="display text-meta tracking-[0.25em] text-moss">Sterowanie</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <RealtimeBadge health={realtime} />
                     <button
@@ -1991,7 +1991,7 @@ export default function StorytellerDashboard() {
                     </div>
 
                     <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-xs text-moss">Obecność</p>
+                      <p className="text-meta text-moss">Obecność</p>
                       {control.presence.length === 0 ? (
                         <p className="mt-1 text-sm text-ink-muted">brak połączeń</p>
                       ) : (
@@ -2006,11 +2006,11 @@ export default function StorytellerDashboard() {
                               </span>
                               <span className="flex shrink-0 items-center gap-2">
                                 <span
-                                  className={`rounded-full border px-2 py-0.5 text-xs ${presenceTone(p.connection)}`}
+                                  className={`rounded-full border px-2 py-0.5 text-meta ${presenceTone(p.connection)}`}
                                 >
                                   {p.connection}
                                 </span>
-                                <span className="text-xs tabular-nums text-ink-muted">
+                                <span className="text-meta tabular-nums text-ink-muted">
                                   {formatTime(p.lastSeenAt)}
                                 </span>
                               </span>
@@ -2022,24 +2022,24 @@ export default function StorytellerDashboard() {
 
                     {control.blockingAction ? (
                       <div className="mt-3 rounded-xl border border-brass/40 bg-brass/10 p-3">
-                        <p className="text-xs text-moss">Blokująca akcja</p>
+                        <p className="text-meta text-moss">Blokująca akcja</p>
                         <p className="mt-1 text-sm text-ink-primary">
                           {titleCaseCharacterId(control.blockingAction.kind)}{" "}
                           <span className="text-brass">· {control.blockingAction.status}</span>
                         </p>
                         {control.blockingAction.actorPlayerId && (
-                          <p className="mt-0.5 text-xs text-ink-muted">
+                          <p className="mt-0.5 text-meta text-ink-muted">
                             {nameById.get(control.blockingAction.actorPlayerId) ??
                               control.blockingAction.actorPlayerId}
                           </p>
                         )}
                       </div>
                     ) : (
-                      <p className="mt-3 text-xs text-ink-muted">Brak blokującej akcji.</p>
+                      <p className="mt-3 text-meta text-ink-muted">Brak blokującej akcji.</p>
                     )}
 
                     <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-xs text-moss">Ostatnie zdarzenie</p>
+                      <p className="text-meta text-moss">Ostatnie zdarzenie</p>
                       {control.lastEvent ? (
                         <p className="mt-1 text-sm text-ink-secondary">
                           <span className="tabular-nums">#{control.lastEvent.sequence}</span>{" "}
@@ -2052,7 +2052,7 @@ export default function StorytellerDashboard() {
                       ) : (
                         <p className="mt-1 text-sm text-ink-muted">brak</p>
                       )}
-                      <p className="mt-3 text-xs text-moss">Ostatni punkt kontrolny</p>
+                      <p className="mt-3 text-meta text-moss">Ostatni punkt kontrolny</p>
                       {control.latestCheckpoint ? (
                         <p className="mt-1 text-sm text-ink-secondary">
                           wersja {control.latestCheckpoint.gameVersion}
@@ -2069,7 +2069,7 @@ export default function StorytellerDashboard() {
                     </div>
 
                     <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-xs text-moss">Spójność</p>
+                      <p className="text-meta text-moss">Spójność</p>
                       {control.consistencyIssues.every((issue) => issue.ok) ? (
                         <p className="mt-1 text-sm text-success">Spójność OK</p>
                       ) : (
@@ -2087,7 +2087,7 @@ export default function StorytellerDashboard() {
 
                     <div className="mt-3 flex flex-wrap items-end gap-2">
                       <label className="min-w-40 flex-1">
-                        <span className="mb-1 block text-xs text-ink-muted">Powód (opcjonalnie)</span>
+                        <span className="mb-1 block text-meta text-ink-muted">Powód (opcjonalnie)</span>
                         <input
                           value={checkpointReason}
                           onChange={(e) => setCheckpointReason(e.target.value)}
@@ -2106,7 +2106,7 @@ export default function StorytellerDashboard() {
                       </button>
                     </div>
                     {checkpointNote && (
-                      <p className="mt-2 text-xs text-ink-secondary">{checkpointNote}</p>
+                      <p className="mt-2 text-meta text-ink-secondary">{checkpointNote}</p>
                     )}
                   </>
                 )}
@@ -2115,8 +2115,8 @@ export default function StorytellerDashboard() {
               {/* Recovery card (Slice 6) */}
               <section className="card critical-card md:col-span-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="display text-xs tracking-[0.25em] text-moss">Odzyskiwanie</p>
-                  <span className="text-xs text-ink-secondary">nadpisania stanu</span>
+                  <p className="display text-meta tracking-[0.25em] text-moss">Odzyskiwanie</p>
+                  <span className="text-meta text-ink-secondary">nadpisania stanu</span>
                 </div>
 
                 <form
@@ -2127,7 +2127,7 @@ export default function StorytellerDashboard() {
                   className="mt-3 flex flex-col gap-2"
                 >
                   <label>
-                    <span className="mb-1 block text-xs text-ink-muted">Rodzaj nadpisania</span>
+                    <span className="mb-1 block text-meta text-ink-muted">Rodzaj nadpisania</span>
                     <select
                       value={recoveryKind}
                       onChange={(e) => setRecoveryKind(e.target.value as RecoveryKind)}
@@ -2142,7 +2142,7 @@ export default function StorytellerDashboard() {
                   </label>
 
                   <label>
-                    <span className="mb-1 block text-xs text-ink-muted">
+                    <span className="mb-1 block text-meta text-ink-muted">
                       {recoveryKind === "CORRECT_ALIVE" || recoveryKind === "RESTORE_GHOST_VOTE"
                         ? "Identyfikator gracza"
                         : "Identyfikator akcji"}
@@ -2158,7 +2158,7 @@ export default function StorytellerDashboard() {
 
                   {recoveryKind === "CORRECT_ALIVE" && (
                     <label>
-                      <span className="mb-1 block text-xs text-ink-muted">Stan życia</span>
+                      <span className="mb-1 block text-meta text-ink-muted">Stan życia</span>
                       <select
                         value={recoveryAlive ? "true" : "false"}
                         onChange={(e) => setRecoveryAlive(e.target.value === "true")}
@@ -2171,7 +2171,7 @@ export default function StorytellerDashboard() {
                   )}
 
                   <label>
-                    <span className="mb-1 block text-xs text-ink-muted">Powód (wymagany)</span>
+                    <span className="mb-1 block text-meta text-ink-muted">Powód (wymagany)</span>
                     <input
                       value={recoveryReason}
                       onChange={(e) => setRecoveryReason(e.target.value)}
@@ -2194,9 +2194,9 @@ export default function StorytellerDashboard() {
               {/* Audit card (Slice 6) */}
               <section className="card md:col-span-6">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="display text-xs tracking-[0.25em] text-moss">Audyt</p>
+                  <p className="display text-meta tracking-[0.25em] text-moss">Audyt</p>
                   {audit && (
-                    <span className="text-xs text-ink-muted">{audit.events.length} zdarzeń</span>
+                    <span className="text-meta text-ink-muted">{audit.events.length} zdarzeń</span>
                   )}
                 </div>
 
@@ -2250,17 +2250,17 @@ export default function StorytellerDashboard() {
                           key={event.sequence}
                           className="flex flex-wrap items-baseline gap-x-3 rounded-lg px-2 py-1.5 text-sm odd:bg-card-soft/40"
                         >
-                          <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-ink-muted">
+                          <span className="w-12 shrink-0 font-mono text-meta tabular-nums text-ink-muted">
                             #{event.sequence}
                           </span>
                           <span className="min-w-0 break-words text-ink-primary">{event.eventType}</span>
                           <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">
                             {event.category}
                           </span>
-                          <span className="min-w-0 truncate text-xs text-ink-muted">
+                          <span className="min-w-0 truncate text-meta text-ink-muted">
                             {event.actor ?? "—"}
                           </span>
-                          <span className="ml-auto shrink-0 text-xs tabular-nums text-ink-muted">
+                          <span className="ml-auto shrink-0 text-meta tabular-nums text-ink-muted">
                             {formatTime(event.createdAt)}
                           </span>
                         </li>
@@ -2367,7 +2367,7 @@ function ClaimModal({
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="display text-xs tracking-[0.25em] text-moss">Link do odbioru</p>
+            <p className="display text-meta tracking-[0.25em] text-moss">Link do odbioru</p>
             <h2 className="mt-1 break-words text-lg text-ink-primary">{playerName}</h2>
           </div>
           <button
@@ -2403,7 +2403,7 @@ function ClaimModal({
                 {copied ? "Skopiowano" : "Kopiuj"}
               </button>
             </div>
-            <p className="mt-3 text-xs text-ink-muted">
+            <p className="mt-3 text-meta text-ink-muted">
               Ten link działa raz. Skopiuj go teraz — nie zostanie pokazany ponownie.
             </p>
           </>
@@ -2471,7 +2471,7 @@ function ResetAccessModal({
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="display text-xs tracking-[0.25em] text-moss">Reset dostępu</p>
+            <p className="display text-meta tracking-[0.25em] text-moss">Reset dostępu</p>
             <h2 className="mt-1 break-words text-lg text-ink-primary">{playerName}</h2>
           </div>
           <button
@@ -2509,7 +2509,7 @@ function ResetAccessModal({
                 {copied ? "Skopiowano" : "Kopiuj"}
               </button>
             </div>
-            <p className="mt-3 text-xs text-ink-muted">
+            <p className="mt-3 text-meta text-ink-muted">
               Ten token działa raz i zastępuje poprzedni dostęp. Skopiuj go teraz — nie zostanie
               pokazany ponownie.
             </p>

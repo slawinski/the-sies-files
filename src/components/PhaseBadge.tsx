@@ -44,7 +44,7 @@ export default function PhaseBadge({
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border border-line bg-card-soft/60 px-3 py-1 text-xs text-ink-secondary ${
+      className={`inline-flex items-center rounded-full border border-line bg-card-soft/60 px-3 py-1 text-meta text-ink-secondary ${
         pulsing ? "phase-pulse" : ""
       } ${className}`}
     >

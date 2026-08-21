@@ -14,7 +14,9 @@ import {
 import { applyBaron, baseCounts } from "./counts";
 import type { SetupAssignment, SetupCandidate } from "./types";
 
-export const SETUP_GENERATOR_VERSION = 1;
+export const SETUP_GENERATOR_VERSION = 2;
+/** Legacy generator version (xorshift32) — kept for stored-draft compatibility. */
+export const SETUP_GENERATOR_VERSION_V1 = 1;
 
 export interface SetupPlayer {
   playerId: string;

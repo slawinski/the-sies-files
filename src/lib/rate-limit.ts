@@ -20,6 +20,11 @@ export function hashKeyPart(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
 }
 
+/** Test-only override (audit spec 22 §3.5): safe defaults, explicit opt-out. */
+export function isRateLimitingDisabled(): boolean {
+  return process.env.RATE_LIMIT_DISABLED === "1";
+}
+
 export function clientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0]!.trim();
@@ -27,6 +32,8 @@ export function clientIp(req: Request): string {
 }
 
 export async function rateLimit(key: string, limit: number, windowMs: number): Promise<void> {
+  if (isRateLimitingDisabled()) return;
+
   const now = Date.now();
   const windowStart = new Date(Math.floor(now / windowMs) * windowMs);
 
