@@ -8,6 +8,7 @@ import { startOperational, submitAction, resolveAction, completeOperational } fr
 import { loadStorytellerData } from "@/modules/projections/load";
 import { getScenarioDefinition } from "@/modules/scenario/definition";
 import { getScriptDefinition } from "@/modules/trouble-brewing/script";
+import { MAP_LAYERS } from "@/modules/map/layers";
 
 beforeEach(resetDb);
 
@@ -49,6 +50,8 @@ describe("Milestone 8 — release hardening", () => {
     const clueIds = new Set(def.clues.map((c) => c.id));
     const taskIds = new Set(def.tasks.map((t) => t.id));
     const mapIds = new Set(def.mapVersions.map((m) => m.id));
+    const layerIds = new Set(MAP_LAYERS.map((l) => l.id));
+    const poiIds = new Set(def.pois.map((p) => p.id));
 
     expect(mapIds.has(def.initialMapVersionId)).toBe(true);
     for (const qr of def.qrTokens) {
@@ -65,8 +68,17 @@ describe("Milestone 8 — release hardening", () => {
       }
     }
     for (const m of def.mapVersions) {
-      const ids = m.locations.map((l) => l.id);
-      expect(new Set(ids).size).toBe(ids.length); // unique locations
+      const ids = m.unlockedLayerIds;
+      expect(new Set(ids).size).toBe(ids.length); // unique layers
+      for (const layerId of ids) expect(layerIds.has(layerId), `version ${m.id}`).toBe(true);
+    }
+    for (const p of def.pois) {
+      expect(poiIds.has(p.id)).toBe(true);
+      expect(layerIds.has(p.layerId), `poi ${p.id}`).toBe(true);
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(1);
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      expect(p.y).toBeLessThanOrEqual(1);
     }
   });
 

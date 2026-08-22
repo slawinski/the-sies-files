@@ -22,6 +22,7 @@ import type {
 } from "@prisma/client";
 import { DomainError } from "@/lib/errors";
 import { isRosterReady } from "@/modules/game-session/roster.rules";
+import { buildMapStateDto, type MapStateDto } from "@/modules/map/state";
 import { buildRoleReveal, type RoleReveal } from "@/modules/setup/reveal";
 import type { SetupCandidate } from "@/modules/setup/types";
 import { getScenarioDefinition } from "@/modules/scenario/definition";
@@ -149,7 +150,7 @@ export interface PlayerNominationDto {
 export interface PlayerScenarioDto {
   stageId: string | null;
   mapVersionId: string | null;
-  mapLocations: { id: string; x: number; y: number }[];
+  map: MapStateDto | null;
   clues: { id: string; title: string; body: string }[];
   tasks: { id: string; title: string; state: string }[];
   conditions: string[];
@@ -240,7 +241,6 @@ function buildPlayerScenario(
     data.scenarioState.scenarioVersion ?? 1,
   );
   const mapVersionId = data.scenarioState.mapVersionId ?? def.initialMapVersionId;
-  const map = def.mapVersions.find((m) => m.id === mapVersionId);
   const clues = data.discoveries
     .filter((d) => d.objectType === "CLUE")
     .filter((d) => {
@@ -264,7 +264,11 @@ function buildPlayerScenario(
   return {
     stageId: data.scenarioState.stageId,
     mapVersionId,
-    mapLocations: map?.locations ?? [],
+    map: buildMapStateDto({
+      gameId: data.scenarioState.gameId,
+      scenarioState: data.scenarioState,
+      def,
+    }),
     clues,
     tasks,
     conditions: data.conditions.map((c) => c.conditionId),
@@ -458,7 +462,7 @@ export function buildStorytellerProjection(
       ) ?? {
         stageId: null,
         mapVersionId: null,
-        mapLocations: [],
+        map: null,
         clues: [],
         tasks: [],
         conditions: [],

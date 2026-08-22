@@ -250,7 +250,8 @@ export async function claimPlayer(
 
 /**
  * Claim every player into its own isolated browser context (each with its own
- * cookie jar) so E2E can drive per-player vote/nomination endpoints.
+ * cookie jar) so E2E can drive per-player vote/nomination endpoints — and,
+ * when needed, open real pages (`contexts[i]`) for UI assertions.
  */
 export async function claimAllPlayers(
   st: APIRequestContext,
@@ -258,9 +259,14 @@ export async function claimAllPlayers(
   gameId: string,
   playerIds: string[],
   version: number,
-): Promise<{ sessions: Array<{ playerId: string; request: APIRequestContext }>; version: number }> {
+): Promise<{
+  sessions: Array<{ playerId: string; request: APIRequestContext }>;
+  contexts: Array<import("@playwright/test").BrowserContext>;
+  version: number;
+}> {
   let v = version;
   const sessions: Array<{ playerId: string; request: APIRequestContext }> = [];
+  const contexts: Array<import("@playwright/test").BrowserContext> = [];
   for (const playerId of playerIds) {
     const context = await browser.newContext({ baseURL: E2E_BASE_URL });
     const res = await st.post(`/api/v1/games/${gameId}/players/${playerId}/claim-token`, {
@@ -276,6 +282,7 @@ export async function claimAllPlayers(
     // The claim itself bumps the game version (PLAYER_CLAIMED).
     v = (await claim.json()).version;
     sessions.push({ playerId, request: context.request });
+    contexts.push(context);
   }
-  return { sessions, version: v };
+  return { sessions, contexts, version: v };
 }

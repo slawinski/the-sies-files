@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { CHARACTER_IDS, CHARACTER_DEFINITIONS, characterDisplayName } from "@/modules/trouble-brewing/characters";
-import { PRODUCTION_CONTENT_MANIFEST, MAP_ASSET_PATHS } from "@/content/manifest";
+import { PRODUCTION_CONTENT_MANIFEST, MAP_ASSET_PATHS, MAP_ASSET_SET } from "@/content/manifest";
 import { getScenarioDefinition } from "@/modules/scenario/definition";
 
 describe("R4 — production content gate", () => {
@@ -37,6 +37,17 @@ describe("R4 — production content gate", () => {
     );
     if (missing.length > 0) {
       expect(PRODUCTION_CONTENT_MANIFEST.productionReady).toBe(false);
+    }
+  });
+
+  it("the extended map asset is a protected API resource, never a public static path", () => {
+    // Anti-spoiler boundary (map-reveal-system-spec §8.2): the reveal overlay
+    // must not be publicly addressable — only the authorized route serves it.
+    expect(MAP_ASSET_SET.extended.protectedApiRoute).toBe(true);
+    expect(MAP_ASSET_SET.extended.src).toMatch(/^\/api\/v1\/games\/:gameId\/map\/layers\/WEST_AREA$/);
+    expect(MAP_ASSET_PATHS).not.toContain(MAP_ASSET_SET.extended.src);
+    for (const src of MAP_ASSET_PATHS) {
+      expect(src.startsWith("/api/")).toBe(false);
     }
   });
 });

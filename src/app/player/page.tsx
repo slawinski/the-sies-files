@@ -1031,8 +1031,8 @@ export default function PlayerWaiting() {
                       </span>
                     </div>
                     <MapCard
+                      map={scenario.map}
                       mapVersionId={scenario.mapVersionId}
-                      mapLocations={scenario.mapLocations}
                     />
                   </div>
 

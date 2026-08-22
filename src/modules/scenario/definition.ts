@@ -2,6 +2,9 @@
 // (docs/08 §3–§13). Content is data, not code; the engine is not hardcoded to
 // final prose. These are development fixtures, clearly non-production.
 
+// Type-only import keeps the map layer module free of scenario dependencies.
+import type { MapLayerId, MapPoiKind, MapPoiVisibility } from "@/modules/map/layers";
+
 export type VisibilityScope =
   | "PUBLIC"
   | "DISCOVERER_ONLY"
@@ -12,15 +15,20 @@ export type VisibilityScope =
 
 export type QrRepeatPolicy = "REPEATABLE_PER_PLAYER" | "ONCE_PER_PLAYER" | "ONCE_PER_GAME";
 
-export interface MapLocationDefinition {
-  id: string;
-  x: number; // normalized 0..1
-  y: number; // normalized 0..1
-}
-
 export interface MapVersionDefinition {
   id: string;
-  locations: MapLocationDefinition[];
+  unlockedLayerIds: MapLayerId[];
+}
+
+export interface MapPoiDefinition {
+  id: string;
+  label: string; // player-facing label (Polish UI, content-authored)
+  x: number; // normalized 0..1 against the full canonical canvas
+  y: number; // normalized 0..1 against the full canonical canvas
+  layerId: MapLayerId;
+  kind: MapPoiKind;
+  visibleWhen: MapPoiVisibility;
+  interactive: boolean;
 }
 
 export interface ClueDefinition {
@@ -64,6 +72,7 @@ export interface ScenarioDefinition {
   initialStageId: string;
   initialMapVersionId: string;
   mapVersions: MapVersionDefinition[];
+  pois: MapPoiDefinition[];
   qrTokens: QrTokenDefinition[];
   clues: ClueDefinition[];
   tasks: TaskDefinition[];
@@ -76,40 +85,28 @@ export const TSF_MILLIONAIRE: ScenarioDefinition = {
   initialStageId: "stage-start",
   initialMapVersionId: "MAP_BASE",
   mapVersions: [
-    {
-      id: "MAP_BASE",
-      locations: [
-        { id: "HOUSE", x: 0.72, y: 0.22 },
-        { id: "OUTBUILDING", x: 0.6, y: 0.3 },
-        { id: "TERRACE", x: 0.55, y: 0.36 },
-        { id: "FIELD", x: 0.4, y: 0.2 },
-        { id: "FIREPIT", x: 0.45, y: 0.62 },
-        { id: "HAMMOCK_APPLES", x: 0.3, y: 0.75 },
-        { id: "PARKING", x: 0.82, y: 0.45 },
-        { id: "GATE", x: 0.9, y: 0.5 },
-        { id: "WICKET", x: 0.68, y: 0.58 },
-        { id: "TRASH", x: 0.85, y: 0.68 },
-      ],
-    },
-    {
-      id: "MAP_EXTENDED",
-      locations: [
-        { id: "HOUSE", x: 0.72, y: 0.22 },
-        { id: "OUTBUILDING", x: 0.6, y: 0.3 },
-        { id: "TERRACE", x: 0.55, y: 0.36 },
-        { id: "FIELD", x: 0.4, y: 0.2 },
-        { id: "FIREPIT", x: 0.45, y: 0.62 },
-        { id: "HAMMOCK_APPLES", x: 0.3, y: 0.75 },
-        { id: "PARKING", x: 0.82, y: 0.45 },
-        { id: "GATE", x: 0.9, y: 0.5 },
-        { id: "WICKET", x: 0.68, y: 0.58 },
-        { id: "TRASH", x: 0.85, y: 0.68 },
-        { id: "WEST_PATH", x: 0.22, y: 0.5 },
-        { id: "STREAM", x: 0.14, y: 0.42 },
-        { id: "WOODS", x: 0.1, y: 0.6 },
-        { id: "HERMITAGE", x: 0.06, y: 0.48 },
-      ],
-    },
+    { id: "MAP_BASE", unlockedLayerIds: ["BASE"] },
+    { id: "MAP_EXTENDED", unlockedLayerIds: ["BASE", "WEST_AREA"] },
+  ],
+  // POI coordinates derived from production assets via structural analysis;
+  // final visual tuning is spec step 14.
+  pois: [
+    // BASE layer — always visible.
+    { id: "HOUSE", label: "Dom", x: 0.68, y: 0.31, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "OUTBUILDING", label: "Zabudowania", x: 0.6, y: 0.33, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "TERRACE", label: "Taras", x: 0.58, y: 0.4, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "FIELD", label: "Boisko", x: 0.56, y: 0.2, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "FIREPIT", label: "Palenisko", x: 0.52, y: 0.55, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "HAMMOCK_APPLES", label: "Hamaki i jabłonie", x: 0.62, y: 0.6, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "PARKING", label: "Parking", x: 0.86, y: 0.42, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "GATE", label: "Brama", x: 0.93, y: 0.42, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "WICKET", label: "Furtka", x: 0.72, y: 0.58, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    { id: "TRASH", label: "Śmietnik", x: 0.88, y: 0.62, layerId: "BASE", kind: "LOCATION", visibleWhen: "ALWAYS", interactive: false },
+    // WEST_AREA layer — hidden until the layer unlocks.
+    { id: "WEST_PATH", label: "Ścieżka na zachód", x: 0.32, y: 0.47, layerId: "WEST_AREA", kind: "LOCATION", visibleWhen: "LAYER_UNLOCKED", interactive: false },
+    { id: "STREAM", label: "Strumień", x: 0.13, y: 0.52, layerId: "WEST_AREA", kind: "LOCATION", visibleWhen: "LAYER_UNLOCKED", interactive: false },
+    { id: "WOODS", label: "Las", x: 0.2, y: 0.36, layerId: "WEST_AREA", kind: "LOCATION", visibleWhen: "LAYER_UNLOCKED", interactive: false },
+    { id: "HERMITAGE", label: "Pustelnia", x: 0.07, y: 0.56, layerId: "WEST_AREA", kind: "LOCATION", visibleWhen: "LAYER_UNLOCKED", interactive: false },
   ],
   qrTokens: [
     {

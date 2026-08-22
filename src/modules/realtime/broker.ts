@@ -11,7 +11,15 @@ export interface RealtimeEvent {
 
 type Listener = (event: RealtimeEvent) => void;
 
-const listeners = new Map<string, Set<Listener>>();
+// The listener registry lives on globalThis, not module scope: in dev, on-demand
+// route compilation can load separate module instances for the SSE stream route
+// and the mutating routes, which silently lost events before. Production
+// bundles share a single instance either way.
+const globalBroker = globalThis as typeof globalThis & {
+  __tsfRealtimeListeners?: Map<string, Set<Listener>>;
+};
+const listeners: Map<string, Set<Listener>> =
+  globalBroker.__tsfRealtimeListeners ?? (globalBroker.__tsfRealtimeListeners = new Map());
 
 export function subscribe(gameId: string, listener: Listener): () => void {
   let set = listeners.get(gameId);

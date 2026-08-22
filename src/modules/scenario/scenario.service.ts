@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { runCommand } from "@/lib/command";
 import { DomainError } from "@/lib/errors";
 import { EVENTS } from "@/modules/events/event-types";
+import { nextMapRevision } from "@/modules/map/state";
 import { publish } from "@/modules/realtime/broker";
 import { getScenarioDefinition, type ScenarioAction, type ScenarioDefinition } from "./definition";
 
@@ -72,7 +73,7 @@ async function ensureScenarioState(tx: Prisma.TransactionClient, gameId: string)
   const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
   return tx.scenarioState.upsert({
     where: { gameId },
-    create: { gameId, scenarioId: def.id, scenarioVersion: def.version, stageId: def.initialStageId, mapVersionId: def.initialMapVersionId, stateJson: {} },
+    create: { gameId, scenarioId: def.id, scenarioVersion: def.version, stageId: def.initialStageId, mapVersionId: def.initialMapVersionId, stateJson: { mapRevision: 1 } },
     update: {},
   });
 }
@@ -167,9 +168,16 @@ export async function scanQr({
           outcome.conditions.push(a.conditionId);
           await appendEvent(active ? EVENTS.SCENARIO_CONDITION_APPLIED : EVENTS.SCENARIO_CONDITION_CLEARED, { conditionId: a.conditionId, playerId });
         } else if (a.type === "SET_MAP_VERSION") {
-          await tx.scenarioState.update({ where: { gameId }, data: { mapVersionId: a.mapVersionId } });
+          // Re-read inside the tx (cheap, correct under concurrency) and bump
+          // the map revision so clients can detect a newly authorized reveal.
+          const existingState = await tx.scenarioState.findUnique({ where: { gameId } });
+          const next = nextMapRevision(existingState);
+          await tx.scenarioState.update({
+            where: { gameId },
+            data: { mapVersionId: a.mapVersionId, stateJson: next.stateJson as Prisma.InputJsonValue },
+          });
           outcome.mapVersionId = a.mapVersionId;
-          await appendEvent(EVENTS.MAP_UNLOCKED, { mapVersionId: a.mapVersionId });
+          await appendEvent(EVENTS.MAP_UNLOCKED, { mapVersionId: a.mapVersionId, revision: next.revision });
         } else if (a.type === "SET_STAGE") {
           await tx.scenarioState.update({ where: { gameId }, data: { stageId: a.stageId } });
           await appendEvent(EVENTS.SCENARIO_STAGE_CHANGED, { stageId: a.stageId });
@@ -297,7 +305,14 @@ export async function storytellerSetMap({
       const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
       if (!def.mapVersions.some((m) => m.id === mapVersionId)) throw new DomainError("INVALID_TARGET", "Unknown map version");
       await ensureScenarioState(tx, gameId);
-      await tx.scenarioState.update({ where: { gameId }, data: { mapVersionId } });
+      // Same revision bump as the QR path so a storyteller-forced unlock is
+      // indistinguishable to clients from an authoritative one.
+      const existingState = await tx.scenarioState.findUnique({ where: { gameId } });
+      const next = nextMapRevision(existingState);
+      await tx.scenarioState.update({
+        where: { gameId },
+        data: { mapVersionId, stateJson: next.stateJson as Prisma.InputJsonValue },
+      });
       await appendEvent(EVENTS.SCENARIO_OVERRIDE_APPLIED, { kind: "SET_MAP", mapVersionId });
       return {};
     },

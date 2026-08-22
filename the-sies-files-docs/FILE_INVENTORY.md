@@ -17,10 +17,16 @@ Generated files:
 - 13_ADR_001_TRAVELLER_BUREAUCRAT.md
 - 14_ACCEPTANCE_TRACEABILITY_MATRIX.md
 - 15_LLM_IMPLEMENTATION_HANDOFF.md
+- 16_ADR_002_CLAIM_TOKEN_TRANSPORT.md
+- map-reveal-system-spec.md (implemented 2026-08-22 — see §23 addendum)
+- 17_ADR_003_MAP_REVEAL_LAYERS.md
 - FILE_INVENTORY.md
 
 Assets:
 - assets/map-reference.png
+- assets/maps/sieski/*.png — canonical map source PNGs (base/master/west-reveal)
+- assets/maps/sieski/map-west-reveal-*.webp — protected reveal overlay (never public)
+- public/maps/sieski/map-base-*.webp — public base terrain (content-hashed)
 
 Audit & remediation (sibling directory `the-sies-files-audit/`):
 - 17_AUDIT_AND_REMEDIATION_INDEX_v1.md

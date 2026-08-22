@@ -260,10 +260,36 @@ export interface ScenarioTaskDto {
   state: string;
 }
 
+// ---- Map reveal system (docs/map-reveal-system-spec.md) ---------------------
+
+export interface MapLayerDto {
+  id: string;
+  kind: "BASE" | "REVEAL";
+  url: string;
+  zIndex: number;
+}
+
+export interface MapPoiDto {
+  id: string;
+  label: string;
+  x: number; // normalized 0..1 against the full canonical canvas
+  y: number;
+  layerId: string;
+  kind: "LOCATION" | "CLUE" | "QR" | "OBJECTIVE" | "SYSTEM";
+  visibleWhen: "ALWAYS" | "LAYER_UNLOCKED" | "DISCOVERED";
+  interactive: boolean;
+}
+
+export interface MapStateDto {
+  revision: number;
+  layers: MapLayerDto[];
+  pois: MapPoiDto[];
+}
+
 export interface PlayerScenarioDto {
   stageId: string | null;
   mapVersionId: string | null;
-  mapLocations: { id: string; x: number; y: number }[];
+  map: MapStateDto | null;
   clues: ScenarioClueDto[];
   tasks: ScenarioTaskDto[];
   conditions: string[];
