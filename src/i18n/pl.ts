@@ -53,4 +53,22 @@ export const pl = {
     success: "Skan przyjęty.",
     preview: "Podgląd kamery",
   },
+  // Player bottom navigation (audit 18 UX-09)
+  nav: {
+    case: "Akta",
+    people: "Gracze",
+    journal: "Dziennik",
+    map: "Mapa",
+    aria: "Nawigacja gracza",
+  },
+  // Storyteller rail (audit 18 UX-02)
+  stNav: {
+    control: "Control",
+    players: "Gracze",
+    grimoire: "Grimuar",
+    scenario: "Scenariusz",
+    audit: "Audyt",
+    system: "System",
+    aria: "Sekcje prowadzącego",
+  },
 } as const;

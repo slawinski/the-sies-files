@@ -38,7 +38,17 @@ test("E2E-07: annex QR unlocks the western map layer with server authorization",
   // --- Before unlock: anti-spoiler boundary (DOM) --------------------------
   const playerPage = await contexts[0].newPage();
   await playerPage.goto("/player");
+
+  // The player shell opens on the deliberate private role reveal (spec 19 §6.3):
+  // nothing else renders until the role is acknowledged.
+  await playerPage.getByRole("button", { name: "Pokaż moją rolę" }).click();
+  await playerPage.getByRole("button", { name: "Zapamiętałem — ukryj" }).click();
+
   await expect(playerPage.locator(".map-viewport")).toBeVisible();
+
+  // The acknowledgement bumps the game version — refresh the optimistic version
+  // (only after the map proves the ack landed) before the next API-driven scan.
+  v = (await (await st.get(`/api/v1/games/${gameId}/storyteller`)).json()).version;
   await expect(playerPage.locator('img[data-layer="BASE"]')).toHaveCount(1);
   await expect(playerPage.locator('img[data-layer="WEST_AREA"]')).toHaveCount(0);
   await expect(playerPage.getByText("Pustelnia", { exact: true })).toHaveCount(0);
