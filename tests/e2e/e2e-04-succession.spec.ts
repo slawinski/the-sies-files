@@ -1,12 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { createStorytellerGame, generateAndCommitSetup, driveOperationalCycle, claimAllPlayers } from "./fixtures";
+import { createStorytellerGame, generateSetupUntilRole, hasSuccessionPrerequisites, driveOperationalCycle, claimAllPlayers, commandVersion } from "./fixtures";
 
 // E2E-04 — Demon succession (audit spec 24 §4): Imp self-kill star-pass to a
 // legal Minion, plus rejection of an invalid successor.
 test("E2E-04: Imp self-kill star-pass to a legal Minion; invalid successor rejected", async ({ page, browser }) => {
   const st = page.request;
   const { gameId, playerIds, version } = await createStorytellerGame(st, "E2E-04", 13);
-  const { candidate } = await generateAndCommitSetup(st, gameId, version);
+  const { candidate } = await generateSetupUntilRole(st, gameId, version, 'IMP', 80, hasSuccessionPrerequisites);
 
   const assignments = (candidate as { assignments: Array<{ playerId: string; trueCharacterId: string }> }).assignments;
   const imp = assignments.find((a) => a.trueCharacterId === "IMP")!.playerId;
@@ -18,9 +18,9 @@ test("E2E-04: Imp self-kill star-pass to a legal Minion; invalid successor rejec
   v = (await (await st.get(`/api/v1/games/${gameId}/storyteller`)).json()).version;
 
   v = await driveOperationalCycle(st, sessions, gameId, v); // cycle 1 (no kill)
-  v = (await (await st.post(`/api/v1/games/${gameId}/operational/start`, {
+  v = await commandVersion(await st.post(`/api/v1/games/${gameId}/operational/start`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v },
-  })).json()).version;
+  }), v);
 
   // Drive the cycle-2 queue in order until the IMP_KILL decision is reached.
   const townsfolk = assignments.find((a) => a.trueCharacterId === "CHEF" || a.trueCharacterId === "MONK")!.playerId;
@@ -75,7 +75,12 @@ test("E2E-04: Imp self-kill star-pass to a legal Minion; invalid successor rejec
       const others = proj.players
         .filter((p: { id: string; alive: boolean }) => p.alive && p.id !== active.actorPlayerId)
         .map((p: { id: string }) => p.id);
-      const chosen = active.kind === "FORTUNE_TELLER_CHOOSE" ? others.slice(0, 2) : others.slice(0, 1);
+      // This scenario needs an unprotected, functioning Imp self-kill. The
+      // generic first-seat target can protect/poison the Imp at seat zero.
+      const eligible = ['MONK_CHOOSE', 'POISONER_CHOOSE'].includes(active.kind)
+        ? others.filter((id: string) => id !== imp) : others;
+      const chosen = active.kind === "FORTUNE_TELLER_CHOOSE" ? eligible.slice(0, 2) : eligible.slice(0, 1);
+      console.log('BASELINE_ACTION', JSON.stringify({ kind: active.kind, actorSeat: playerIds.indexOf(active.actorPlayerId), targetSeats: chosen.map((id: string) => playerIds.indexOf(id)) }));
       const res = await session.request.post(`/api/v1/games/${gameId}/operational/actions/${active.id}/submit`, {
         data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { targetPlayerIds: chosen } },
       });

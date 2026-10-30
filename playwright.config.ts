@@ -16,7 +16,7 @@ export default defineConfig({
   projects: [{ name: 'mobile-chromium', use: { ...devices['Pixel 7'] } }],
   webServer: {
     command: production ? 'npm run start -- --port 3100' : 'npm run dev -- --port 3100',
-    env: { ...target.env, RATE_LIMIT_DISABLED: '1' } as Record<string, string>,
+    env: { ...target.env, NODE_ENV: production ? 'production' : 'development', RATE_LIMIT_DISABLED: '1' } as Record<string, string>,
     url: 'http://localhost:3100',
     reuseExistingServer: false,
     timeout: 120_000,

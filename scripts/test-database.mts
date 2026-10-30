@@ -3,7 +3,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 
 export function resolveTarget(env: Partial<NodeJS.ProcessEnv> = process.env) {
   const fail = () => { throw new Error('Explicit local disposable *_test DATABASE_URL required; conflicting URLs and connection overrides refused'); };
@@ -62,7 +61,7 @@ export function resetDatabase(target: Target, token?: string, cwd = process.cwd(
   run('createdb', [target.database], target.env, cwd);
   run('npx', ['prisma', 'migrate', 'deploy'], target.env, cwd);
 }
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && path.basename(process.argv[1]) === 'test-database.mts') {
   if (!['reset', 'verify'].includes(process.argv[2])) throw new Error('Use reset or verify');
   const target = resolveTarget();
   const lease = acquireLease(target);

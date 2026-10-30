@@ -22,9 +22,9 @@ import type { SetupCandidate } from "@/modules/setup/types";
 
 beforeEach(resetDb);
 
-async function setupCommittedGame(count: number) {
+async function setupCommittedGame(count: number, seed = 'regression-baseline-v1') {
   const { gameId, playerIds, version } = await createGameWithPlayers(count);
-  const g = await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: version });
+  const g = await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: version, seed });
   const c = await commitSetup({ gameId, commandId: randomUUID(), expectedVersion: g.version });
   return { gameId, playerIds, version: c.version };
 }
@@ -134,7 +134,7 @@ describe("Slice 2 — setup + first Operational", () => {
     });
 
     let v = b.version;
-    const g = await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: v });
+    const g = await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: v, seed: 'regression-baseline-v1' });
     v = g.version;
     await commitSetup({ gameId, commandId: randomUUID(), expectedVersion: v });
 
@@ -147,7 +147,7 @@ describe("Slice 2 — setup + first Operational", () => {
   it("Drunk sees a Townsfolk, never the truth", async () => {
     for (let attempt = 0; attempt < 30; attempt += 1) {
       await resetDb();
-      const { gameId } = await setupCommittedGame(15);
+      const { gameId } = await setupCommittedGame(15, `drunk-fixture-${attempt}`);
       const candidate = await candidateOf(gameId);
       const drunk = candidate.assignments.find((a) => a.trueCharacterId === "DRUNK");
       if (!drunk) continue;

@@ -32,7 +32,14 @@ async function runFullOperationalCycle(gameId: string, version: number, playerId
 describe("Milestone 8 — release hardening", () => {
   it("13-player golden path: setup → first Operational → Investigation", async () => {
     const { gameId, version, playerIds } = await createGameWithPlayers(13);
-    let v = (await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: version })).version;
+    const seed = 'regression-baseline-v1';
+    let v = (await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: version, seed })).version;
+    const draft = await prisma.setupDraft.findUniqueOrThrow({ where: { gameId } });
+    const candidate = draft.candidateJson as unknown as import('@/modules/setup/types').SetupCandidate;
+    console.log('BASELINE_SCENARIO', JSON.stringify({ seed, generatorVersion: draft.generatorVersion,
+      script: ['TROUBLE_BREWING', 1], scenario: ['THE_SIES_FILES_MILLIONAIRE', 1],
+      roles: candidate.assignments.map(({ virtualSeat, participantKind, trueCharacterId, perceivedCharacterId, trueAlignment }) =>
+        ({ virtualSeat, participantKind, trueCharacterId, perceivedCharacterId, trueAlignment })) }));
     v = (await commitSetup({ gameId, commandId: randomUUID(), expectedVersion: v })).version;
 
     const game = await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } });

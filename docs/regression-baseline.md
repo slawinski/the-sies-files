@@ -72,3 +72,29 @@ blocked; its migrate/unit operations are characterized independently instead.
 
 This is not yet a completed runtime baseline. Completion requires S1 profiles
 and final failure reconciliation.
+
+## Scenario inputs
+
+Ordinary browser setups and the integration golden path use
+`regression-baseline-v1` through the existing setup API/service seam. Role-search
+fixtures retain `e2e-seed-N` and report the accepted seed. E2E-04 requires Imp,
+a legal Minion and CHEF/MONK before commit. Its cycle-two Monk and Poisoner
+targets explicitly exclude the Imp: with `e2e-seed-0`, the inherited generic
+first-seat choice protected the Imp and prevented the self-kill, so the invalid
+successor request was legitimately accepted as a no-death resolution. The
+application was not changed. The same seed passes with the corrected scenario
+preconditions; invalid-successor and star-pass assertions are unchanged.
+
+`BASELINE_SCENARIO` and `BASELINE_ACTION` lines in native reports preserve
+generator/script/scenario versions, seat-normalized roles, seeds and action
+choices. Claims and commit helpers return the resulting version; no mutation
+retry hides a conflict, and failed votes are no longer ignored. Existing
+role-acknowledgement version refresh in E2E-07 remains unchanged.
+
+The additional unseeded service calls in `slice2.test.ts` and `r1.test.ts` are
+seeded because they drive gameplay queues. The Drunk search uses bounded
+`drunk-fixture-N` inputs. Generator count/distribution tests intentionally vary
+their explicit seeds and remain unchanged; UUID/session/command IDs still vary
+and are not role-determinism proofs. E2E-01/02/07/09 require no call-site edits:
+their shared helper now supplies the fixed seed. No application assertions or
+LIVE/readiness expectations were weakened.

@@ -4,6 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { capture } from '../scripts/regression-baseline.mjs';
+import { hasSuccessionPrerequisites, scenarioSpecimen, commandVersion } from './e2e/fixtures';
+import { createServer } from 'node:http';
+import { request } from '@playwright/test';
+import { generateSetupCandidate } from '../src/modules/setup/generator';
+import { SeededRngV2 } from '../src/lib/rng';
 
 const trees: string[] = [];
 afterEach(() => { for (const tree of trees.splice(0)) fs.rmSync(tree, { recursive: true, force: true }); });
@@ -59,4 +64,38 @@ test('includes schema migrations but excludes database dumps', () => {
 test('refuses an escaping symlink', () => {
   const dir = tree(); fs.symlinkSync('../outside-secret', path.join(dir, 'escape'));
   expect(() => capture(dir)).toThrow('Escaping symlink');
+});
+test('succession fixture requires Imp, a legal Minion and CHEF or MONK before commit', () => {
+  const candidate = (roles: string[]) => ({ assignments: roles.map(trueCharacterId => ({ trueCharacterId })) });
+  expect(hasSuccessionPrerequisites(candidate(['IMP', 'SPY', 'CHEF']))).toBe(true);
+  expect(hasSuccessionPrerequisites(candidate(['IMP', 'BARON', 'MONK']))).toBe(true);
+  for (const roles of [['SPY', 'CHEF'], ['IMP', 'CHEF'], ['IMP', 'SPY']]) {
+    expect(hasSuccessionPrerequisites(candidate(roles))).toBe(false);
+  }
+});
+test('same seed and seats have identical role specimens despite different player UUIDs', () => {
+  const candidate = (prefix: string, seed: string) => generateSetupCandidate({
+    players: Array.from({ length: 13 }, (_, virtualSeat) => ({ playerId: `${prefix}-${virtualSeat}`, virtualSeat, participantKind: 'NORMAL' as const })),
+    rng: new SeededRngV2(seed),
+  });
+  expect(scenarioSpecimen('baseline', candidate('first', 'baseline'))).toEqual(scenarioSpecimen('baseline', candidate('second', 'baseline')));
+  expect(scenarioSpecimen('other', candidate('first', 'other'))).not.toEqual(scenarioSpecimen('baseline', candidate('first', 'baseline')));
+});
+test('command failures retain HTTP/domain/version evidence and successful versions propagate', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.statusCode = req.url === '/conflict' ? 409 : 200;
+    res.end(req.url === '/conflict' ? JSON.stringify({ error: { code: 'VERSION_CONFLICT', actualVersion: 9 } }) : JSON.stringify({ version: 8 }));
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing fixture port');
+  const context = await request.newContext({ baseURL: `http://127.0.0.1:${address.port}` });
+  try {
+    await expect(commandVersion(await context.post('/conflict'), 7)).rejects.toThrow(/expectedVersion=7: HTTP 409.*VERSION_CONFLICT.*actualVersion.*9/);
+    expect(await commandVersion(await context.post('/ok'), 7)).toBe(8);
+  } finally {
+    await context.dispose();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });
