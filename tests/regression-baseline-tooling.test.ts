@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { capture } from '../scripts/regression-baseline.mts';
+import { capture } from '../scripts/regression-baseline.mjs';
 
 const trees: string[] = [];
 afterEach(() => { for (const tree of trees.splice(0)) fs.rmSync(tree, { recursive: true, force: true }); });
@@ -46,6 +46,15 @@ test('a source edit changes identity', () => {
   const dir = tree(); const before = capture(dir).sourceId;
   fs.writeFileSync(path.join(dir, 'source.ts'), 'different');
   expect(capture(dir).sourceId).not.toBe(before);
+});
+test('includes schema migrations but excludes database dumps', () => {
+  const dir = tree();
+  fs.mkdirSync(path.join(dir, 'prisma/migrations/001'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'prisma/migrations/001/migration.sql'), 'CREATE TABLE fixture(id int);');
+  fs.writeFileSync(path.join(dir, 'private-dump.sql'), 'not source');
+  const result = capture(dir);
+  expect(result.entries.map(e => e.path)).toContain('prisma/migrations/001/migration.sql');
+  expect(result.entries.map(e => e.path)).not.toContain('private-dump.sql');
 });
 test('refuses an escaping symlink', () => {
   const dir = tree(); fs.symlinkSync('../outside-secret', path.join(dir, 'escape'));

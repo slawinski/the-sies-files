@@ -11,7 +11,8 @@ function git(root: string, args: string[]) {
   return r.stdout;
 }
 export function excluded(name: string): boolean {
-  return name.split('/').some(p => /^(\.git|node_modules|\.next|out|build|coverage|test-results|playwright-report|baseline-results|\.vercel|\.yarn)$/.test(p) || /^\.env/.test(p) || /\.(pem|key|p12|pfx|dump|sql|tsbuildinfo)$/.test(p) || /^(id_rsa|id_ed25519|credentials.*|secrets?.*|next-env\.d\.ts|\.DS_Store)$/i.test(p));
+  if (/\.sql$/i.test(name) && !/^prisma\/migrations\/[^/]+\/migration\.sql$/.test(name)) return true;
+  return name.split('/').some(p => /^(\.git|node_modules|\.next|out|build|coverage|test-results|playwright-report|baseline-results|\.vercel|\.yarn)$/.test(p) || /^\.env/.test(p) || /\.(pem|key|p12|pfx|dump|tsbuildinfo)$/.test(p) || /^(id_rsa|id_ed25519|credentials.*|secrets?.*|next-env\.d\.ts|\.DS_Store)$/i.test(p));
 }
 export function capture(root: string, output?: string) {
   root = fs.realpathSync(root);
