@@ -70,8 +70,7 @@ or starting a persistent service. The original `verify-clean-db.sh` cannot use
 this target safely (it hardcodes port/account), so its S0 convenience entry is
 blocked; its migrate/unit operations are characterized independently instead.
 
-This is not yet a completed runtime baseline. Completion requires S1 profiles
-and final failure reconciliation.
+The completed runtime and failure account is in [regressions/README.md](regressions/README.md).
 
 ## Scenario inputs
 
@@ -132,3 +131,42 @@ CI calls this same production entry point and always uploads the report/log
 paths, not source capsules, even on failure. A raw failure remains a failing CI
 step. Three independently reset canonical runs establish the initial local
 baseline; routine CI runs one complete canonical profile per commit.
+
+## Completed reference and later comparisons
+
+Measured S1 is `60f542c8fb8b4601eadd242732b42093f30648e458f314e667245183c4d181d8`
+(baseline code commit `1e9920e`, before documentation-only reconciliation).
+`baseline-results/canonical-{1,2,3}/` each records 179/179 unit assertions,
+9/9 mobile browser scenarios, 15 successful stages, a distinct fresh build ID,
+unchanged original and reconstructed source, and released owned resources.
+`baseline-results/development-canonical/` passes the same assertions under a
+separate fresh dev server. Initial S0 production and dev controls also pass.
+
+The [failure ledger](regressions/README.md) explains the earlier observer,
+fixture and tooling failures with source/runtime provenance, original report
+references and causal controls. A real interruption probe established that
+Playwright can leave a detached server when its runner is terminated. The
+owned wrapper now records its spawned process group under the lease; controller
+cleanup stops that group and verifies the port is free. Failed or cancelled
+runs remain nonzero and retain incomplete/missing-report evidence.
+
+For a future change:
+
+1. Keep the reference capsule/manifests and original reports. Check out its
+   equivalent committed source only in a separately chosen disposable copy;
+   never reset the user's working tree to manufacture a control.
+2. Capture the proposed source and run the same production/development profiles
+   with explicit disposable resources and the same content versions and seeds.
+3. Compare the actual path/content delta, lock/dependency identity, runtime
+   envelope, build identity and discovered/executed/skipped/blocked inventories.
+   Do not compare a dev failure to a production pass as if the profiles matched.
+4. Reproduce each failure with the smallest existing test selection and a
+   full-suite control. Preserve HTTP/domain/version diagnostics, traces and
+   both passing/failing observations; explain a causal trigger before grouping.
+5. Record provenance and cause separately. An unmatched source/profile or
+   missing report is incomplete evidence, not an inherited-defect label.
+
+The final ledger/runbook commit is documentation-only and has a different full
+source digest from measured S1. Its app/tooling/test bytes are identical; no
+runtime evidence is attributed to documentation that did not exist during the
+runs. Hosted CI execution, review and publication belong to the caller.
