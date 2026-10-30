@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inherited app reinforcement — ranked directions</title>
+<style>
+:root{color-scheme:light;--paper:#f5f3ee;--ink:#202923;--muted:#526057;--line:#cbd2c9;--accent:#205c48;--soft:#e8efe9}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:58rem;margin:auto;padding:3rem 1.4rem}header{padding-bottom:2rem;border-bottom:1px solid var(--line)}h1{font:600 clamp(1.9rem,5vw,2.7rem)/1.15 Georgia,serif;max-width:24ch}h2{font-size:1.5rem;margin:2.6rem 0 1rem}h3{font-size:1.22rem;line-height:1.35;margin:0 0 1rem}p,li,dd{max-width:74ch}p{margin:.7rem 0}a{color:var(--accent);text-underline-offset:.2em}a:focus-visible{outline:3px solid var(--accent);outline-offset:4px}code{font: .87em ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere}small,.muted{color:var(--muted)}.eyebrow{font-size:.8rem;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:700}.meta{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;color:var(--muted);font-size:.9rem}.note{background:var(--soft);padding:1rem 1.25rem;border-radius:.5rem;margin:1.3rem 0}.jump{padding-left:1.3rem}.jump li{margin:.35rem 0}article{background:#fff;padding:1.5rem;border:1px solid var(--line);border-radius:.5rem;margin:1.2rem 0;scroll-margin-top:1rem}.metrics{display:flex;gap:.5rem;flex-wrap:wrap;margin:.7rem 0 1rem}.metrics span{font-size:.82rem;background:var(--soft);color:#244a3b;padding:.25rem .6rem;border:1px solid #c9d8cc;border-radius:.3rem}dl{margin:0}dt{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:1rem}dd{margin:.2rem 0 0}figure{margin:1.3rem 0 0}svg{display:block;width:100%;height:auto;background:#f1f5f0;border-radius:.4rem}figcaption{font-size:.84rem;color:var(--muted);margin-top:.5rem}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{padding:.65rem .5rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}th{background:var(--soft)}footer{font-size:.83rem;color:var(--muted);margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line)}@media(max-width:600px){main{padding:1.5rem 1rem}article{padding:1rem}th,td{min-width:7rem}}@media print{body{background:white}main{max-width:none;padding:0}article{break-inside:avoid}a{color:inherit}}
+</style>
+</head>
+<body><main>
+<header>
+<p class="eyebrow">The Sieś Files · discovery brief</p>
+<h1>Reinforce the app without losing the behavior you inherited</h1>
+<div class="meta"><span>Date: <time datetime="2026-10-28">2026-10-28</time></span><span>Topic: legacy-app-reinforcement</span><span>Scope: current codebase</span></div>
+<p><strong>Focus:</strong> security, reliability, code quality, legal readiness, bug fixes and missing capabilities—with regression avoidance as a constraint on every direction.</p>
+<div class="note"><strong>Best starting direction:</strong> a reproducible baseline for the exact inherited workspace. It makes each later hardening change easier to evaluate. Zero regressions cannot be guaranteed; reproducible evidence, small changes and demonstrated recovery reduce the risk.</div>
+<p class="muted">46 original ideas → 22 consolidated candidates + 4 combinations → 7 ranked directions. All 26 candidates were challenged; 19 had sound bases and 7 were weak. Strong overlapping ideas were merged or narrowed rather than turned into parallel projects.</p>
+</header>
+
+<section id="context"><h2>Codebase Context</h2>
+<p>This application already has substantial foundations: domain services, separate public/player/Storyteller projections, PostgreSQL-backed transactional commands, expected-version checks, persisted idempotency receipts, checkpoint infrastructure, authorization boundaries and CI. Reinforcement should extend these strengths.</p>
+<p>The historical audit explicitly targets <code>main@9099836</code>. Some missing features it describes now exist. Its rows need reconciliation with current behavior before becoming a new defect backlog. The workspace also contains substantial uncommitted UI, package and test work; assessing only committed HEAD would omit part of the inherited application.</p>
+<p>Source inspection identified concrete leads: the event-stream client does not handle the server’s initial version message; replay verifies a narrower state set than whole-game recovery; receipt decoding remains optional; a role-dependent browser test assumes a randomized setup includes particular roles. CI and test source were inspected, but no passing runtime baseline was established.</p>
+<p>Ownership, content-permission, data-retention and deployed-operation evidence remains incomplete. Missing documents are evidence gaps, not findings of infringement or noncompliance. Actual hosting topology, proxy behavior, backup practices, jurisdiction and intended distribution remain unverified.</p>
+<p class="muted">Evidence limits: no application changes, test execution, vulnerability scan, production inspection or legal determination. No secrets were read. External research was unavailable because a dedicated web-search tool was absent. Confidence below means confidence that a direction deserves exploration, not a measured assurance level. The two-frame generator shared its verification budget, so source-reading depth varied; a separate verifier challenged every consolidated candidate and spot-checked live source.</p>
+</section>
+
+<section id="axes"><h2>Topic Axes</h2><ol>
+<li><strong>Access and abuse boundaries:</strong> who can observe or act, including revocation and proxy trust.</li>
+<li><strong>State recovery and live delivery:</strong> whether clients catch up and interrupted games remain playable.</li>
+<li><strong>Regression confidence and release control:</strong> reproducibility, attribution and evidence for the exact changed workspace.</li>
+<li><strong>Rules correctness and maintainable contracts:</strong> valid actions and durable results across retries and releases.</li>
+<li><strong>Ownership, participant data and operational stewardship:</strong> provenance, information survival and successor responsibilities.</li>
+</ol><p>All five axes have surviving directions. Ranking weighs evidence strength, expected value, leverage, feasibility, burden and overlap. A demonstrated actively exploited defect or failing production recovery would change the immediate priority; neither was established here.</p></section>
+
+<section id="ideas"><h2>Ranked Ideas</h2>
+<nav aria-label="Ranked idea navigation"><ol class="jump">
+<li><a href="#idea-1">Establish a reproducible inherited baseline</a></li>
+<li><a href="#idea-2">Reconcile state before calling the client live</a></li>
+<li><a href="#idea-3">Prove recovery by continuing a restored game</a></li>
+<li><a href="#idea-4">Challenge access and secrecy through the real boundary</a></li>
+<li><a href="#idea-5">Make durable command outcomes safe across retries and releases</a></li>
+<li><a href="#idea-6">Establish provenance for the actual playable release</a></li>
+<li><a href="#idea-7">Decide what survives after a participant or game leaves</a></li>
+</ol></nav>
+
+<article id="idea-1"><h3>1. Establish a reproducible inherited baseline</h3>
+<div class="metrics"><span>Confidence: 95%</span><span>Complexity: Medium</span></div>
+<dl><dt>Description</dt><dd>Make the actual inherited workspace—including relevant untracked UI files and dependency changes—a reproducible comparison point. Preserve known failures and deterministic synthetic game scenarios, so each small reinforcement can be compared against the same starting conditions. Serious bugs should leave a minimal repeatable specimen rather than a timing anecdote. This is an evidence habit, not a new snapshot or incident-recording platform.</dd>
+<dt>Axis</dt><dd>Regression confidence and release control.</dd>
+<dt>Basis</dt><dd><strong>reasoned:</strong> the current dirty tree contains changed package manifests, routes, presentation components and browser tests. <code>tests/e2e/e2e-04-succession.spec.ts:9–26</code> commits randomized setup before assuming a CHEF/MONK assignment. <code>playwright.config.ts:42–48</code> uses a development server, while <code>.github/workflows/ci.yml:61–65</code> builds production afterward. These are different test conditions; a single red or green run cannot establish attribution or production behavior.</dd>
+<dt>Rationale</dt><dd>Every security patch, bug fix and refactor becomes easier to judge when existing failures and relevant behavior are reproducible. Exact workspace attribution protects the ongoing UI work and avoids labeling inherited failures as new regressions. Review old audit claims against these observations instead of assuming the audit still describes the code.</dd>
+<dt>Downsides</dt><dd>Some initial effort produces confidence rather than features. Captures need deliberate exclusion of credentials and generated artifacts. Deterministic scenarios do not reproduce every race, and existing CI remains valuable rather than being replaced.</dd></dl>
+<figure><svg viewBox="0 0 720 145" role="img" aria-label="The same inherited state is compared with itself plus one change"><g fill="#fff" stroke="#8ea597"><rect x="20" y="32" width="205" height="78" rx="6"/><rect x="285" y="12" width="415" height="52" rx="6"/><rect x="285" y="82" width="415" height="52" rx="6"/></g><g stroke="#526c5a" fill="none" stroke-width="2"><path d="M225 71H250V38H280"/><path d="M250 71V108H280"/></g><g font-family="system-ui,sans-serif" font-size="16" fill="#202923"><text x="38" y="65">Exact inherited state</text><text x="38" y="90">+ fixed scenario</text><text x="304" y="44">Baseline observations</text><text x="304" y="114">Same state + one reinforcement</text></g></svg><figcaption>Conceptual contrast: preserve the starting conditions so changed observations can be attributed more narrowly.</figcaption></figure>
+</article>
+
+<article id="idea-2"><h3>2. Reconcile state before calling the client live</h3>
+<div class="metrics"><span>Confidence: 95%</span><span>Complexity: Medium</span></div>
+<dl><dt>Description</dt><dd>Separate a connected transport from a screen that has caught up with authoritative game state. Explore bounded reconciliation at initial connection, reconnect and foreground return, with a visible catching-up state where appropriate. Notifications can accelerate freshness; correctness should not rely on receiving every notification. Existing server-side version checks remain the final mutation guard.</dd>
+<dt>Axis</dt><dd>State recovery and live delivery.</dd>
+<dt>Basis</dt><dd><strong>direct:</strong> <code>src/app/api/v1/games/[gameId]/events/stream/route.ts:63–64</code> sends <code>send("hello", game.version, game.eventSequence)</code>. <code>src/components/useGameEventStream.ts:66–68</code> registers <code>open</code>, <code>error</code> and <code>invalidate</code> listeners, without a hello reconciliation handler. The test comment at <code>tests/e2e/e2e-07-map-unlock.spec.ts:57–59</code> warns that a scan before the connection opens “is missed forever.”</dd>
+<dt>Rationale</dt><dd>This is a bounded, source-supported reliability direction that can reduce stale decisions and timing-dependent tests without replacing the in-memory broker. The important property is agreement with database truth after disruption, not merely a green connection label.</dd>
+<dt>Downsides</dt><dd>Extra fetches and temporary waiting states affect latency. Overlapping responses can themselves introduce stale-state races. Convergence must be conditional on server reachability; browser suspension and network loss rule out an unconditional freshness guarantee.</dd></dl>
+<figure><svg viewBox="0 0 720 110" role="img" aria-label="Connected does not mean caught up; authoritative reconciliation bridges the gap"><g fill="#fff" stroke="#8ea597"><rect x="15" y="25" width="180" height="60" rx="6"/><rect x="245" y="25" width="230" height="60" rx="6"/><rect x="525" y="25" width="180" height="60" rx="6"/></g><g stroke="#526c5a" stroke-width="2"><path d="M195 55H240"/><path d="M475 55H520"/></g><g font-family="system-ui,sans-serif" font-size="16" text-anchor="middle" fill="#202923"><text x="105" y="61">Connected</text><text x="360" y="61">Reconcile with authority</text><text x="615" y="61">Caught up</text></g></svg><figcaption>Conceptual distinction: transport health alone does not establish what the user is seeing.</figcaption></figure>
+</article>
+
+<article id="idea-3"><h3>3. Prove recovery by continuing a restored game</h3>
+<div class="metrics"><span>Confidence: 95%</span><span>Complexity: High</span></div>
+<dl><dt>Description</dt><dd>Treat recoverability as evidence that a restored synthetic game can complete its next legal action in a fresh process, ideally with a second operator. Describe separately what checks prove about checkpoint integrity, players, votes, pending decisions, phase and scenario state. A loaded dump or a replay success flag should not imply a stronger continuation guarantee than was actually exercised.</dd>
+<dt>Axis</dt><dd>State recovery and live delivery.</dd>
+<dt>Basis</dt><dd><strong>direct:</strong> <code>src/modules/recovery/recovery.service.ts:361–415</code> checks event continuity and player alive/ghost-vote state, rather than reconstructing the entire game. <code>scripts/backup-restore.sh:19–23</code> counts restored tables before announcing verification. <code>tests/e2e/e2e-08-restart-recovery.spec.ts:11–13,42–58</code> checks mid-vote consistency/replay but does not itself restart a server; the inspected CI has no physical-restart step.</dd>
+<dt>Rationale</dt><dd>Durability is one of the app’s strongest existing foundations, making playable continuation a high-value next assurance. Honest coverage also prevents a new owner from trusting a narrow diagnostic as a complete disaster-recovery promise. A cold operator exercise reveals missing assets, access and runbook knowledge that database checks cannot.</dd>
+<dt>Downsides</dt><dd>This is the highest-burden direction: isolated restore environments and representative unfinished game states require care. Full event-sourced reconstruction may not be necessary or economical. Deployment topology, backup storage and recovery targets remain facts to establish, not assumptions this assessment settled.</dd></dl>
+</article>
+
+<article id="idea-4"><h3>4. Challenge access and secrecy through the real boundary</h3>
+<div class="metrics"><span>Confidence: 90%</span><span>Complexity: Medium</span></div>
+<dl><dt>Description</dt><dd>Evaluate selected hostile-viewer journeys: another game’s participant, an expired or revoked session, a former player with an open stream, and an anonymous claimant. Use synthetic secret markers and paired game states to challenge audience isolation across projections, errors, protected assets and realtime metadata. Include the deployed proxy’s authority over host/address headers and the configuration under which abuse controls actually run.</dd>
+<dt>Axis</dt><dd>Access and abuse boundaries.</dd>
+<dt>Basis</dt><dd><strong>reasoned:</strong> scoped projections and protected routes already exist at <code>src/modules/projections/projections.ts:30–95</code> and <code>src/app/api/v1/games/[gameId]/map/layers/[layerId]/route.ts:18–45</code>. The stream resolves membership on entry at <code>src/app/api/v1/games/[gameId]/events/stream/route.ts:35</code>. Origin/IP decisions depend on forwarded values in <code>src/lib/auth/http.ts</code> and <code>src/lib/rate-limit.ts:28–31</code>. Entry authorization and source configuration do not establish behavior after revocation or through the production proxy.</dd>
+<dt>Rationale</dt><dd>This builds on existing security design while checking transitions and secondary disclosure paths. It is more informative than merely counting authenticated endpoints. A current dependency/advisory inventory can complement the behavioral evidence; dependency metadata alone does not establish exploitability.</dd>
+<dt>Downsides</dt><dd>The real deployment and permitted audience distinctions must be understood. Paired-state tests need narrowly defined secrets and legitimate reveals; not every version change must be invisible. Marker absence cannot prove all possible leaks. No exploitable vulnerability was established by this source review.</dd></dl>
+</article>
+
+<article id="idea-5"><h3>5. Make durable command outcomes safe across retries and releases</h3>
+<div class="metrics"><span>Confidence: 90%</span><span>Complexity: Medium</span></div>
+<dl><dt>Description</dt><dd>Extend the existing command identity and receipt machinery to settle a consequential action after response loss, using actor-scoped access and validated results. Treat durable JSON as a compatibility boundary across releases, starting with a representative meaningful command outcome. Explore whether a candidate and its rollback can interpret already-committed outcomes without repeating their effects.</dd>
+<dt>Axis</dt><dd>Rules correctness and maintainable contracts.</dd>
+<dt>Basis</dt><dd><strong>direct:</strong> <code>src/lib/command.ts:126–158</code> makes <code>resultSchema</code> optional and retains <code>(existing.resultJson ?? null) as T</code> for unvalidated results. <code>src/modules/scenario/scenario.service.ts:93–99</code> returns structured scan data without supplying a result codec. The verifier also confirmed fresh client command IDs per attempt and an existing Storyteller-only status lookup; command status is not a wholly missing subsystem.</dd>
+<dt>Rationale</dt><dd>Runtime result contracts improve maintainability at a real seam rather than triggering broad refactors. Existing transactional idempotency is valuable, but a person who lost a response still needs to learn what happened. Persisted records outlive the code that wrote them, so fresh-database tests alone cannot establish compatibility.</dd>
+<dt>Downsides</dt><dd>Historical result formats and access rules need explicit treatment. An invalid old receipt must not cause a committed mutation to run again. Not all database migrations are reversible, and a full multi-build compatibility platform would be excessive as the first intervention.</dd></dl>
+</article>
+
+<article id="idea-6"><h3>6. Establish provenance for the actual playable release</h3>
+<div class="metrics"><span>Confidence: 90%</span><span>Complexity: Medium</span></div>
+<dl><dt>Description</dt><dd>Build a compact release-linked account of code ownership and contributor rights, game-content sources, names/prose/artwork, asset derivatives, fonts, and the dependencies actually distributed. Record evidence of permitted use, required notices and unresolved questions against the intended private/public/commercial context. Keep permission to distribute independent from permission to reveal an asset during play.</dd>
+<dt>Axis</dt><dd>Ownership, participant data and operational stewardship.</dd>
+<dt>Basis</dt><dd><strong>direct:</strong> <code>the-sies-files-docs/00_README.md:35</code> names “Blood on the Clocktower: Trouble Brewing” as the reskinned ruleset. <code>scripts/build-map-assets.mjs:4–7</code> traces canonical artwork into public/protected derivatives. <code>src/content/manifest.ts:10–11</code> states <code>productionReady: false</code> pending production art and approved prose/names. Inspected tracked paths did not establish first-party license/notice documents or permission records.</dd>
+<dt>Rationale</dt><dd>Inheritance creates uncertainty about who supplied what and under which terms. Exact release provenance turns “is this legally ready?” into bounded evidence questions for the owner and, where needed, an appropriate legal reviewer. Lockfile license strings and transformed artwork do not answer those questions by themselves.</dd>
+<dt>Downsides</dt><dd>Repository evidence may not contain agreements held elsewhere. Applicable obligations depend on actual use and distribution. This direction does not presume infringement, mandate wholesale content replacement or certify legal clearance.</dd></dl>
+</article>
+
+<article id="idea-7"><h3>7. Decide what survives after a participant or game leaves</h3>
+<div class="metrics"><span>Confidence: 90%</span><span>Complexity: Medium</span></div>
+<dl><dt>Description</dt><dd>Make participant-data survival understandable across roster records, sessions, events, command results, snapshots, exports, client caches and backups. Establish the purpose, audience and lifetime of retained data, including what a restore could reintroduce. Consider participant-facing explanations and removal handling alongside the operator’s need to investigate or resume games, before choosing destructive retention changes.</dd>
+<dt>Axis</dt><dd>Ownership, participant data and operational stewardship.</dd>
+<dt>Basis</dt><dd><strong>direct:</strong> <code>src/modules/game-session/game-session.service.ts:239–253</code> deletes a roster row and appends <code>PLAYER_REMOVED</code> with <code>displayName</code>. <code>prisma/schema.prisma:163,182,414</code> restricts deletion of retained history, while <code>:167–170,185,417–421</code> provides event JSON, receipt results and snapshots. The historical security spec describes a conditional separate retention procedure; inspections did not establish implemented retention durations or cleanup schedules.</dd>
+<dt>Rationale</dt><dd>Removing a player from the roster is not equivalent to removing identifying details from history. A clear data-lifecycle decision connects privacy, reliability, incident handling and ownership handoff without silently undermining the audit trail or restore behavior.</dd>
+<dt>Downsides</dt><dd>Retention and recovery goals can conflict. Pseudonymous identifiers are not automatically anonymous, and backup expiry is different from immediate deletion. Actual legal obligations depend on jurisdiction and processing context; neither was established here.</dd></dl>
+</article>
+</section>
+
+<section id="rejections"><h2>Rejection Summary</h2>
+<p>The seven primary candidates were M11, M01, M02, M03, M05, M08 and M07. The table accounts for every other standalone candidate; merged candidates contribute only bounded parts to the ranked ideas. All original 46 ideas were represented in the 22 consolidated candidates before critique.</p>
+<div class="table-wrap"><table><thead><tr><th>Candidate</th><th>Idea considered</th><th>Reason cut or merged</th></tr></thead><tbody>
+<tr><td>M04</td><td>Replayable failure case files</td><td>Merged into #1 as minimal deterministic specimens; a universal incident recorder is excessive.</td></tr>
+<tr><td>M06</td><td>Domain-issued legal-move envelopes</td><td>Sound seam, deferred: broad UI/domain contract work amid unfinished UI changes adds risk; no particular user-visible rule mismatch was established.</td></tr>
+<tr><td>M10</td><td>Cross-release receipt specimens</td><td>Merged into #5; same durable-outcome boundary.</td></tr>
+<tr><td>M12</td><td>Recovery coverage map</td><td>Merged into #3; honest assurance scope belongs beside the continuation exercise.</td></tr>
+<tr><td>M13</td><td>Executable deployment envelope</td><td>Narrowed into #3 and #4; a general environment platform costs too much initially.</td></tr>
+<tr><td>M14</td><td>Automatic assurance expiry</td><td>Weak: no established claim-to-source dependency model; manual scoped evidence is more pragmatic.</td></tr>
+<tr><td>M15</td><td>Synthetic secret tracers</td><td>Merged into #4 as a testing technique, not separate infrastructure.</td></tr>
+<tr><td>M16</td><td>Durable adjudication proof objects</td><td>Weak: selected decisions already persist; no demonstrated explanation defect justifies a new proof framework.</td></tr>
+<tr><td>M17</td><td>Release chain-of-custody system</td><td>Weak standalone: duplicates baseline attribution; ordinary build/scenario metadata is retained in #1.</td></tr>
+<tr><td>M18</td><td>Convergence with all notifications lost</td><td>Merged into #2 after removing the unconditional guarantee; server reachability remains necessary.</td></tr>
+<tr><td>M19</td><td>Forwarded-header trust contract</td><td>Merged into #4; trust is deployment-dependent, not a source-proven spoofing exploit.</td></tr>
+<tr><td>M20</td><td>Cold operator handoff capsule</td><td>Merged into #3 as a runbook and drill; no capsule subsystem needed.</td></tr>
+<tr><td>M21</td><td>Versioned readers for all durable JSON</td><td>Narrowed into #5; representative results first, not a blanket format migration.</td></tr>
+<tr><td>M22</td><td>Whole-bundle content substitution</td><td>Weak: missing provenance is not evidence of disputed content; replacement is premature before #6.</td></tr>
+<tr><td>X01</td><td>Decision continuity token protocol</td><td>Weak: existing versions, action IDs and command IDs can address the observed joins.</td></tr>
+<tr><td>X02</td><td>Mid-flight release/rollback round trip</td><td>Sound but high burden as a separate project; representative compatibility evidence retained in #5.</td></tr>
+<tr><td>X03</td><td>Disclosure-checked incident compiler</td><td>Weak: no demonstrated sharing need warrants an automated causal-redaction subsystem.</td></tr>
+<tr><td>X04</td><td>Successor continuity capsule</td><td>Weak: bundles undecided privacy/content policies into premature architecture.</td></tr>
+</tbody></table></div>
+<p>No axis was left uncovered. The recurring cut was unnecessary new infrastructure: the app already has useful contracts and controls to strengthen. Nothing here depends on a rewrite or assumes that an old audit finding is still an unfixed bug.</p>
+</section>
+
+<section id="references"><h2>Sources &amp; References</h2>
+<p>Line references describe the inspected workspace, which includes uncommitted changes; links below open the repository’s main branch and may differ from that workspace.</p><ul>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/the-sies-files-audit/17_AUDIT_AND_REMEDIATION_INDEX_v1.md">Historical audit index and original revision scope</a></li>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/src/lib/command.ts">Transactional commands and persisted result decoding</a></li>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/src/components/useGameEventStream.ts">Client event-stream handling</a></li>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/src/modules/recovery/recovery.service.ts">Checkpoint/replay implementation</a></li>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/scripts/backup-restore.sh">Inspected backup/restore script</a></li>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/.github/workflows/ci.yml">Existing CI configuration</a></li>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/prisma/schema.prisma">Stored data and retention relationships</a></li>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/src/content/manifest.ts">Content readiness and protected-delivery intent</a></li>
+<li><a href="https://github.com/slawinski/the-sies-files/blob/main/the-sies-files-docs/00_README.md">Product/ruleset context</a></li>
+</ul></section>
+<footer>Composed 2026-10-28T22:24:18Z by ce-ideate from the inherited-app reinforcement request and inspected repository evidence.</footer>
+</main></body></html>
