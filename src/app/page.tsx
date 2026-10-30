@@ -1,34 +1,43 @@
 import Link from "next/link";
 
+// Branded entry (audit 18 §7): compact wordmark, one case-file hero, two
+// clearly-explained paths. No unexplained "Storyteller" jargon before the
+// user has context.
+
 export default function Home() {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-10 px-6">
-      <div className="text-center">
-        <p className="display mb-3 text-sm tracking-[0.3em] text-moss">
-          Akta sprawy &middot; Sieśki
+    <main className="texture-shell flex min-h-dvh flex-col items-center justify-center px-6 py-12">
+      <div className="w-full max-w-sm text-center">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-moss">
+          Akta sprawy &middot; wiejskie neo-noir
         </p>
-        <h1 className="display text-4xl leading-tight text-ink-primary">
+        <h1 className="display mt-3 text-4xl leading-tight text-ink-primary">
           The Sieś Files
         </h1>
-        <p className="mx-auto mt-4 max-w-xs text-ink-muted">
-          Towarzysz gry w dedukcję społeczną w klimacie wiejskiego neo-noir — na weekend w terenie.
+        <p className="mx-auto mt-4 max-w-xs text-base leading-relaxed text-ink-secondary">
+          Towarzysz gry w dedukcję społeczną — na weekend w terenie, z telefonem w dłoni.
         </p>
       </div>
 
-      <div className="flex w-full max-w-xs flex-col gap-3">
+      <div className="mt-10 flex w-full max-w-xs flex-col gap-3">
         <Link
           href="/storyteller"
-          className="flex min-h-12 items-center justify-center rounded-xl border border-brass/60 bg-brass/10 px-5 text-ink-primary transition-colors hover:bg-brass/20"
+          className="flex min-h-14 items-center justify-center rounded-control bg-brass px-6 text-base font-medium text-ink transition-colors hover:bg-brass/90"
         >
-          Storyteller
+          Prowadzę grę
         </Link>
         <Link
           href="/claim"
-          className="flex min-h-12 items-center justify-center rounded-xl border border-line px-5 text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary"
+          className="flex min-h-14 items-center justify-center rounded-control border border-line bg-card-soft/60 px-6 text-base text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary"
         >
-          Mam link do odbioru
+          Dołączam jako gracz
         </Link>
       </div>
+
+      <p className="mt-10 max-w-xs text-center text-meta text-ink-muted">
+        Prowadzący otwiera sprawę i rozsyła jednorazowe linki do odbioru tożsamości. Gracze grają
+        z telefonu — w domu, na podwórku, w terenie.
+      </p>
     </main>
   );
 }

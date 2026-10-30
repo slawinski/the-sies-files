@@ -1,14 +1,16 @@
 "use client";
 
+// Storyteller entry — open a case or resume the current one (audit 18 §7).
+// Polish copy first; the "Storyteller" role is explained, not assumed.
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  api,
-  ApiClientError,
-  friendlyMessage,
-  type StorytellerGameProjection,
-} from "@/lib/client-api";
+import { api, ApiClientError, friendlyMessage, type StorytellerGameProjection } from "@/lib/client-api";
+import AppShell, { AppShellContent } from "@/components/ui/AppShell";
+import Button from "@/components/ui/Button";
+import Notice from "@/components/ui/Notice";
+import Surface from "@/components/ui/Surface";
 
 type View = "loading" | "form" | "creating" | "error";
 
@@ -68,81 +70,85 @@ export default function StorytellerHome() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <AppShell>
       <header className="border-b border-line">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3">
-          <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
+          <Link href="/" className="text-[11px] uppercase tracking-[0.3em] text-moss">
             The Sieś Files
           </Link>
-          <span className="text-meta text-ink-muted">Storyteller</span>
+          <span className="text-meta text-ink-muted">Prowadzący</span>
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10">
-        {view === "loading" && (
-          <p className="text-center text-ink-muted">Sprawdzam akta sprawy…</p>
-        )}
+      <AppShellContent>
+        <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+          {view === "loading" && (
+            <p className="text-center text-ink-muted">Sprawdzam akta sprawy…</p>
+          )}
 
-        {view === "error" && (
-          <div className="card critical-card text-center">
-            <p className="text-danger">{error}</p>
-            <button
-              type="button"
-              onClick={() => {
-                setView("loading");
-                setError(null);
-                void api<{ gameId: string | null }>("/api/v1/storyteller/current")
-                  .then((c) => (c.gameId ? router.replace(`/storyteller/${c.gameId}`) : setView("form")))
-                  .catch((err: ApiClientError) => {
-                    setError(friendlyMessage(err.code ?? "UNKNOWN", "Nie udało się sprawdzić otwartej sprawy."));
-                    setView("error");
-                  });
-              }}
-              className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass hover:bg-brass/20"
-            >
-              Spróbuj ponownie
-            </button>
-          </div>
-        )}
-
-        {(view === "form" || view === "creating") && (
-          <div className="card">
-            <p className="display text-meta tracking-[0.25em] text-moss">Nowe akta sprawy</p>
-            <h1 className="display mt-2 text-2xl leading-tight text-ink-primary">
-              Otwórz sprawę
-            </h1>
-            <p className="mt-2 text-sm text-ink-muted">
-              Nazwij to śledztwo. Następnie dodasz 13–16 uczestników i ustawisz ich w Wirtualnym
-              Kręgu.
-            </p>
-
-            <form onSubmit={handleCreate} className="mt-5 flex flex-col gap-3">
-              <label htmlFor="game-name" className="sr-only">
-                Nazwa sprawy
-              </label>
-              <input
-                id="game-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="The Sieś Files — 2026"
-                autoComplete="off"
-                className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
-              />
-              {error && <p className="text-sm text-danger">{error}</p>}
-              <button
-                type="submit"
-                disabled={view === "creating"}
-                className="min-h-12 rounded-xl border border-brass/60 bg-brass/10 px-5 text-ink-primary transition-colors hover:bg-brass/20 disabled:opacity-50"
+          {view === "error" && (
+            <div className="flex flex-col gap-3">
+              <Notice variant="error">{error}</Notice>
+              <Button
+                fullWidth
+                onClick={() => {
+                  setView("loading");
+                  setError(null);
+                  void api<{ gameId: string | null }>("/api/v1/storyteller/current")
+                    .then((c) =>
+                      c.gameId ? router.replace(`/storyteller/${c.gameId}`) : setView("form"),
+                    )
+                    .catch((err: ApiClientError) => {
+                      setError(
+                        friendlyMessage(
+                          err.code ?? "UNKNOWN",
+                          "Nie udało się sprawdzić otwartej sprawy.",
+                        ),
+                      );
+                      setView("error");
+                    });
+                }}
               >
-                {view === "creating" ? "Otwieram…" : "Otwórz sprawę"}
-              </button>
-            </form>
-          </div>
-        )}
+                Spróbuj ponownie
+              </Button>
+            </div>
+          )}
 
-        {(view === "error" || view === "form" || view === "creating") && <RecoverAccess />}
-      </main>
-    </div>
+          {(view === "form" || view === "creating") && (
+            <Surface variant="system">
+              <p className="eyebrow">Nowe akta sprawy</p>
+              <h1 className="display mt-2 text-2xl leading-tight text-ink-primary">
+                Otwórz sprawę
+              </h1>
+              <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                Nazwij to śledztwo. Następnie dodasz 13–16 uczestników i ustawisz ich w Wirtualnym
+                Kręgu, a na koniec zatwierdzisz tajny układ ról.
+              </p>
+
+              <form onSubmit={handleCreate} className="mt-5 flex flex-col gap-3">
+                <label htmlFor="game-name" className="sr-only">
+                  Nazwa sprawy
+                </label>
+                <input
+                  id="game-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="The Sieś Files — 2026"
+                  autoComplete="off"
+                  className="min-h-12 w-full rounded-control border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
+                />
+                {error && <Notice variant="error">{error}</Notice>}
+                <Button type="submit" fullWidth size="lg" busy={view === "creating"}>
+                  {view === "creating" ? "Otwieram…" : "Otwórz sprawę"}
+                </Button>
+              </form>
+            </Surface>
+          )}
+
+          {(view === "error" || view === "form" || view === "creating") && <RecoverAccess />}
+        </div>
+      </AppShellContent>
+    </AppShell>
   );
 }
 
@@ -174,20 +180,20 @@ function RecoverAccess() {
   }
 
   return (
-    <div className="mt-6">
+    <div>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="min-h-11 rounded-xl px-3 text-sm text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
+        className="min-h-11 rounded-control px-3 text-sm text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
       >
-        Odzyskaj dostęp Storytellera
+        Odzyskaj dostęp prowadzącego
       </button>
 
       {open && (
         <form
           onSubmit={handleSubmit}
-          className="mt-3 flex flex-col gap-2 rounded-xl border border-line bg-card-soft/60 p-3"
+          className="mt-3 flex flex-col gap-2 rounded-tile border border-line bg-card-soft/60 p-3"
         >
           <label htmlFor="recover-game-id" className="sr-only">
             Identyfikator sprawy
@@ -195,10 +201,10 @@ function RecoverAccess() {
           <input
             id="recover-game-id"
             value={gameId}
-            onChange={(e) => setGameId(e.target.value)}
+            onChange={(event) => setGameId(event.target.value)}
             placeholder="ID sprawy"
             autoComplete="off"
-            className="min-h-11 w-full rounded-xl border border-line bg-elevated px-3 font-mono text-sm text-ink-primary placeholder:text-ink-muted"
+            className="min-h-11 w-full rounded-control border border-line bg-elevated px-3 font-mono text-sm text-ink-primary placeholder:text-ink-muted"
           />
           <label htmlFor="recover-secret" className="sr-only">
             Sekret odzyskiwania
@@ -207,23 +213,20 @@ function RecoverAccess() {
             id="recover-secret"
             type="password"
             value={secret}
-            onChange={(e) => setSecret(e.target.value)}
+            onChange={(event) => setSecret(event.target.value)}
             placeholder="Sekret odzyskiwania"
             autoComplete="off"
-            className="min-h-11 w-full rounded-xl border border-line bg-elevated px-3 text-ink-primary placeholder:text-ink-muted"
+            className="min-h-11 w-full rounded-control border border-line bg-elevated px-3 text-ink-primary placeholder:text-ink-muted"
           />
-          {failed && (
-            <p role="alert" className="text-sm text-danger">
-              Nie udało się odzyskać dostępu.
-            </p>
-          )}
-          <button
+          {failed && <Notice variant="error">Nie udało się odzyskać dostępu.</Notice>}
+          <Button
             type="submit"
-            disabled={busy || !gameId.trim() || !secret.trim()}
-            className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
+            variant="secondary"
+            busy={busy}
+            disabled={!gameId.trim() || !secret.trim()}
           >
             {busy ? "Odzyskuję…" : "Odzyskaj"}
-          </button>
+          </Button>
         </form>
       )}
     </div>

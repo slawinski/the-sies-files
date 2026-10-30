@@ -2,8 +2,33 @@
 // specs independent of random assignment luck: roles are discovered from
 // Storyteller projections, never assumed.
 
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { expect } from "@playwright/test";
+import type { SetupCandidate } from '../../src/modules/setup/types';
+
+export const BASELINE_SEED = 'regression-baseline-v1';
+export function hasSuccessionPrerequisites(candidate: { assignments: Array<{ trueCharacterId: string }> }) {
+  const roles = candidate.assignments.map(a => a.trueCharacterId);
+  return roles.includes('IMP') && ['POISONER', 'SPY', 'SCARLET_WOMAN', 'BARON'].some(r => roles.includes(r)) && ['CHEF', 'MONK'].some(r => roles.includes(r));
+}
+export async function requireOk(response: APIResponse, context: string) {
+  if (!response.ok()) throw new Error(`${context}: HTTP ${response.status()} ${response.url()}: ${await response.text()}`);
+  return response;
+}
+export async function commandVersion(response: APIResponse, expectedVersion: number) {
+  const body = await (await requireOk(response, `command expectedVersion=${expectedVersion}`)).json();
+  expect(Number.isInteger(body.version), 'command returned version').toBe(true);
+  return body.version as number;
+}
+export function scenarioSpecimen(seed: string, candidate: SetupCandidate) {
+  return { seed, generatorVersion: candidate.generatorVersion,
+    script: ['TROUBLE_BREWING', 1], scenario: ['THE_SIES_FILES_MILLIONAIRE', 1],
+    roles: candidate.assignments.map(({ virtualSeat, participantKind, trueCharacterId, perceivedCharacterId, trueAlignment }) =>
+      ({ virtualSeat, participantKind, trueCharacterId, perceivedCharacterId, trueAlignment })) };
+}
+function recordCandidate(seed: string, candidate: SetupCandidate) {
+  console.log('BASELINE_SCENARIO', JSON.stringify(scenarioSpecimen(seed, candidate)));
+}
 
 /** Test server base URL (matches the Playwright config webServer). */
 export const E2E_BASE_URL = "http://localhost:3100";
@@ -20,7 +45,7 @@ export async function createStorytellerGame(
   count: number,
 ): Promise<StorytellerGame> {
   const created = await st.post("/api/v1/games", { data: { name } });
-  expect(created.ok(), "create game").toBeTruthy();
+  await requireOk(created, 'create game');
   const game = await created.json();
 
   let version = game.version;
@@ -33,7 +58,7 @@ export async function createStorytellerGame(
         payload: { displayName: `Player ${i}` },
       },
     });
-    expect(res.ok(), `add player ${i}`).toBeTruthy();
+    await requireOk(res, `add player ${i} expectedVersion=${version}`);
     const body = await res.json();
     version = body.version;
     playerIds.push(body.playerId);
@@ -47,16 +72,17 @@ export async function generateAndCommitSetup(
   version: number,
 ): Promise<{ version: number; candidate: unknown }> {
   const generated = await st.post(`/api/v1/games/${gameId}/setup/generate`, {
-    data: { commandId: crypto.randomUUID(), expectedVersion: version },
+    data: { commandId: crypto.randomUUID(), expectedVersion: version, payload: { seed: BASELINE_SEED } },
   });
-  expect(generated.ok(), "generate setup").toBeTruthy();
+  await requireOk(generated, `generate setup expectedVersion=${version}`);
   const committed = await st.post(`/api/v1/games/${gameId}/setup/commit`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: (await generated.json()).version },
   });
-  expect(committed.ok(), "commit setup").toBeTruthy();
+  await requireOk(committed, 'commit setup');
 
   const projection = await st.get(`/api/v1/games/${gameId}/storyteller`);
   const stProjection = await projection.json();
+  recordCandidate(BASELINE_SEED, stProjection.setup.candidate);
   return { version: stProjection.version, candidate: stProjection.setup.candidate };
 }
 
@@ -70,28 +96,28 @@ export async function generateSetupUntilRole(
   version: number,
   role: string,
   maxAttempts = 80,
+  prerequisites: (candidate: SetupCandidate) => boolean = () => true,
 ): Promise<{ version: number; candidate: unknown }> {
   let v = version;
   for (let i = 0; i < maxAttempts; i += 1) {
     const generated = await st.post(`/api/v1/games/${gameId}/setup/generate`, {
       data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { seed: `e2e-seed-${i}` } },
     });
-    expect(generated.ok(), `generate seed ${i}`).toBeTruthy();
+    await requireOk(generated, `generate seed ${i} expectedVersion=${v}`);
     v = (await generated.json()).version;
 
     const projection = await (await st.get(`/api/v1/games/${gameId}/storyteller`)).json();
-    const candidate = projection.setup.candidate as {
-      assignments: Array<{ trueCharacterId: string }>;
-    };
-    if (candidate.assignments.some((a) => a.trueCharacterId === role)) {
+    const candidate = projection.setup.candidate as SetupCandidate;
+    if (candidate.assignments.some((a) => a.trueCharacterId === role) && prerequisites(candidate)) {
       const committed = await st.post(`/api/v1/games/${gameId}/setup/commit`, {
         data: { commandId: crypto.randomUUID(), expectedVersion: v },
       });
-      expect(committed.ok(), "commit setup").toBeTruthy();
-      return { version: projection.version, candidate };
+      const committedVersion = await commandVersion(committed, v);
+      recordCandidate(`e2e-seed-${i}`, candidate);
+      return { version: committedVersion, candidate };
     }
   }
-  throw new Error(`No seed found with role ${role} within ${maxAttempts} attempts`);
+  throw new Error(`Fixture prerequisites not met: role ${role} within ${maxAttempts} fixed seeds`);
 }
 
 /**
@@ -111,9 +137,9 @@ export async function executeDemonToEnd(
   let winner: string | null = null;
 
   for (let attempt = 0; attempt < 4 && !winner; attempt += 1) {
-    v = (await (await st.post(`/api/v1/games/${gameId}/investigation/nominations/open`, {
+    v = await commandVersion(await st.post(`/api/v1/games/${gameId}/investigation/nominations/open`, {
       data: { commandId: crypto.randomUUID(), expectedVersion: v },
-    })).json()).version;
+    }), v);
 
     const nominator = sessions.find((s) => s.playerId !== currentImp)!;
     const nomination = await nominator.request.post(`/api/v1/games/${gameId}/nominations`, {
@@ -122,13 +148,13 @@ export async function executeDemonToEnd(
     if (!nomination.ok()) {
       console.log(`nominate failed (attempt ${attempt}, imp=${currentImp}):`, nomination.status(), await nomination.text());
     }
-    expect(nomination.ok(), "nominate demon").toBeTruthy();
+    await requireOk(nomination, `nominate demon expectedVersion=${v}`);
     const nominationBody = await nomination.json();
     v = nominationBody.version;
 
-    v = (await (await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/voting/start`, {
+    v = await commandVersion(await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/voting/start`, {
       data: { commandId: crypto.randomUUID(), expectedVersion: v },
-    })).json()).version;
+    }), v);
 
     const stProjection = await (await st.get(`/api/v1/games/${gameId}/storyteller`)).json();
     for (const p of stProjection.players as Array<{ id: string }>) {
@@ -138,17 +164,17 @@ export async function executeDemonToEnd(
         `/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/votes/intent`,
         { data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { intent: true } } },
       );
-      if (res.ok()) v = (await res.json()).version;
+      v = await commandVersion(res, v);
     }
 
-    v = (await (await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/votes/lock`, {
+    v = await commandVersion(await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/votes/lock`, {
       data: { commandId: crypto.randomUUID(), expectedVersion: v },
-    })).json()).version;
+    }), v);
 
     const executed = await st.post(`/api/v1/games/${gameId}/investigation/resolve-execution`, {
       data: { commandId: crypto.randomUUID(), expectedVersion: v },
     });
-    expect(executed.ok(), "resolve execution").toBeTruthy();
+    await requireOk(executed, `resolve execution expectedVersion=${v}`);
     const body = await executed.json();
     v = body.version;
     winner = body.winner;
@@ -163,13 +189,13 @@ export async function executeDemonToEnd(
       );
       if (change?.payload?.playerId) currentImp = change.payload.playerId;
 
-      v = (await (await st.post(`/api/v1/games/${gameId}/investigation/nominations/close`, {
+      v = await commandVersion(await st.post(`/api/v1/games/${gameId}/investigation/nominations/close`, {
         data: { commandId: crypto.randomUUID(), expectedVersion: v },
-      })).json()).version;
+      }), v);
       const closed = await st.post(`/api/v1/games/${gameId}/investigation/close`, {
         data: { commandId: crypto.randomUUID(), expectedVersion: v },
       });
-      expect(closed.ok(), "close investigation").toBeTruthy();
+      await requireOk(closed, `close investigation expectedVersion=${v}`);
       v = (await closed.json()).version;
       v = await driveOperationalCycle(st, sessions, gameId, v);
     }
@@ -189,7 +215,7 @@ export async function driveOperationalCycle(
   const started = await st.post(`/api/v1/games/${gameId}/operational/start`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: version },
   });
-  expect(started.ok(), "start operational").toBeTruthy();
+  await requireOk(started, `start operational expectedVersion=${version}`);
   let v = (await started.json()).version;
 
   for (let guard = 0; guard < 100; guard += 1) {
@@ -208,16 +234,19 @@ export async function driveOperationalCycle(
       const chosen =
         targets[active.kind] ??
         (active.kind === "FORTUNE_TELLER_CHOOSE" ? others.slice(0, 2) : others.slice(0, 1));
+      console.log('BASELINE_ACTION', JSON.stringify({ kind: active.kind,
+        actorSeat: projection.players.findIndex((p: { id: string }) => p.id === active.actorPlayerId),
+        targetSeats: chosen.map((id: string) => projection.players.findIndex((p: { id: string }) => p.id === id)) }));
       const res = await session!.request.post(`/api/v1/games/${gameId}/operational/actions/${active.id}/submit`, {
         data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { targetPlayerIds: chosen } },
       });
-      expect(res.ok(), `submit ${active.kind}`).toBeTruthy();
+      await requireOk(res, `submit ${active.kind} targets=${JSON.stringify(chosen)} expectedVersion=${v}`);
       v = (await res.json()).version;
     } else {
       const res = await st.post(`/api/v1/games/${gameId}/storyteller/actions/${active.id}/resolve`, {
         data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: {} },
       });
-      expect(res.ok(), `resolve ${active.kind}`).toBeTruthy();
+      await requireOk(res, `resolve ${active.kind} expectedVersion=${v}`);
       v = (await res.json()).version;
     }
   }
@@ -225,7 +254,7 @@ export async function driveOperationalCycle(
   const complete = await st.post(`/api/v1/games/${gameId}/operational/complete`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v },
   });
-  expect(complete.ok(), "complete operational").toBeTruthy();
+  await requireOk(complete, `complete operational expectedVersion=${v}`);
   return (await complete.json()).version;
 }
 
@@ -239,12 +268,12 @@ export async function claimPlayer(
   const claimRes = await st.post(`/api/v1/games/${gameId}/players/${playerId}/claim-token`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: version },
   });
-  expect(claimRes.ok(), "issue claim token").toBeTruthy();
+  await requireOk(claimRes, `issue claim token expectedVersion=${version}`);
   const claimBody = await claimRes.json();
   const claim = await playerRequest.post("/api/v1/player-claims/claim", {
     data: { token: claimBody.claimToken, commandId: crypto.randomUUID() },
   });
-  expect(claim.ok(), "claim player").toBeTruthy();
+  await requireOk(claim, 'claim player');
   return { player: playerRequest, version: (await claim.json()).version };
 }
 
@@ -272,13 +301,13 @@ export async function claimAllPlayers(
     const res = await st.post(`/api/v1/games/${gameId}/players/${playerId}/claim-token`, {
       data: { commandId: crypto.randomUUID(), expectedVersion: v },
     });
-    expect(res.ok()).toBeTruthy();
+    await requireOk(res, `issue claim token expectedVersion=${v}`);
     const body = await res.json();
     v = body.version;
     const claim = await context.request.post("/api/v1/player-claims/claim", {
       data: { token: body.claimToken, commandId: crypto.randomUUID() },
     });
-    expect(claim.ok()).toBeTruthy();
+    await requireOk(claim, `claim player after version=${v}`);
     // The claim itself bumps the game version (PLAYER_CLAIMED).
     v = (await claim.json()).version;
     sessions.push({ playerId, request: context.request });

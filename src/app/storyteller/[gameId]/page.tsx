@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
+// /storyteller/[gameId] — controller layer (spec 19 §7.1). Fetches the
+// projection + control/audit feeds, owns every mutation, resolves the active
+// view from the URL, and delegates rendering. Rendering/styling lives in the
+// view components.
+
+import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   api,
   ApiClientError,
@@ -11,194 +15,32 @@ import {
   type AccessResetResponseDto,
   type AuditCategoryDto,
   type CheckpointResponseDto,
-  type InfoResultDto,
-  type PresenceConnectionDto,
-  type StorytellerActionDto,
   type StorytellerAuditDto,
   type StorytellerControlDto,
   type StorytellerGameProjection,
   type StorytellerPlayerDto,
   type StorytellerResolutionDto,
 } from "@/lib/client-api";
-import ActionDecisionPanel from "@/components/ActionDecisionPanel";
-import PhaseBadge from "@/components/PhaseBadge";
-import { useGameEventStream, type RealtimeHealth } from "@/components/useGameEventStream";
+import { useGameEventStream } from "@/components/useGameEventStream";
 import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
-import { characterDisplayName, type CharacterId } from "@/modules/trouble-brewing/characters";
-import { STEP_CHARACTER, type StepKind } from "@/modules/trouble-brewing/script";
-
-const MIN_READY = 13;
-const MAX_PLAYERS = 16;
-
-/** Scenario definition fixture ids (docs/08) — ST-only override menu. */
-const CLUE_OPTIONS = [
-  { id: "clue-letter", label: "clue-letter — List milionera" },
-  { id: "clue-map", label: "clue-map — Aneks do mapy" },
-  { id: "clue-finale", label: "clue-finale — Zniknięcie" },
-];
-
-const MAP_OPTIONS = [
-  { id: "MAP_BASE", label: "Mapa główna" },
-  { id: "MAP_EXTENDED", label: "Mapa rozszerzona" },
-];
-
-type RecoveryKind = "RESOLVE_ACTION" | "SKIP_ACTION" | "CORRECT_ALIVE" | "RESTORE_GHOST_VOTE";
-
-const RECOVERY_KINDS: { id: RecoveryKind; label: string }[] = [
-  { id: "RESOLVE_ACTION", label: "Rozwiąż akcję" },
-  { id: "SKIP_ACTION", label: "Pomiń akcję" },
-  { id: "CORRECT_ALIVE", label: "Popraw stan życia" },
-  { id: "RESTORE_GHOST_VOTE", label: "Przywróć głos widma" },
-];
-
-/** "2026-08-20T18:04:00Z" → "20.08, 18:04" (local). */
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("pl-PL", {
-    day: "numeric",
-    month: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function mapVersionLabel(mapVersionId: string | null): string {
-  if (mapVersionId === "MAP_EXTENDED") return "Mapa rozszerzona";
-  if (mapVersionId === "MAP_BASE") return "Mapa główna";
-  return "—";
-}
-
-function taskStateLabel(state: string): string {
-  return state === "COMPLETED" ? "ukończono" : "do zrobienia";
-}
-
-function statusLabel(status: string): string {
-  if (status === "LOBBY") return "Poczekalnia";
-  if (status === "SETUP") return "Konfiguracja";
-  return status;
-}
-
-function claimStatus(player: StorytellerPlayerDto): { label: string; className: string } {
-  if (player.claimed) return { label: "odebrano", className: "text-success" };
-  if (player.hasClaimToken) return { label: "link wydany, nieodebrany", className: "text-brass" };
-  return { label: "brak linku", className: "text-ink-muted" };
-}
-
-function presenceTone(connection: PresenceConnectionDto): string {
-  if (connection === "ONLINE") return "border-success/40 text-success";
-  if (connection === "STALE") return "border-brass/40 text-brass";
-  return "border-line text-ink-muted";
-}
-
-/** Compact realtime health pill — always carries text, never color alone. */
-function RealtimeBadge({ health }: { health: RealtimeHealth }) {
-  if (health === "LIVE") {
-    return (
-      <span
-        role="status"
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-moss/40 bg-moss/10 px-3 text-meta font-medium text-moss"
-      >
-        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-moss" />
-        LIVE
-      </span>
-    );
-  }
-  if (health === "RECONNECTING") {
-    return (
-      <span
-        role="status"
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-brass/40 bg-brass/10 px-3 text-meta font-medium text-brass"
-      >
-        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-brass" />
-        ŁĄCZENIE…
-      </span>
-    );
-  }
-  return (
-    <span
-      role="status"
-      className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-danger/40 bg-danger/10 px-3 text-meta font-medium text-danger"
-    >
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-danger" />
-      OFFLINE
-    </span>
-  );
-}
-
-function alignmentLabel(alignment: string): string {
-  return alignment === "EVIL" ? "Zło" : "Dobro";
-}
-
-function winnerLabel(winner: string | null): string {
-  if (winner === "GOOD") return "Koniec gry — wygrywa dobro";
-  if (winner === "EVIL") return "Koniec gry — wygrywa zło";
-  return "";
-}
-
-function nominationStatusLabel(status: string): string {
-  switch (status) {
-    case "VOTING":
-      return "głosowanie";
-    case "LOCKED":
-      return "zablokowano";
-    case "RESOLVED":
-      return "rozstrzygnięto";
-    case "CREATED":
-      return "utworzono";
-    case "DAY_TRIGGER_RESOLUTION":
-      return "wymagana decyzja rejestracji";
-    default:
-      return status;
-  }
-}
-
-/** Polish labels for the bounded registration option descriptions (spec 18). */
-const REGISTRATION_DESCRIPTION_LABELS: Record<string, string> = {
-  "true registration": "prawdziwa rejestracja",
-  "register as evil": "rejestruje się jako zły",
-  "register as good": "rejestruje się jako dobry",
-  "register as a Minion": "rejestruje się jako Sługus",
-  "register as the Demon": "rejestruje się jako Demon",
-  "register as a Townsfolk": "rejestruje się jako Mieszczanin",
-  "register as an Outsider": "rejestruje się jako Odludek",
-};
-
-function registrationOptionLabel(description: string): string {
-  return REGISTRATION_DESCRIPTION_LABELS[description] ?? description;
-}
-
-function isInfoResult(result: unknown): result is InfoResultDto {
-  if (typeof result !== "object" || result === null) return false;
-  return "kind" in result && typeof (result as { kind?: unknown }).kind === "string";
-}
-
-/** Readable text for a resolved secret (InfoResult or `{ targetPlayerIds }`). */
-function resolutionText(result: unknown, nameById: Map<string, string>): string {
-  if (isInfoResult(result)) {
-    switch (result.kind) {
-      case "CHARACTER_CANDIDATES":
-        return `${characterDisplayName(result.characterId)}: ${result.candidatePlayerIds
-          .map((id) => nameById.get(id) ?? id)
-          .join(", ")}`;
-      case "CHARACTER":
-        return `${characterDisplayName(result.characterId)} — ${nameById.get(result.playerId) ?? result.playerId}`;
-      case "NUMBER":
-        return `Liczba: ${result.value}`;
-      case "NO_OUTSIDERS":
-        return "brak outsiderów";
-      case "DEMON_YES_NO":
-        return result.value ? "Tak" : "Nie";
-      case "GRIMOIRE":
-        return `Pełna lista ról (${result.assignments.length})`;
-      default:
-        return "—";
-    }
-  }
-  if (result && typeof result === "object" && "targetPlayerIds" in result) {
-    const ids = (result as { targetPlayerIds?: string[] }).targetPlayerIds ?? [];
-    return `Wybrani: ${ids.map((id) => nameById.get(id) ?? id).join(", ")}`;
-  }
-  return "—";
-}
+import { useVersionedMutation } from "@/components/useVersionedMutation";
+import { isStorytellerView, type StorytellerView } from "@/lib/presentation/types";
+import { selectPrimaryStorytellerBlocker } from "@/lib/presentation/storyteller-mode";
+import { formatTime, phaseLabel } from "@/lib/presentation/labels";
+import AppShell, { AppShellContent } from "@/components/ui/AppShell";
+import CaseHeader from "@/components/ui/CaseHeader";
+import Button from "@/components/ui/Button";
+import Dialog from "@/components/ui/Dialog";
+import Notice from "@/components/ui/Notice";
+import Skeleton from "@/components/ui/Skeleton";
+import { Eye, EyeOff } from "lucide-react";
+import StorytellerShell from "./_components/StorytellerShell";
+import ControlView from "./_components/ControlView";
+import PlayersView from "./_components/PlayersView";
+import GrimoireView from "./_components/GrimoireView";
+import ScenarioView from "./_components/ScenarioView";
+import AuditView from "./_components/AuditView";
+import SystemView, { type RecoveryKind } from "./_components/SystemView";
 
 interface ClaimTokenResponse {
   playerId: string;
@@ -209,28 +51,32 @@ interface ClaimTokenResponse {
   version: number;
 }
 
-export default function StorytellerDashboard() {
+function LoadingShell() {
+  return (
+    <AppShell>
+      <AppShellContent variant="storyteller">
+        <Skeleton variant="heading" className="mb-4" />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Skeleton variant="tile" className="h-44 xl:col-span-2" />
+          <Skeleton variant="tile" className="h-44" />
+        </div>
+        <Skeleton variant="list" className="mt-4" />
+      </AppShellContent>
+    </AppShell>
+  );
+}
+
+function StorytellerPageInner() {
   const params = useParams<{ gameId: string }>();
   const gameId = params.gameId;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawView = searchParams.get("view");
+  const view: StorytellerView = isStorytellerView(rawView) ? rawView : "control";
 
   const [game, setGame] = useState<StorytellerGameProjection | null>(null);
   const [loading, setLoading] = useState(true);
   const [fatalError, setFatalError] = useState<string | null>(null);
-  const [stale, setStale] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const [newName, setNewName] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState("");
-
-  const [claimModal, setClaimModal] = useState<{
-    player: StorytellerPlayerDto;
-    link: string | null;
-    busy: boolean;
-    error: string | null;
-  } | null>(null);
-
   const [renamingGame, setRenamingGame] = useState(false);
   const [gameNameDraft, setGameNameDraft] = useState("");
 
@@ -248,14 +94,20 @@ export default function StorytellerDashboard() {
   const [checkpointReason, setCheckpointReason] = useState("");
   const [checkpointNote, setCheckpointNote] = useState<string | null>(null);
 
-  /** One-shot crisp confirmation after a vote lock succeeds (docs/11 §13). */
-  const [lockConfirm, setLockConfirm] = useState(false);
-  const lockConfirmTimerRef = useRef<number | null>(null);
-
   const [recoveryKind, setRecoveryKind] = useState<RecoveryKind>("RESOLVE_ACTION");
   const [recoveryTargetId, setRecoveryTargetId] = useState("");
   const [recoveryAlive, setRecoveryAlive] = useState(true);
   const [recoveryReason, setRecoveryReason] = useState("");
+
+  /** Projector safety (audit 18 §6.6): blanks secret role details instantly. */
+  const [privacyCovered, setPrivacyCovered] = useState(false);
+
+  const [claimModal, setClaimModal] = useState<{
+    player: StorytellerPlayerDto;
+    link: string | null;
+    busy: boolean;
+    error: string | null;
+  } | null>(null);
 
   const [resetModal, setResetModal] = useState<{
     player: StorytellerPlayerDto;
@@ -264,7 +116,6 @@ export default function StorytellerDashboard() {
     error: string | null;
   } | null>(null);
 
-  /** Control plane projection (Slice 6) — refreshed alongside the main load. */
   const loadAux = useCallback(async () => {
     try {
       const controlRes = await api<StorytellerControlDto>(
@@ -276,13 +127,12 @@ export default function StorytellerDashboard() {
     }
   }, [gameId]);
 
-  /** Audit log with category filter + cursor pagination. */
   const loadAudit = useCallback(
     async (categories: AuditCategoryDto[], cursor?: number) => {
-      const params = new URLSearchParams();
-      if (categories.length > 0) params.set("categories", categories.join(","));
-      if (cursor !== undefined) params.set("cursor", String(cursor));
-      const qs = params.toString();
+      const query = new URLSearchParams();
+      if (categories.length > 0) query.set("categories", categories.join(","));
+      if (cursor !== undefined) query.set("cursor", String(cursor));
+      const qs = query.toString();
       try {
         const res = await api<StorytellerAuditDto>(
           `/api/v1/games/${gameId}/storyteller/audit${qs ? `?${qs}` : ""}`,
@@ -298,7 +148,6 @@ export default function StorytellerDashboard() {
         }
       } catch {
         if (cursor === undefined) setAuditError(true);
-        // Keep the previous snapshot; the audit card is non-critical.
       }
     },
     [gameId],
@@ -309,7 +158,6 @@ export default function StorytellerDashboard() {
       const next = await api<StorytellerGameProjection>(`/api/v1/games/${gameId}/storyteller`);
       setGame(next);
       setFatalError(null);
-      setStale(false);
       void loadAux();
     } catch (err) {
       const e = err as ApiClientError;
@@ -323,7 +171,6 @@ export default function StorytellerDashboard() {
     void load();
   }, [load]);
 
-  // Restore the audit category filter from the URL (survives reload).
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get("auditCat") ?? "";
     const categories = param
@@ -334,32 +181,6 @@ export default function StorytellerDashboard() {
     void loadAudit(categories);
   }, [loadAudit]);
 
-  function applyAuditCategories(next: AuditCategoryDto[]) {
-    auditCategoriesRef.current = next;
-    setAuditCategories(next);
-    const url = new URL(window.location.href);
-    if (next.length === 0) url.searchParams.delete("auditCat");
-    else url.searchParams.set("auditCat", next.join(","));
-    window.history.replaceState(null, "", url.toString());
-    void loadAudit(next);
-  }
-
-  function toggleAuditCategory(id: AuditCategoryDto) {
-    applyAuditCategories(
-      auditCategories.includes(id)
-        ? auditCategories.filter((c) => c !== id)
-        : [...auditCategories, id],
-    );
-  }
-
-  async function handleLoadMoreAudit() {
-    if (!audit?.nextCursor) return;
-    setAuditLoadingMore(true);
-    await loadAudit(auditCategories, audit.nextCursor);
-    setAuditLoadingMore(false);
-  }
-
-  /** One refetch of every card — coalesced upstream by the realtime hook. */
   const refetchAll = useCallback(() => {
     void load();
     void loadAudit(auditCategoriesRef.current);
@@ -368,138 +189,58 @@ export default function StorytellerDashboard() {
   const realtime = useGameEventStream(gameId, refetchAll);
   usePresenceHeartbeat(gameId);
 
-  // Clear the vote-lock confirmation timer on unmount.
-  useEffect(() => {
-    return () => {
-      if (lockConfirmTimerRef.current !== null) {
-        window.clearTimeout(lockConfirmTimerRef.current);
-      }
-    };
-  }, []);
+  // The stale banner persists until the user dismisses it or the next mutation
+  // succeeds — a version conflict is worth an explicit acknowledgement.
+  const { busy, actionError, stale, setActionError, setStale, run, runWithResult } =
+    useVersionedMutation(load);
 
-  async function runMutation(action: () => Promise<unknown>): Promise<boolean> {
-    setBusy(true);
-    setActionError(null);
-    setStale(false);
-    try {
-      await action();
-      await load();
-      return true;
-    } catch (err) {
-      const e = err as ApiClientError;
-      if (e.code === "VERSION_CONFLICT") {
-        await load();
-        setStale(true);
-      } else {
-        setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
-      }
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /** Like `runMutation`, but returns the endpoint's response body when it succeeds. */
-  async function runWithResult<T>(
-    action: () => Promise<T>,
-  ): Promise<{ ok: boolean; value: T | null }> {
-    setBusy(true);
-    setActionError(null);
-    setStale(false);
-    try {
-      const value = await action();
-      await load();
-      return { ok: true, value };
-    } catch (err) {
-      const e = err as ApiClientError;
-      if (e.code === "VERSION_CONFLICT") {
-        await load();
-        setStale(true);
-      } else {
-        setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
-      }
-      return { ok: false, value: null };
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleAdd(event: React.FormEvent) {
-    event.preventDefault();
-    const trimmed = newName.trim();
-    if (!trimmed || !game) return;
-    const ok = await runMutation(() =>
-      api(`/api/v1/games/${gameId}/players`, {
-        method: "POST",
+  function mutate(
+    path: string,
+    method: "POST" | "PATCH" | "DELETE",
+    payload: Record<string, unknown> = {},
+  ) {
+    if (!game) return Promise.resolve(false);
+    return run(() =>
+      api(path, {
+        method,
         body: JSON.stringify({
           commandId: crypto.randomUUID(),
           expectedVersion: game.version,
-          payload: { displayName: trimmed },
-        }),
-      }),
-    );
-    if (ok) setNewName("");
-  }
-
-  function startRename(player: StorytellerPlayerDto) {
-    setEditingId(player.id);
-    setEditingName(player.displayName);
-  }
-
-  async function commitRename(playerId: string) {
-    const trimmed = editingName.trim();
-    if (!trimmed || !game) return;
-    const ok = await runMutation(() =>
-      api(`/api/v1/games/${gameId}/players/${playerId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: { displayName: trimmed },
-        }),
-      }),
-    );
-    if (ok) {
-      setEditingId(null);
-      setEditingName("");
-    }
-  }
-
-  async function handleRemove(player: StorytellerPlayerDto) {
-    if (!game) return;
-    const confirmed = window.confirm(`Usunąć gracza ${player.displayName} z kręgu?`);
-    if (!confirmed) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/players/${player.id}`, {
-        method: "DELETE",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
+          ...payload,
         }),
       }),
     );
   }
 
-  async function handleMove(playerId: string, direction: -1 | 1) {
+  // ---- Roster -----------------------------------------------------------------
+  async function handleAddPlayer(name: string) {
+    const ok = await mutate(`/api/v1/games/${gameId}/players`, "POST", {
+      payload: { displayName: name },
+    });
+    return ok;
+  }
+
+  async function handleRenamePlayer(playerId: string, displayName: string) {
+    await mutate(`/api/v1/games/${gameId}/players/${playerId}`, "PATCH", {
+      payload: { displayName },
+    });
+  }
+
+  async function handleRemovePlayer(player: StorytellerPlayerDto) {
+    await mutate(`/api/v1/games/${gameId}/players/${player.id}`, "DELETE");
+  }
+
+  async function handleMovePlayer(playerId: string, direction: -1 | 1) {
     if (!game) return;
     const sorted = [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat);
     const index = sorted.findIndex((p) => p.id === playerId);
     const target = index + direction;
     if (index < 0 || target < 0 || target >= sorted.length) return;
-
     const reordered = [...sorted];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/players/reorder`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: { orderedPlayerIds: reordered.map((p) => p.id) },
-        }),
-      }),
-    );
+    await mutate(`/api/v1/games/${gameId}/players/reorder`, "POST", {
+      payload: { orderedPlayerIds: reordered.map((p) => p.id) },
+    });
   }
 
   async function issueClaim(player: StorytellerPlayerDto) {
@@ -515,21 +256,12 @@ export default function StorytellerDashboard() {
           }),
         },
       );
-      if (res.claimToken) {
-        setClaimModal({
-          player,
-          link: `${window.location.origin}/claim#${res.claimToken}`,
-          busy: false,
-          error: null,
-        });
-      } else {
-        setClaimModal({
-          player,
-          link: null,
-          busy: false,
-          error: "Dla tego gracza wydano już link do odbioru.",
-        });
-      }
+      setClaimModal({
+        player,
+        link: res.claimToken ? `${window.location.origin}/claim#${res.claimToken}` : null,
+        busy: false,
+        error: res.claimToken ? null : "Dla tego gracza wydano już link do odbioru.",
+      });
       await load();
     } catch (err) {
       const e = err as ApiClientError;
@@ -549,309 +281,6 @@ export default function StorytellerDashboard() {
   function openClaim(player: StorytellerPlayerDto) {
     setClaimModal({ player, link: null, busy: true, error: null });
     void issueClaim(player);
-  }
-
-  async function handleGenerateSetup() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/setup/generate`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleCommitSetup() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/setup/commit`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleStartOperational() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/operational/start`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleResolveActionWithResolution(
-    action: StorytellerActionDto,
-    resolution: StorytellerResolutionDto | undefined,
-  ) {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/storyteller/actions/${action.id}/resolve`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: resolution ? { resolution } : {},
-        }),
-      }),
-    );
-  }
-
-  async function handleRenameGame() {
-    if (!game) return;
-    const trimmed = gameNameDraft.trim();
-    if (!trimmed) return;
-    const ok = await runMutation(() =>
-      api(`/api/v1/games/${gameId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: { name: trimmed },
-        }),
-      }),
-    );
-    if (ok) {
-      setRenamingGame(false);
-      setGameNameDraft("");
-    }
-  }
-
-  async function handleCompleteOperational() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/operational/complete`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleOpenNominations() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/investigation/nominations/open`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleCloseNominations() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/investigation/nominations/close`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleLockVote(nominationId: string) {
-    if (!game) return;
-    const ok = await runMutation(() =>
-      api(`/api/v1/games/${gameId}/nominations/${nominationId}/votes/lock`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-    if (ok) {
-      setLockConfirm(true);
-      if (lockConfirmTimerRef.current !== null) {
-        window.clearTimeout(lockConfirmTimerRef.current);
-      }
-      lockConfirmTimerRef.current = window.setTimeout(() => setLockConfirm(false), 2200);
-    }
-  }
-
-  async function handleStartVoting(nominationId: string) {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/nominations/${nominationId}/voting/start`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleAdvanceVoting(nominationId: string) {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/nominations/${nominationId}/voting/advance`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleResolveTrigger(nominationId: string, optionId: string) {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/nominations/${nominationId}/triggers/resolve`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: { optionId },
-        }),
-      }),
-    );
-  }
-
-  async function handleResolveExecution() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/investigation/resolve-execution`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleCloseInvestigation() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/investigation/close`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleExileTraveller(playerId: string) {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/traveller/exile`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: { playerId },
-        }),
-      }),
-    );
-  }
-
-  async function handleScenarioRevealClue() {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/storyteller/scenario/clues/${revealClueId}/reveal`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: revealTargetPlayerId ? { targetPlayerId: revealTargetPlayerId } : {},
-        }),
-      }),
-    );
-  }
-
-  async function handleScenarioCompleteTask(taskId: string) {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/storyteller/scenario/tasks/${taskId}/complete`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version }),
-      }),
-    );
-  }
-
-  async function handleScenarioSetStage() {
-    if (!game || !stageInput.trim()) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/storyteller/scenario/stage`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: { stageId: stageInput.trim() },
-        }),
-      }),
-    );
-  }
-
-  async function handleScenarioSetMap(mapVersionId: string) {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/storyteller/scenario/map`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: { mapVersionId },
-        }),
-      }),
-    );
-  }
-
-  async function handleScenarioSetCondition(conditionId: string, active: boolean) {
-    if (!game) return;
-    await runMutation(() =>
-      api(`/api/v1/games/${gameId}/storyteller/scenario/conditions`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: { conditionId, active },
-        }),
-      }),
-    );
-  }
-
-  /** Prefill the override target from the current blocking action. */
-  useEffect(() => {
-    const blocking = control?.blockingAction ?? null;
-    if (!blocking) return;
-    const needsPlayer = recoveryKind === "CORRECT_ALIVE" || recoveryKind === "RESTORE_GHOST_VOTE";
-    setRecoveryTargetId(needsPlayer ? (blocking.actorPlayerId ?? "") : blocking.id);
-  }, [control, recoveryKind]);
-
-  async function handleCreateCheckpoint() {
-    if (!game) return;
-    setCheckpointNote(null);
-    const reason = checkpointReason.trim();
-    const res = await runWithResult<CheckpointResponseDto>(() =>
-      api(`/api/v1/games/${gameId}/storyteller/checkpoints`, {
-        method: "POST",
-        body: JSON.stringify({
-          commandId: crypto.randomUUID(),
-          expectedVersion: game.version,
-          payload: reason ? { reason } : {},
-        }),
-      }),
-    );
-    if (res.ok) {
-      setCheckpointReason("");
-      setCheckpointNote(
-        res.value?.valid === false
-          ? "Punkt kontrolny utworzony — UWAGA: stan niespójny."
-          : "Punkt kontrolny utworzony — stan spójny.",
-      );
-    }
-  }
-
-  async function handleRecoveryOverride() {
-    if (!game) return;
-    const reason = recoveryReason.trim();
-    if (!reason) return;
-    const target = recoveryTargetId.trim() || undefined;
-    const payload =
-      recoveryKind === "CORRECT_ALIVE"
-        ? { kind: recoveryKind, playerId: target, alive: recoveryAlive, reason }
-        : recoveryKind === "RESTORE_GHOST_VOTE"
-          ? { kind: recoveryKind, playerId: target, reason }
-          : { kind: recoveryKind, actionId: target, reason };
-    const ok = await runMutation(() =>
-      api(`/api/v1/games/${gameId}/storyteller/recovery/override`, {
-        method: "POST",
-        body: JSON.stringify({ commandId: crypto.randomUUID(), expectedVersion: game.version, payload }),
-      }),
-    );
-    if (ok) {
-      setRecoveryReason("");
-      setRecoveryTargetId("");
-    }
   }
 
   async function resetPlayerAccess(player: StorytellerPlayerDto) {
@@ -889,73 +318,242 @@ export default function StorytellerDashboard() {
     void resetPlayerAccess(player);
   }
 
-  const sorted = game ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat) : [];
-  const ready = game?.isReady ?? false;
-  const need = game ? Math.max(0, MIN_READY - game.participantCount) : 0;
-  const renameEnabled = game ? game.status === "LOBBY" || game.status === "SETUP" : false;
-  const gateText = ready
-    ? "Gotowe do konfiguracji"
-    : `Dodaj jeszcze ${need} ${need === 1 ? "uczestnika" : "uczestników"}`;
-  const gateClassName = ready
-    ? "border-success/40 bg-success/10 text-success"
-    : "border-brass/40 bg-brass/10 text-brass";
+  // ---- Setup / operational / investigation / scenario ------------------------
+  async function handleGenerateSetup() {
+    await mutate(`/api/v1/games/${gameId}/setup/generate`, "POST");
+  }
 
-  const setup = game?.setup ?? null;
-  const setupCommitted = setup?.committed ?? false;
-  const candidate = setup?.candidate ?? null;
-  const grimoireAssignments = candidate
-    ? [...candidate.assignments].sort((a, b) => a.virtualSeat - b.virtualSeat)
-    : [];
-  const operational = game?.operational ?? null;
+  async function handleCommitSetup() {
+    await mutate(`/api/v1/games/${gameId}/setup/commit`, "POST");
+  }
+
+  async function handleStartOperational() {
+    await mutate(`/api/v1/games/${gameId}/operational/start`, "POST");
+  }
+
+  async function handleResolveAction(
+    actionId: string,
+    resolution: StorytellerResolutionDto | undefined,
+  ) {
+    await mutate(`/api/v1/games/${gameId}/storyteller/actions/${actionId}/resolve`, "POST", {
+      payload: resolution ? { resolution } : {},
+    });
+  }
+
+  async function handleCompleteOperational() {
+    await mutate(`/api/v1/games/${gameId}/operational/complete`, "POST");
+  }
+
+  async function handleOpenNominations() {
+    await mutate(`/api/v1/games/${gameId}/investigation/nominations/open`, "POST");
+  }
+
+  async function handleCloseNominations() {
+    await mutate(`/api/v1/games/${gameId}/investigation/nominations/close`, "POST");
+  }
+
+  async function handleStartVoting(nominationId: string) {
+    await mutate(`/api/v1/games/${gameId}/nominations/${nominationId}/voting/start`, "POST");
+  }
+
+  async function handleAdvanceVoting(nominationId: string) {
+    await mutate(`/api/v1/games/${gameId}/nominations/${nominationId}/voting/advance`, "POST");
+  }
+
+  async function handleLockVote(nominationId: string) {
+    await mutate(`/api/v1/games/${gameId}/nominations/${nominationId}/votes/lock`, "POST");
+  }
+
+  async function handleResolveTrigger(nominationId: string, optionId: string) {
+    await mutate(`/api/v1/games/${gameId}/nominations/${nominationId}/triggers/resolve`, "POST", {
+      payload: { optionId },
+    });
+  }
+
+  async function handleResolveExecution() {
+    await mutate(`/api/v1/games/${gameId}/investigation/resolve-execution`, "POST");
+  }
+
+  async function handleCloseInvestigation() {
+    await mutate(`/api/v1/games/${gameId}/investigation/close`, "POST");
+  }
+
+  async function handleExileTraveller(playerId: string) {
+    await mutate(`/api/v1/games/${gameId}/traveller/exile`, "POST", { payload: { playerId } });
+  }
+
+  async function handleRenameGame() {
+    const trimmed = gameNameDraft.trim();
+    if (!trimmed || !game) return;
+    const ok = await run(() =>
+      api(`/api/v1/games/${gameId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game.version,
+          payload: { name: trimmed },
+        }),
+      }),
+    );
+    if (ok) {
+      setRenamingGame(false);
+      setGameNameDraft("");
+    }
+  }
+
+  async function handleRevealClue(clueId: string, targetPlayerId: string | null) {
+    await mutate(`/api/v1/games/${gameId}/storyteller/scenario/clues/${clueId}/reveal`, "POST", {
+      payload: targetPlayerId ? { targetPlayerId } : {},
+    });
+  }
+
+  async function handleCompleteTask(taskId: string) {
+    await mutate(`/api/v1/games/${gameId}/storyteller/scenario/tasks/${taskId}/complete`, "POST");
+  }
+
+  async function handleSetStage(stageId: string) {
+    if (!stageId.trim()) return;
+    await mutate(`/api/v1/games/${gameId}/storyteller/scenario/stage`, "POST", {
+      payload: { stageId: stageId.trim() },
+    });
+  }
+
+  async function handleSetMap(mapVersionId: string) {
+    await mutate(`/api/v1/games/${gameId}/storyteller/scenario/map`, "POST", {
+      payload: { mapVersionId },
+    });
+  }
+
+  async function handleSetCondition(conditionId: string, active: boolean) {
+    await mutate(`/api/v1/games/${gameId}/storyteller/scenario/conditions`, "POST", {
+      payload: { conditionId, active },
+    });
+  }
+
+  // ---- System -----------------------------------------------------------------
+  /** Prefill the override target from the current blocking action — only when
+   *  the Storyteller has not started typing (unrelated refetches must never
+   *  stomp a mid-form selection). */
+  const lastBlockingActionId = useRef<string | null>(null);
+  useEffect(() => {
+    const blocking = control?.blockingAction ?? null;
+    const blockingId = blocking?.id ?? null;
+    if (!blocking || blockingId === lastBlockingActionId.current) return;
+    lastBlockingActionId.current = blockingId;
+    if (recoveryTargetId.trim() !== "") return;
+    const needsPlayer = recoveryKind === "CORRECT_ALIVE" || recoveryKind === "RESTORE_GHOST_VOTE";
+    setRecoveryTargetId(needsPlayer ? (blocking.actorPlayerId ?? "") : blocking.id);
+  }, [control, recoveryKind, recoveryTargetId]);
+
+  async function handleCreateCheckpoint() {
+    const reason = checkpointReason.trim();
+    setCheckpointNote(null);
+    const res = await runWithResult<CheckpointResponseDto>(() =>
+      api(`/api/v1/games/${gameId}/storyteller/checkpoints`, {
+        method: "POST",
+        body: JSON.stringify({
+          commandId: crypto.randomUUID(),
+          expectedVersion: game?.version,
+          payload: reason ? { reason } : {},
+        }),
+      }),
+    );
+    if (res.ok) {
+      setCheckpointReason("");
+      setCheckpointNote(
+        res.value?.valid === false
+          ? "Punkt kontrolny utworzony — UWAGA: stan niespójny."
+          : "Punkt kontrolny utworzony — stan spójny.",
+      );
+    }
+  }
+
+  async function handleRecoveryOverride() {
+    const reason = recoveryReason.trim();
+    if (!reason || !game) return;
+    const target = recoveryTargetId.trim() || undefined;
+    const payload =
+      recoveryKind === "CORRECT_ALIVE"
+        ? { kind: recoveryKind, playerId: target, alive: recoveryAlive, reason }
+        : recoveryKind === "RESTORE_GHOST_VOTE"
+          ? { kind: recoveryKind, playerId: target, reason }
+          : { kind: recoveryKind, actionId: target, reason };
+    const ok = await mutate(`/api/v1/games/${gameId}/storyteller/recovery/override`, "POST", { payload });
+    if (ok) {
+      setRecoveryReason("");
+      setRecoveryTargetId("");
+    }
+  }
+
+  // ---- Derived -----------------------------------------------------------------
+  const blocker = game ? selectPrimaryStorytellerBlocker(game) : null;
   const nameById = new Map((game?.players ?? []).map((p) => [p.id, p.displayName]));
-  const activeAction =
-    operational?.actions.find(
-      (a) => a.status === "WAITING_FOR_PLAYER" || a.status === "WAITING_FOR_STORYTELLER",
-    ) ?? null;
-  const unresolvedCount =
-    operational?.actions.filter((a) => a.status !== "RESOLVED").length ?? 0;
-  const operationalCardVisible = game ? game.status === "ROLE_REVEAL" || game.status === "ACTIVE" : false;
+  const gameEnded = game?.status === "ENDED" || game?.result !== null;
+  const renameEnabled = game ? game.status === "LOBBY" || game.status === "SETUP" : false;
+  const ready = game?.isReady ?? false;
+  const need = game ? Math.max(0, 13 - game.participantCount) : 0;
 
-  const investigation = game?.investigation ?? null;
-  const investigationVisible = game ? game.phase === "INVESTIGATION" : false;
-  const gameEnded = game?.status === "ENDED";
-  const candidateId = investigation?.currentExecutionCandidatePlayerId ?? null;
-  const candidateName = candidateId ? (nameById.get(candidateId) ?? candidateId) : null;
-  const travellers = game ? game.players.filter((p) => p.participantKind === "TRAVELLER" && p.alive) : [];
-
-  const scenario = game?.scenario ?? null;
-  const availableTasks = scenario ? scenario.tasks.filter((t) => t.state !== "COMPLETED") : [];
-  const injured = scenario?.conditions.includes("INJURED") ?? false;
+  function navigate(next: StorytellerView) {
+    const url = next === "control" ? `/storyteller/${gameId}` : `/storyteller/${gameId}?view=${next}`;
+    router.replace(url, { scroll: false });
+  }
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-line">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3">
-          <Link href="/" className="display text-sm tracking-[0.3em] text-moss">
-            The Sieś Files
-          </Link>
-          <span className="text-meta text-ink-muted">Storyteller</span>
-        </div>
-      </header>
+    <AppShell>
+      <CaseHeader
+        phaseLabel={game ? phaseLabel(game.phase, game.status) : "Sprawa"}
+        cycleLabel={game && game.phase !== null ? `cykl ${game.cycleNumber}` : undefined}
+        caseName={game?.name ?? undefined}
+        mode={gameEnded ? "critical" : "quiet"}
+        connection={game ? realtime : undefined}
+        privacy={privacyCovered ? "private" : "public"}
+        right={
+          game && (
+            <Button
+              variant={privacyCovered ? "secondary" : "quiet"}
+              size="sm"
+              icon={
+                privacyCovered ? (
+                  <Eye aria-hidden="true" className="h-4 w-4" />
+                ) : (
+                  <EyeOff aria-hidden="true" className="h-4 w-4" />
+                )
+              }
+              aria-pressed={privacyCovered}
+              onClick={() => setPrivacyCovered((value) => !value)}
+            >
+              {privacyCovered ? "Odkryj" : "Zasłoń"}
+            </Button>
+          )
+        }
+      />
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+      <AppShellContent variant="storyteller" className="max-w-none">
         {loading && !game && (
-          <p className="py-12 text-center text-ink-muted">Wczytuję akta sprawy…</p>
+          <div className="flex flex-col gap-4">
+            <Skeleton variant="heading" />
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <Skeleton variant="tile" className="h-44 xl:col-span-2" />
+              <Skeleton variant="tile" className="h-44" />
+            </div>
+            <Skeleton variant="list" />
+          </div>
         )}
 
         {!loading && fatalError && !game && (
-          <div className="card critical-card mx-auto max-w-md text-center">
-            <p className="text-danger">{fatalError}</p>
-            <button
-              type="button"
+          <div className="mx-auto max-w-md">
+            <Notice variant="error" className="mb-3">
+              {fatalError}
+            </Notice>
+            <Button
+              fullWidth
               onClick={() => {
                 setLoading(true);
                 void load();
               }}
-              className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass hover:bg-brass/20"
             >
               Spróbuj ponownie
-            </button>
+            </Button>
           </div>
         )}
 
@@ -964,1375 +562,204 @@ export default function StorytellerDashboard() {
             {(stale || actionError) && (
               <div className="mb-4 flex flex-col gap-2">
                 {stale && (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brass/40 bg-brass/10 px-4 py-3 text-sm text-brass"
-                  >
-                    <span>Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Ponów ostatnią akcję.</span>
-                    <button
-                      type="button"
-                      onClick={() => setStale(false)}
-                      className="min-h-11 rounded-lg px-3 text-brass underline-offset-2 hover:underline"
-                    >
-                      Zamknij
-                    </button>
-                  </div>
+                  <Notice variant="warning">
+                    Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Ponów ostatnią
+                    akcję.
+                  </Notice>
                 )}
                 {actionError && (
-                  <div
-                    role="alert"
-                    aria-live="polite"
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
-                  >
-                    <span>{actionError}</span>
+                  <Notice variant="error">
+                    {actionError}{" "}
                     <button
                       type="button"
                       onClick={() => setActionError(null)}
-                      className="min-h-11 rounded-lg px-3 text-danger underline-offset-2 hover:underline"
+                      className="min-h-11 rounded-control px-2 text-danger underline-offset-2 hover:underline"
                     >
                       Zamknij
                     </button>
-                  </div>
+                  </Notice>
                 )}
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-              {/* Persistent terminal result (authoritative, survives reload) */}
-              {game.result && (
-                <section
-                  className={`card md:col-span-6 ${
-                    game.result.winner === "EVIL"
-                      ? "border-danger/40 bg-danger/10"
-                      : "border-success/40 bg-success/10"
-                  }`}
-                >
-                  <p className="display text-meta tracking-[0.25em] text-ink-muted">Wynik sprawy</p>
-                  <h2 className="display mt-1 text-2xl leading-tight text-ink-primary">
-                    {winnerLabel(game.result.winner)}
-                  </h2>
-                  {game.result.reason && (
-                    <p className="mt-1 text-sm text-ink-secondary">{game.result.reason}</p>
-                  )}
-                </section>
+            <StorytellerShell active={view} onNavigate={navigate} renaming={renamingGame} onStartRename={() => { setGameNameDraft(game.name); setRenamingGame(true); }} onCancelRename={() => { setRenamingGame(false); setGameNameDraft(""); }} onCommitRename={() => void handleRenameGame()} gameNameDraft={gameNameDraft} onGameNameDraftChange={setGameNameDraft} renameEnabled={renameEnabled} busy={busy} game={game}>
+              {view === "control" && blocker && (
+                <ControlView
+                  game={game}
+                  blocker={blocker}
+                  control={control}
+                  realtime={realtime}
+                  nameById={nameById}
+                  busy={busy}
+                  gameEnded={gameEnded}
+                  ready={ready}
+                  need={need}
+                  privacyCovered={privacyCovered}
+                  onStartOperational={() => void handleStartOperational()}
+                  onCompleteOperational={() => void handleCompleteOperational()}
+                  onResolveAction={(actionId, resolution) => void handleResolveAction(actionId, resolution)}
+                  onOpenNominations={() => void handleOpenNominations()}
+                  onCloseNominations={() => void handleCloseNominations()}
+                  onStartVoting={(id) => void handleStartVoting(id)}
+                  onAdvanceVoting={(id) => void handleAdvanceVoting(id)}
+                  onLockVote={(id) => void handleLockVote(id)}
+                  onResolveTrigger={(id, optionId) => void handleResolveTrigger(id, optionId)}
+                  onResolveExecution={() => void handleResolveExecution()}
+                  onCloseInvestigation={() => void handleCloseInvestigation()}
+                  onExileTraveller={(playerId) => void handleExileTraveller(playerId)}
+                  onNavigate={navigate}
+                />
               )}
-
-              {/* Header card */}
-              <section className="card md:col-span-6">
-                <div className="flex flex-wrap items-end justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="display text-meta tracking-[0.25em] text-moss">Akta sprawy</p>
-                    {renamingGame ? (
-                      <div className="mt-2 flex max-w-md flex-wrap items-center gap-2">
-                        <label htmlFor="game-name-input" className="sr-only">
-                          Nowa nazwa sprawy
-                        </label>
-                        <input
-                          id="game-name-input"
-                          value={gameNameDraft}
-                          onChange={(e) => setGameNameDraft(e.target.value)}
-                          autoFocus
-                          autoComplete="off"
-                          className="min-h-11 w-full min-w-52 flex-1 rounded-xl border border-line bg-elevated px-3 text-base text-ink-primary"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleRenameGame}
-                          disabled={busy || !gameNameDraft.trim()}
-                          className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass hover:bg-brass/20 disabled:opacity-50"
-                        >
-                          Zapisz
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRenamingGame(false);
-                            setGameNameDraft("");
-                          }}
-                          className="min-h-11 rounded-xl px-3 text-ink-muted hover:text-ink-primary"
-                        >
-                          Anuluj
-                        </button>
-                      </div>
-                    ) : (
-                      <h1 className="display mt-1 break-words text-2xl leading-tight text-ink-primary sm:text-3xl">
-                        {game.name}
-                      </h1>
-                    )}
-                    <p className="mt-1 text-sm text-ink-muted">
-                      {statusLabel(game.status)} · {game.participantCount}{" "}
-                      {game.participantCount === 1 ? "uczestnik" : "uczestników"}
-                    </p>
-                    {!renamingGame && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setGameNameDraft(game.name);
-                          setRenamingGame(true);
-                        }}
-                        disabled={!renameEnabled || busy}
-                        title={
-                          renameEnabled
-                            ? "Zmień nazwę sprawy"
-                            : "Nazwę można zmieniać tylko w poczekalni i konfiguracji."
-                        }
-                        className="mt-2 min-h-11 rounded-xl border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Zmień nazwę
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <PhaseBadge phase={game.phase} status={game.status} />
-                    <div className={`rounded-full border px-4 py-2 text-sm font-medium ${gateClassName}`}>
-                      {gateText}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Add participant card */}
-              <section className="card md:col-span-2">
-                <p className="display text-meta tracking-[0.25em] text-moss">Dodaj uczestnika</p>
-                <form onSubmit={handleAdd} className="mt-3 flex flex-col gap-2">
-                  <label htmlFor="new-player-name" className="sr-only">
-                    Imię uczestnika
-                  </label>
-                  <input
-                    id="new-player-name"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Imię"
-                    autoComplete="off"
-                    className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
-                  />
-                  <button
-                    type="submit"
-                    disabled={busy}
-                    className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                  >
-                    Dodaj do kręgu
-                  </button>
-                </form>
-                {game.participantCount >= MAX_PLAYERS && (
-                  <p className="mt-2 text-meta text-ink-muted">Lista pełna — maksimum 16 uczestników.</p>
-                )}
-              </section>
-
-              {/* Virtual Circle card */}
-              <section className="card md:col-span-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="display text-meta tracking-[0.25em] text-moss">Wirtualny Krąg</p>
-                  <span className="text-meta text-ink-muted">{game.participantCount} osób</span>
-                </div>
-
-                {sorted.length === 0 ? (
-                  <p className="mt-6 text-center text-sm text-ink-muted">
-                    Nie ma jeszcze uczestników. Dodaj pierwsze imię, aby otworzyć krąg.
-                  </p>
-                ) : (
-                  <ol className="mt-3 flex flex-col gap-2">
-                    {sorted.map((player, index) => {
-                      const tone = claimStatus(player);
-                      const isEditing = editingId === player.id;
-                      const isFirst = index === 0;
-                      const isLast = index === sorted.length - 1;
-
-                      return (
-                        <li
-                          key={player.id}
-                          className="rounded-xl border border-line bg-card-soft/60 p-3"
-                        >
-                          <div className="flex min-w-0 items-start gap-3">
-                            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
-                              {player.virtualSeat + 1}
-                            </span>
-
-                            {isEditing ? (
-                              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                                <input
-                                  value={editingName}
-                                  onChange={(e) => setEditingName(e.target.value)}
-                                  aria-label={`Zmień imię: ${player.displayName}`}
-                                  autoFocus
-                                  className="min-h-11 w-full min-w-40 flex-1 rounded-lg border border-line bg-elevated px-3 text-ink-primary"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => commitRename(player.id)}
-                                  disabled={busy}
-                                  className="min-h-11 rounded-lg border border-brass/40 bg-brass/10 px-3 text-brass hover:bg-brass/20 disabled:opacity-50"
-                                >
-                                  Zapisz
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingId(null)}
-                                  className="min-h-11 rounded-lg px-3 text-ink-muted hover:text-ink-primary"
-                                >
-                                  Anuluj
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-base text-ink-primary">{player.displayName}</p>
-                                <p className={`text-meta ${tone.className}`}>{tone.label}</p>
-                              </div>
-                            )}
-                          </div>
-
-                          {!isEditing && (
-                            <div className="mt-2 flex flex-wrap gap-1.5 pl-11">
-                              <button
-                                type="button"
-                                onClick={() => startRename(player)}
-                                className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary"
-                              >
-                                Zmień imię
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openClaim(player)}
-                                disabled={busy}
-                                className="min-h-11 rounded-lg border border-brass/40 px-3 text-sm text-brass hover:bg-brass/10 disabled:opacity-50"
-                              >
-                                Link do odbioru
-                              </button>
-                              {(player.claimed || player.hasClaimToken) && (
-                                <button
-                                  type="button"
-                                  onClick={() => openResetAccess(player)}
-                                  disabled={busy}
-                                  className="min-h-11 rounded-lg border border-danger/40 px-3 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
-                                >
-                                  Reset dostępu
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => handleMove(player.id, -1)}
-                                disabled={busy || isFirst}
-                                aria-label={`Przenieś ${player.displayName} w górę`}
-                                className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:opacity-40"
-                              >
-                                W górę
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleMove(player.id, 1)}
-                                disabled={busy || isLast}
-                                aria-label={`Przenieś ${player.displayName} w dół`}
-                                className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:opacity-40"
-                              >
-                                W dół
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemove(player)}
-                                disabled={busy}
-                                className="min-h-11 rounded-lg border border-danger/40 px-3 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
-                              >
-                                Usuń
-                              </button>
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </section>
-
-              {/* Setup card */}
-              {!setupCommitted ? (
-                <section className="card md:col-span-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="display text-meta tracking-[0.25em] text-moss">Konfiguracja</p>
-                    {setup && setup.regenerationIndex > 0 && (
-                      <span className="text-meta text-ink-muted">układ {setup.regenerationIndex}</span>
-                    )}
-                  </div>
-
-                  {!candidate ? (
-                    <>
-                      <p className="mt-3 text-sm text-ink-secondary">
-                        {ready
-                          ? "Krąg jest gotowy — wygeneruj tajny układ ról."
-                          : "Uzupełnij krąg, aby wygenerować układ."}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleGenerateSetup}
-                        disabled={busy || !ready}
-                        className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                      >
-                        Wygeneruj układ
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-2 text-meta text-ink-muted">Grimuar — tajny układ ról</p>
-                      <ol className="mt-3 flex flex-col gap-2">
-                        {grimoireAssignments.map((a) => {
-                          const isRedHerring = a.playerId === candidate.fortuneTellerRedHerringPlayerId;
-                          const isDrunk = a.trueCharacterId === "DRUNK";
-                          return (
-                            <li
-                              key={a.playerId}
-                              className={`rounded-xl border p-3 ${
-                                isRedHerring ? "border-rust bg-rust/10" : "border-line bg-card-soft/60"
-                              }`}
-                            >
-                              <div className="flex min-w-0 items-center gap-3">
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
-                                  {a.virtualSeat + 1}
-                                </span>
-                                <span className="min-w-0 flex-1 truncate text-base text-ink-primary">
-                                  {nameById.get(a.playerId) ?? a.playerId}
-                                </span>
-                                <span className="min-w-0 text-right text-sm text-ink-secondary">
-                                  {characterDisplayName(a.trueCharacterId)}
-                                  {isDrunk && a.perceivedCharacterId !== a.trueCharacterId && (
-                                    <span className="text-ink-muted">
-                                      {" "}
-                                      → {characterDisplayName(a.perceivedCharacterId)}
-                                    </span>
-                                  )}
-                                </span>
-                                <span
-                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-meta ${
-                                    a.trueAlignment === "EVIL"
-                                      ? "border-danger/40 text-danger"
-                                      : "border-success/40 text-success"
-                                  }`}
-                                >
-                                  {alignmentLabel(a.trueAlignment)}
-                                </span>
-                              </div>
-                              {isRedHerring && (
-                                <p className="mt-1 pl-11 text-meta text-ink-secondary">czerwony śledź Wróżki</p>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ol>
-
-                      <div className="mt-4 rounded-xl border border-line bg-card-soft/60 p-3">
-                        <p className="text-meta text-moss">Bluffy Demona</p>
-                        <p className="mt-1 text-sm text-ink-secondary">
-                          {candidate.demonBluffs.map((id) => characterDisplayName(id as CharacterId)).join(", ")}
-                        </p>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={handleGenerateSetup}
-                          disabled={busy}
-                          className="min-h-11 rounded-xl border border-line px-4 text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
-                        >
-                          Przegeneruj
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCommitSetup}
-                          disabled={busy}
-                          className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                        >
-                          Zatwierdź układ
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </section>
-              ) : (
-                /* Compact confirmation strip — subordinate to the active
-                   blocker once the setup is locked (docs/11 §6). */
-                <section className="card md:col-span-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="display text-meta tracking-[0.25em] text-moss">Konfiguracja</p>
-                    <span className="rounded-full border border-success/40 bg-success/10 px-3 py-1 text-meta text-success">
-                      zatwierdzono
-                    </span>
-                  </div>
-                  <p className="mt-2 text-meta text-ink-muted">
-                    Układ ról zatwierdzony i zablokowany.
-                  </p>
-                </section>
+              {view === "players" && (
+                <PlayersView
+                  game={game}
+                  busy={busy}
+                  renameEnabled={renameEnabled}
+                  onAddPlayer={(name) => handleAddPlayer(name)}
+                  onRenamePlayer={(playerId, name) => void handleRenamePlayer(playerId, name)}
+                  onRemovePlayer={(player) => void handleRemovePlayer(player)}
+                  onMovePlayer={(playerId, direction) => void handleMovePlayer(playerId, direction)}
+                  onIssueClaim={openClaim}
+                  onResetAccess={openResetAccess}
+                />
               )}
-
-              {/* Operational card */}
-              {operationalCardVisible && (
-                <section className="card md:col-span-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="display text-meta tracking-[0.25em] text-moss">Faza operacyjna</p>
-                    {operational && (
-                      <span className="text-meta text-ink-muted">cykl {operational.cycleNumber}</span>
-                    )}
-                  </div>
-
-                  {!operational ? (
-                    game.status === "ROLE_REVEAL" ? (
-                      <div className="mt-3">
-                        <p className="text-sm text-ink-secondary">
-                          Rozpocznij pierwszą noc — zbuduj kolejkę działań i roześlij informacje.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={handleStartOperational}
-                          disabled={busy}
-                          className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                        >
-                          Rozpocznij fazę operacyjną
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="mt-3 text-sm text-ink-secondary">
-                        Faza operacyjna zakończona — śledztwo w toku.
-                      </p>
-                    )
-                  ) : (
-                    <>
-                      <ol className="mt-3 flex flex-col gap-2">
-                        {operational.actions.map((action) => {
-                          const isActive = action.id === activeAction?.id;
-                          const isStoryteller = action.status === "WAITING_FOR_STORYTELLER";
-                          const isWaitingPlayer = action.status === "WAITING_FOR_PLAYER";
-                          const isResolved = action.status === "RESOLVED";
-                          const isPending = action.status === "PENDING";
-                          return (
-                            <li
-                              key={action.id}
-                              className={`rounded-xl border p-3 ${
-                                isActive
-                                  ? "border-brass bg-brass/10"
-                                  : "border-line bg-card-soft/60"
-                              }`}
-                            >
-                              <div className="flex min-w-0 items-center gap-3">
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
-                                  {action.orderIndex + 1}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-base text-ink-primary">
-                                    {characterDisplayName(STEP_CHARACTER[action.kind as StepKind] ?? action.kind)}
-                                  </p>
-                                  <p className="truncate text-meta text-ink-muted">
-                                    {action.actorDisplayName ?? "—"}
-                                  </p>
-                                </div>
-                                <span
-                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-meta ${
-                                    isResolved
-                                      ? "border-success/40 text-success"
-                                      : isActive
-                                        ? "border-brass/40 text-brass"
-                                        : "border-line text-ink-muted"
-                                  }`}
-                                >
-                                  {isResolved
-                                    ? "rozstrzygnięto"
-                                    : isPending
-                                      ? "w kolejce"
-                                      : isWaitingPlayer
-                                        ? "czeka na gracza"
-                                        : "czeka na Ciebie"}
-                                </span>
-                              </div>
-
-                              {isStoryteller && (
-                                <ActionDecisionPanel
-                                  gameId={gameId}
-                                  action={action}
-                                  players={game.players}
-                                  busy={busy}
-                                  onSubmit={(resolution) =>
-                                    void handleResolveActionWithResolution(action, resolution)
-                                  }
-                                />
-                              )}
-
-                              {isResolved && (
-                                <p className="mt-1 pl-11 text-meta text-ink-muted">
-                                  {resolutionText(action.resolutionJson, nameById)}
-                                </p>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ol>
-
-                      <button
-                        type="button"
-                        onClick={handleCompleteOperational}
-                        disabled={busy || unresolvedCount > 0}
-                        className="mt-4 min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                      >
-                        Zakończ fazę operacyjną
-                      </button>
-                    </>
-                  )}
-                </section>
+              {view === "grimoire" && (
+                <GrimoireView
+                  game={game}
+                  busy={busy}
+                  privacyCovered={privacyCovered}
+                  onGenerateSetup={() => void handleGenerateSetup()}
+                  onCommitSetup={() => void handleCommitSetup()}
+                />
               )}
-
-              {/* Investigation card */}
-              {investigationVisible && (
-                <section className="card md:col-span-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="display text-meta tracking-[0.25em] text-moss">Śledztwo</p>
-                    {investigation && (
-                      <span className="text-meta text-ink-muted">cykl {investigation.cycleNumber}</span>
-                    )}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {investigation?.nominationState === "CLOSED" ? (
-                      <button
-                        type="button"
-                        onClick={handleOpenNominations}
-                        disabled={busy || gameEnded}
-                        className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                      >
-                        Otwórz nominacje
-                      </button>
-                    ) : investigation?.nominationState === "OPEN" ? (
-                      <button
-                        type="button"
-                        onClick={handleCloseNominations}
-                        disabled={busy || gameEnded}
-                        className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                      >
-                        Zamknij nominacje
-                      </button>
-                    ) : (
-                      <span className="text-sm text-ink-muted">
-                        stan: {investigation?.nominationState ?? "—"}
-                      </span>
-                    )}
-                    {gameEnded && <span className="text-meta text-ink-muted">sprawa zakończona</span>}
-                  </div>
-
-                  <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                    <p className="text-meta text-moss">Kandydat do egzekucji</p>
-                    {candidateId ? (
-                      <p className="mt-1 text-base text-ink-primary">
-                        {candidateName}{" "}
-                        <span className="text-sm text-ink-muted">
-                          ({investigation?.currentHighEffectiveVotes ?? 0} głosów)
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-sm text-ink-muted">Brak kandydata.</p>
-                    )}
-                  </div>
-
-                  {game.nominations.length > 0 ? (
-                    <ol className="mt-3 flex flex-col gap-2">
-                      {game.nominations.map((n) => {
-                        const locked = n.status === "LOCKED" || n.status === "RESOLVED";
-                        const triggerPending = n.status === "DAY_TRIGGER_RESOLUTION";
-                        const voting = n.status === "VOTING";
-                        const currentVoter =
-                          n.currentVirtualSeat != null
-                            ? (sorted.find((p) => p.virtualSeat === n.currentVirtualSeat) ?? null)
-                            : null;
-                        return (
-                          <li
-                            key={n.id}
-                            className="rounded-xl border border-line bg-card-soft/60 p-3"
-                          >
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-elevated text-sm tabular-nums text-ink-secondary">
-                                {n.sequence + 1}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-base text-ink-primary">
-                                  {n.nominatorName ?? "—"} → {n.nomineeName ?? "—"}
-                                </p>
-                                <p className="text-meta text-ink-muted">
-                                  {nominationStatusLabel(n.status)}
-                                </p>
-                              </div>
-                              {locked && (
-                                <span
-                                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-meta ${
-                                    n.qualified
-                                      ? "border-success/40 text-success"
-                                      : "border-line text-ink-muted"
-                                  }`}
-                                >
-                                  {n.qualified ? "kandydat" : "nie przeszedł"} · {n.effectiveTotal}
-                                </span>
-                              )}
-                            </div>
-
-                            {triggerPending && n.decision && (
-                              <div className="mt-2 rounded-xl border border-brass/40 bg-brass/10 p-3 pl-11 sm:pl-11">
-                                <p className="text-meta font-semibold uppercase tracking-[0.2em] text-brass">
-                                  Wymagana decyzja rejestracji
-                                </p>
-                                <p className="mt-1 text-meta text-ink-muted">
-                                  Jak ma zarejestrować się nominujący ({n.nominatorName ?? "—"})?
-                                </p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {n.decision.options.map((option) => (
-                                    <button
-                                      key={option.optionId}
-                                      type="button"
-                                      onClick={() => handleResolveTrigger(n.id, option.optionId)}
-                                      disabled={busy || gameEnded}
-                                      className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-sm text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                                    >
-                                      {registrationOptionLabel(option.description)}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {voting && n.passStatus === "READY" && (
-                              <div className="mt-2 flex flex-wrap items-center gap-2 pl-11">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartVoting(n.id)}
-                                  disabled={busy || gameEnded}
-                                  className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                                >
-                                  Rozpocznij głosowanie
-                                </button>
-                              </div>
-                            )}
-
-                            {voting && n.passStatus === "RUNNING" && (
-                              <div className="mt-2 flex flex-wrap items-center gap-2 pl-11">
-                                <span className="text-sm text-ink-secondary">
-                                  Głosuje:{" "}
-                                  <span className="text-ink-primary">
-                                    {currentVoter?.displayName ??
-                                      (n.currentVirtualSeat != null
-                                        ? `miejsce ${n.currentVirtualSeat + 1}`
-                                        : "—")}
-                                  </span>
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAdvanceVoting(n.id)}
-                                  disabled={busy || gameEnded}
-                                  className="min-h-11 rounded-xl border border-line px-4 text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
-                                >
-                                  Dalej
-                                </button>
-                              </div>
-                            )}
-
-                            {voting && n.passStatus === "COMPLETE" && (
-                              <div className="mt-2 flex flex-wrap items-center gap-2 pl-11">
-                                <span className="text-sm text-ink-muted">
-                                  Głosowanie zakończone.
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleLockVote(n.id)}
-                                  disabled={busy || gameEnded}
-                                  className="min-h-11 rounded-xl border border-brass/40 px-4 text-brass transition-colors hover:bg-brass/10 disabled:opacity-50"
-                                >
-                                  Zablokuj głosowanie
-                                </button>
-                              </div>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  ) : (
-                    <p className="mt-3 text-sm text-ink-muted">Brak nominacji.</p>
-                  )}
-
-                  {lockConfirm && (
-                    <p
-                      role="status"
-                      className="lock-confirm mt-3 inline-flex min-h-11 items-center rounded-lg border border-success/40 bg-success/10 px-3 text-sm text-success"
-                    >
-                      Głosowanie zablokowane.
-                    </p>
-                  )}
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={handleResolveExecution}
-                      disabled={busy || gameEnded || !candidateId}
-                      className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-5 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                    >
-                      Wykonaj egzekucję
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCloseInvestigation}
-                      disabled={busy || gameEnded}
-                      className="min-h-11 rounded-xl border border-line px-5 text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
-                    >
-                      Zamknij śledztwo
-                    </button>
-                  </div>
-
-                  {travellers.length > 0 && (
-                    <div className="mt-4 rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-meta text-moss">Podróżni</p>
-                      <ul className="mt-2 flex flex-col gap-2">
-                        {travellers.map((p) => (
-                          <li key={p.id} className="flex items-center justify-between gap-3">
-                            <span className="min-w-0 truncate text-sm text-ink-primary">
-                              {p.displayName}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleExileTraveller(p.id)}
-                              disabled={busy || gameEnded}
-                              className="min-h-11 shrink-0 rounded-lg border border-danger/40 px-3 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
-                            >
-                              Wygnaj
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </section>
+              {view === "scenario" && (
+                <ScenarioView
+                  game={game}
+                  busy={busy}
+                  revealClueId={revealClueId}
+                  onRevealClueIdChange={setRevealClueId}
+                  revealTargetPlayerId={revealTargetPlayerId}
+                  onRevealTargetPlayerIdChange={setRevealTargetPlayerId}
+                  stageInput={stageInput}
+                  onStageInputChange={setStageInput}
+                  onRevealClue={(clueId, targetPlayerId) => void handleRevealClue(clueId, targetPlayerId)}
+                  onCompleteTask={(taskId) => void handleCompleteTask(taskId)}
+                  onSetStage={(stageId) => void handleSetStage(stageId)}
+                  onSetMap={(mapVersionId) => void handleSetMap(mapVersionId)}
+                  onSetCondition={(conditionId, active) => void handleSetCondition(conditionId, active)}
+                />
               )}
-
-              {/* Scenario card */}
-              {scenario && (
-                <section className="card md:col-span-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="display text-meta tracking-[0.25em] text-moss">Scenariusz</p>
-                    <span className="text-meta text-ink-muted">panel Mistrza Gry</span>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
-                    {/* State */}
-                    <div className="rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Etap</p>
-                      <p className="mt-1 text-base text-ink-primary">{scenario.stageId ?? "—"}</p>
-                      <p className="mt-3 text-meta uppercase tracking-[0.2em] text-ink-muted">Mapa</p>
-                      <p className="mt-1 text-base text-ink-primary">
-                        {mapVersionLabel(scenario.mapVersionId)}
-                      </p>
-                      <p className="mt-3 text-meta uppercase tracking-[0.2em] text-ink-muted">Stany</p>
-                      {scenario.conditions.length === 0 ? (
-                        <p className="mt-1 text-sm text-ink-muted">brak</p>
-                      ) : (
-                        <ul className="mt-1 flex flex-wrap gap-1.5">
-                          {scenario.conditions.map((condition) => (
-                            <li
-                              key={condition}
-                              className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-0.5 text-meta text-ink-primary"
-                            >
-                              {condition}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    {/* Clues */}
-                    <div className="rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Wskazówki</p>
-                      {scenario.clues.length === 0 ? (
-                        <p className="mt-1 text-sm text-ink-muted">Brak dowodów</p>
-                      ) : (
-                        <ol className="mt-2 flex flex-col gap-1.5">
-                          {scenario.clues.map((clue) => (
-                            <li key={clue.id} className="text-sm text-ink-secondary">
-                              <span className="text-ink-primary">{clue.title}</span>
-                              <span className="text-ink-muted"> · {clue.id}</span>
-                            </li>
-                          ))}
-                        </ol>
-                      )}
-                    </div>
-
-                    {/* Tasks */}
-                    <div className="rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Zadania</p>
-                      {scenario.tasks.length === 0 ? (
-                        <p className="mt-1 text-sm text-ink-muted">Brak zadań</p>
-                      ) : (
-                        <ol className="mt-2 flex flex-col gap-1.5">
-                          {scenario.tasks.map((task) => {
-                            const done = task.state === "COMPLETED";
-                            return (
-                              <li key={task.id} className="text-sm text-ink-secondary">
-                                <span className="text-ink-primary">{task.title}</span>
-                                <span
-                                  className={`ml-1 text-meta ${done ? "text-success" : "text-brass"}`}
-                                >
-                                  · {taskStateLabel(task.state)}
-                                </span>
-                              </li>
-                            );
-                          })}
-                        </ol>
-                      )}
-                    </div>
-
-                    {/* Scans */}
-                    <div className="rounded-xl border border-line bg-card-soft/60 p-3 md:col-span-2">
-                      <p className="text-meta uppercase tracking-[0.2em] text-ink-muted">Skanowania</p>
-                      {scenario.scans.length === 0 ? (
-                        <p className="mt-1 text-sm text-ink-muted">brak</p>
-                      ) : (
-                        <ol className="mt-2 flex flex-col gap-1.5">
-                          {scenario.scans.map((scan, index) => (
-                            <li
-                              key={`${scan.qrTokenId}-${scan.playerId}-${index}`}
-                              className="flex flex-wrap items-center gap-2 text-sm text-ink-secondary"
-                            >
-                              <span className="text-ink-primary">
-                                {scan.playerName ?? scan.playerId}
-                              </span>
-                              <span className="rounded-full border border-line px-2 py-0.5 font-mono text-meta text-ink-muted">
-                                {scan.qrTokenId}
-                              </span>
-                            </li>
-                          ))}
-                        </ol>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Override controls — visually distinct from role/nomination controls */}
-                  <div className="mt-4 rounded-xl border border-dashed border-brass/40 bg-elevated/60 p-3">
-                    <p className="display text-meta tracking-[0.25em] text-brass">
-                      Nadpisania scenariusza
-                    </p>
-
-                    <div className="mt-3 flex flex-col gap-3">
-                      {/* Reveal clue */}
-                      <div className="flex flex-wrap items-end gap-2">
-                        <label className="min-w-40 flex-1">
-                          <span className="mb-1 block text-meta text-ink-muted">Odsłoń wskazówkę</span>
-                          <select
-                            value={revealClueId}
-                            onChange={(e) => setRevealClueId(e.target.value)}
-                            className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary"
-                          >
-                            {CLUE_OPTIONS.map((option) => (
-                              <option key={option.id} value={option.id}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="min-w-40 flex-1">
-                          <span className="mb-1 block text-meta text-ink-muted">
-                            Dla gracza (opcjonalnie)
-                          </span>
-                          <select
-                            value={revealTargetPlayerId}
-                            onChange={(e) => setRevealTargetPlayerId(e.target.value)}
-                            className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary"
-                          >
-                            <option value="">— wszyscy —</option>
-                            {sorted.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.displayName}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleScenarioRevealClue}
-                          disabled={busy}
-                          className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                        >
-                          Odsłoń
-                        </button>
-                      </div>
-
-                      {/* Complete task */}
-                      <div>
-                        <p className="text-meta text-ink-muted">Ukończ zadanie</p>
-                        <div className="mt-1 flex flex-wrap gap-2">
-                          {availableTasks.length === 0 ? (
-                            <span className="text-sm text-ink-muted">Brak dostępnych zadań.</span>
-                          ) : (
-                            availableTasks.map((task) => (
-                              <button
-                                key={task.id}
-                                type="button"
-                                onClick={() => handleScenarioCompleteTask(task.id)}
-                                disabled={busy}
-                                className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                              >
-                                Ukończ: {task.title}
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Set stage */}
-                      <div className="flex flex-wrap items-end gap-2">
-                        <label className="min-w-40 flex-1">
-                          <span className="mb-1 block text-meta text-ink-muted">Zmień etap</span>
-                          <input
-                            value={stageInput}
-                            onChange={(e) => setStageInput(e.target.value)}
-                            placeholder={scenario.stageId ?? "stage-finale"}
-                            autoComplete="off"
-                            className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 font-mono text-sm text-ink-primary placeholder:text-ink-muted"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={handleScenarioSetStage}
-                          disabled={busy || !stageInput.trim()}
-                          className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                        >
-                          Ustaw etap
-                        </button>
-                      </div>
-
-                      {/* Set map */}
-                      <div>
-                        <p className="text-meta text-ink-muted">Odblokuj mapę</p>
-                        <div className="mt-1 flex flex-wrap gap-2">
-                          {MAP_OPTIONS.map((option) => {
-                            const active = scenario.mapVersionId === option.id;
-                            return (
-                              <button
-                                key={option.id}
-                                type="button"
-                                onClick={() => handleScenarioSetMap(option.id)}
-                                disabled={busy}
-                                aria-pressed={active}
-                                className={`min-h-11 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
-                                  active
-                                    ? "border-brass bg-brass/15 text-brass"
-                                    : "border-line text-ink-secondary hover:border-brass/40 hover:text-ink-primary"
-                                }`}
-                              >
-                                {option.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* INJURED condition toggle */}
-                      <div>
-                        <p className="text-meta text-ink-muted">Stan: INJURED</p>
-                        <button
-                          type="button"
-                          onClick={() => handleScenarioSetCondition("INJURED", !injured)}
-                          disabled={busy}
-                          aria-pressed={injured}
-                          className={`mt-1 min-h-11 rounded-xl border px-4 text-sm transition-colors disabled:opacity-50 ${
-                            injured
-                              ? "border-rust bg-rust/15 text-ink-primary"
-                              : "border-line text-ink-secondary hover:border-rust/40 hover:text-ink-primary"
-                          }`}
-                        >
-                          {injured ? "wyłącz" : "włącz"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* Control card (Slice 6) */}
-              <section className="card md:col-span-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="display text-meta tracking-[0.25em] text-moss">Sterowanie</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <RealtimeBadge health={realtime} />
-                    <button
-                      type="button"
-                      onClick={() => void loadAux()}
-                      disabled={busy}
-                      className="min-h-11 rounded-lg border border-line px-3 text-sm text-ink-secondary hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
-                    >
-                      Odśwież
-                    </button>
-                  </div>
-                </div>
-
-                {!control ? (
-                  <p className="mt-3 text-sm text-ink-muted">Wczytuję panel sterowania…</p>
-                ) : (
-                  <>
-                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm text-ink-secondary">
-                      <span>
-                        <span className="text-ink-muted">status:</span> {control.status ?? "—"}
-                      </span>
-                      <span>
-                        <span className="text-ink-muted">faza:</span> {control.phase ?? "—"}
-                      </span>
-                      <span>
-                        <span className="text-ink-muted">cykl:</span> {control.cycleNumber}
-                      </span>
-                      <span>
-                        <span className="text-ink-muted">wersja:</span>{" "}
-                        <span className="tabular-nums">{control.version}</span>
-                      </span>
-                      <span>
-                        <span className="text-ink-muted">uczestnicy:</span> {control.participantCount}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-meta text-moss">Obecność</p>
-                      {control.presence.length === 0 ? (
-                        <p className="mt-1 text-sm text-ink-muted">brak połączeń</p>
-                      ) : (
-                        <ul className="mt-2 flex flex-col gap-1.5">
-                          {control.presence.map((p) => (
-                            <li
-                              key={p.viewerId}
-                              className="flex items-center justify-between gap-3 text-sm"
-                            >
-                              <span className="min-w-0 truncate text-ink-primary">
-                                {p.playerId ? (nameById.get(p.playerId) ?? p.playerId) : "Storyteller"}
-                              </span>
-                              <span className="flex shrink-0 items-center gap-2">
-                                <span
-                                  className={`rounded-full border px-2 py-0.5 text-meta ${presenceTone(p.connection)}`}
-                                >
-                                  {p.connection}
-                                </span>
-                                <span className="text-meta tabular-nums text-ink-muted">
-                                  {formatTime(p.lastSeenAt)}
-                                </span>
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    {control.blockingAction ? (
-                      <div className="mt-3 rounded-xl border border-brass/40 bg-brass/10 p-3">
-                        <p className="text-meta text-moss">Blokująca akcja</p>
-                        <p className="mt-1 text-sm text-ink-primary">
-                          {characterDisplayName(control.blockingAction.kind)}{" "}
-                          <span className="text-brass">· {control.blockingAction.status}</span>
-                        </p>
-                        {control.blockingAction.actorPlayerId && (
-                          <p className="mt-0.5 text-meta text-ink-muted">
-                            {nameById.get(control.blockingAction.actorPlayerId) ??
-                              control.blockingAction.actorPlayerId}
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="mt-3 text-meta text-ink-muted">Brak blokującej akcji.</p>
-                    )}
-
-                    <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-meta text-moss">Ostatnie zdarzenie</p>
-                      {control.lastEvent ? (
-                        <p className="mt-1 text-sm text-ink-secondary">
-                          <span className="tabular-nums">#{control.lastEvent.sequence}</span>{" "}
-                          {control.lastEvent.eventType} · wersja {control.lastEvent.gameVersion}
-                          <span className="text-ink-muted">
-                            {" "}
-                            · {formatTime(control.lastEvent.createdAt)}
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-sm text-ink-muted">brak</p>
-                      )}
-                      <p className="mt-3 text-meta text-moss">Ostatni punkt kontrolny</p>
-                      {control.latestCheckpoint ? (
-                        <p className="mt-1 text-sm text-ink-secondary">
-                          wersja {control.latestCheckpoint.gameVersion}
-                          {control.latestCheckpoint.reason &&
-                            ` · ${control.latestCheckpoint.reason}`}
-                          <span className="text-ink-muted">
-                            {" "}
-                            · {formatTime(control.latestCheckpoint.createdAt)}
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-sm text-ink-muted">brak</p>
-                      )}
-                    </div>
-
-                    <div className="mt-3 rounded-xl border border-line bg-card-soft/60 p-3">
-                      <p className="text-meta text-moss">Spójność</p>
-                      {control.consistencyIssues.every((issue) => issue.ok) ? (
-                        <p className="mt-1 text-sm text-success">Spójność OK</p>
-                      ) : (
-                        <ul className="mt-1 flex flex-col gap-1">
-                          {control.consistencyIssues
-                            .filter((issue) => !issue.ok)
-                            .map((issue) => (
-                              <li key={issue.check} className="text-sm text-danger">
-                                {issue.check} — {issue.message}
-                              </li>
-                            ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-end gap-2">
-                      <label className="min-w-40 flex-1">
-                        <span className="mb-1 block text-meta text-ink-muted">Powód (opcjonalnie)</span>
-                        <input
-                          value={checkpointReason}
-                          onChange={(e) => setCheckpointReason(e.target.value)}
-                          placeholder="np. przed nocą 3"
-                          autoComplete="off"
-                          className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleCreateCheckpoint}
-                        disabled={busy}
-                        className="min-h-11 rounded-xl border border-brass/40 bg-brass/10 px-4 text-brass transition-colors hover:bg-brass/20 disabled:opacity-50"
-                      >
-                        Utwórz punkt kontrolny
-                      </button>
-                    </div>
-                    {checkpointNote && (
-                      <p className="mt-2 text-meta text-ink-secondary">{checkpointNote}</p>
-                    )}
-                  </>
-                )}
-              </section>
-
-              {/* Recovery card (Slice 6) */}
-              <section className="card critical-card md:col-span-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="display text-meta tracking-[0.25em] text-moss">Odzyskiwanie</p>
-                  <span className="text-meta text-ink-secondary">nadpisania stanu</span>
-                </div>
-
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void handleRecoveryOverride();
+              {view === "audit" && (
+                <AuditView
+                  audit={audit}
+                  auditError={auditError}
+                  auditLoadingMore={auditLoadingMore}
+                  selectedCategories={auditCategories}
+                  onToggleCategory={(id) => {
+                    const next = auditCategories.includes(id)
+                      ? auditCategories.filter((c) => c !== id)
+                      : [...auditCategories, id];
+                    auditCategoriesRef.current = next;
+                    setAuditCategories(next);
+                    const url = new URL(window.location.href);
+                    if (next.length === 0) url.searchParams.delete("auditCat");
+                    else url.searchParams.set("auditCat", next.join(","));
+                    window.history.replaceState(null, "", url.toString());
+                    void loadAudit(next);
                   }}
-                  className="mt-3 flex flex-col gap-2"
-                >
-                  <label>
-                    <span className="mb-1 block text-meta text-ink-muted">Rodzaj nadpisania</span>
-                    <select
-                      value={recoveryKind}
-                      onChange={(e) => setRecoveryKind(e.target.value as RecoveryKind)}
-                      className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary"
-                    >
-                      {RECOVERY_KINDS.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    <span className="mb-1 block text-meta text-ink-muted">
-                      {recoveryKind === "CORRECT_ALIVE" || recoveryKind === "RESTORE_GHOST_VOTE"
-                        ? "Identyfikator gracza"
-                        : "Identyfikator akcji"}
-                    </span>
-                    <input
-                      value={recoveryTargetId}
-                      onChange={(e) => setRecoveryTargetId(e.target.value)}
-                      placeholder="id"
-                      autoComplete="off"
-                      className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 font-mono text-sm text-ink-primary placeholder:text-ink-muted"
-                    />
-                  </label>
-
-                  {recoveryKind === "CORRECT_ALIVE" && (
-                    <label>
-                      <span className="mb-1 block text-meta text-ink-muted">Stan życia</span>
-                      <select
-                        value={recoveryAlive ? "true" : "false"}
-                        onChange={(e) => setRecoveryAlive(e.target.value === "true")}
-                        className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary"
-                      >
-                        <option value="true">żyje</option>
-                        <option value="false">nie żyje</option>
-                      </select>
-                    </label>
-                  )}
-
-                  <label>
-                    <span className="mb-1 block text-meta text-ink-muted">Powód (wymagany)</span>
-                    <input
-                      value={recoveryReason}
-                      onChange={(e) => setRecoveryReason(e.target.value)}
-                      placeholder="Dlaczego nadpisujesz stan?"
-                      autoComplete="off"
-                      className="min-h-11 w-full rounded-xl border border-line bg-card-soft px-3 text-ink-primary placeholder:text-ink-muted"
-                    />
-                  </label>
-
-                  <button
-                    type="submit"
-                    disabled={busy || !recoveryReason.trim()}
-                    className="min-h-11 rounded-xl border border-rust/50 bg-rust/15 px-4 text-ink-primary transition-colors hover:bg-rust/25 disabled:opacity-50"
-                  >
-                    Wykonaj nadpisanie
-                  </button>
-                </form>
-              </section>
-
-              {/* Audit card (Slice 6) */}
-              <section className="card md:col-span-6">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="display text-meta tracking-[0.25em] text-moss">Audyt</p>
-                  {audit && (
-                    <span className="text-meta text-ink-muted">{audit.events.length} zdarzeń</span>
-                  )}
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Filtruj kategorie audytu">
-                  <button
-                    type="button"
-                    onClick={() => applyAuditCategories([])}
-                    aria-pressed={auditCategories.length === 0}
-                    className={`min-h-11 rounded-full border px-3.5 text-sm transition-colors ${
-                      auditCategories.length === 0
-                        ? "border-moss/60 bg-moss/15 text-moss"
-                        : "border-line text-ink-secondary hover:border-moss/40 hover:text-ink-primary"
-                    }`}
-                  >
-                    Wszystkie
-                  </button>
-                  {AUDIT_CATEGORIES.map((id) => {
-                    const active = auditCategories.includes(id);
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => toggleAuditCategory(id)}
-                        aria-pressed={active}
-                        className={`min-h-11 rounded-full border px-3.5 text-sm transition-colors ${
-                          active
-                            ? "border-moss/60 bg-moss/15 text-moss"
-                            : "border-line text-ink-secondary hover:border-moss/40 hover:text-ink-primary"
-                        }`}
-                      >
-                        {id}
-                      </button>
+                  onClearCategories={() => {
+                    auditCategoriesRef.current = [];
+                    setAuditCategories([]);
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("auditCat");
+                    window.history.replaceState(null, "", url.toString());
+                    void loadAudit([]);
+                  }}
+                  onLoadMore={() => {
+                    if (!audit?.nextCursor) return;
+                    setAuditLoadingMore(true);
+                    void loadAudit(auditCategoriesRef.current, audit.nextCursor).finally(() =>
+                      setAuditLoadingMore(false),
                     );
-                  })}
-                </div>
-
-                {!audit && !auditError && (
-                  <p className="mt-3 text-sm text-ink-muted">Wczytuję dziennik zdarzeń…</p>
-                )}
-                {!audit && auditError && (
-                  <p className="mt-3 text-sm text-ink-muted">Nie udało się wczytać dziennika zdarzeń.</p>
-                )}
-                {audit && audit.events.length === 0 && (
-                  <p className="mt-3 text-sm text-ink-muted">Brak zdarzeń.</p>
-                )}
-                {audit && audit.events.length > 0 && (
-                  <>
-                    <ol className="mt-3 flex max-h-96 flex-col gap-1 overflow-y-auto pr-1">
-                      {audit.events.map((event) => (
-                        <li
-                          key={event.sequence}
-                          className="flex flex-wrap items-baseline gap-x-3 rounded-lg px-2 py-1.5 text-sm odd:bg-card-soft/40"
-                        >
-                          <span className="w-12 shrink-0 font-mono text-meta tabular-nums text-ink-muted">
-                            #{event.sequence}
-                          </span>
-                          <span className="min-w-0 break-words text-ink-primary">{event.eventType}</span>
-                          <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">
-                            {event.category}
-                          </span>
-                          <span className="min-w-0 truncate text-meta text-ink-muted">
-                            {event.actor ?? "—"}
-                          </span>
-                          <span className="ml-auto shrink-0 text-meta tabular-nums text-ink-muted">
-                            {formatTime(event.createdAt)}
-                          </span>
-                        </li>
-                      ))}
-                    </ol>
-                    {audit.nextCursor !== null && (
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={() => void handleLoadMoreAudit()}
-                          disabled={auditLoadingMore}
-                          className="min-h-11 rounded-xl border border-line px-4 text-sm text-ink-secondary transition-colors hover:border-brass/50 hover:text-ink-primary disabled:opacity-50"
-                        >
-                          {auditLoadingMore ? "Wczytuję…" : "Więcej"}
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </section>
-            </div>
+                  }}
+                  formatTime={formatTime}
+                />
+              )}
+              {view === "system" && (
+                <SystemView
+                  control={control}
+                  nameById={nameById}
+                  realtime={realtime}
+                  players={game.players}
+                  actions={game.operational?.actions ?? []}
+                  checkpointReason={checkpointReason}
+                  onCheckpointReasonChange={setCheckpointReason}
+                  onCreateCheckpoint={() => void handleCreateCheckpoint()}
+                  checkpointBusy={busy}
+                  checkpointNote={checkpointNote}
+                  recoveryKind={recoveryKind}
+                  onRecoveryKindChange={setRecoveryKind}
+                  recoveryTargetId={recoveryTargetId}
+                  onRecoveryTargetIdChange={setRecoveryTargetId}
+                  recoveryAlive={recoveryAlive}
+                  onRecoveryAliveChange={setRecoveryAlive}
+                  recoveryReason={recoveryReason}
+                  onRecoveryReasonChange={setRecoveryReason}
+                  onSubmitRecovery={() => void handleRecoveryOverride()}
+                  recoveryBusy={busy}
+                  formatTime={formatTime}
+                />
+              )}
+            </StorytellerShell>
           </>
         )}
-      </main>
+      </AppShellContent>
 
       {claimModal && (
-        <ClaimModal
-          playerName={claimModal.player.displayName}
-          link={claimModal.link}
-          busy={claimModal.busy}
-          error={claimModal.error}
+        <Dialog
+          open
           onClose={() => setClaimModal(null)}
-        />
+          title={`Link do odbioru: ${claimModal.player.displayName}`}
+          description="Wyślij ten jednorazowy link do gracza. Działa raz i nie zostanie pokazany ponownie."
+        >
+          {claimModal.busy && <p className="text-sm text-ink-secondary">Wydaję jednorazowy link do odbioru…</p>}
+          {!claimModal.busy && claimModal.error && (
+            <Notice variant="error">{claimModal.error}</Notice>
+          )}
+          {!claimModal.busy && claimModal.link && (
+            <CopyField value={claimModal.link} label="Link do odbioru" />
+          )}
+        </Dialog>
       )}
 
       {resetModal && (
-        <ResetAccessModal
-          playerName={resetModal.player.displayName}
-          token={resetModal.token}
-          busy={resetModal.busy}
-          error={resetModal.error}
+        <Dialog
+          open
           onClose={() => setResetModal(null)}
-        />
+          title={`Reset dostępu: ${resetModal.player.displayName}`}
+          description="Nowy jednorazowy token zastępuje poprzedni dostęp gracza. Nie zostanie pokazany ponownie."
+        >
+          {resetModal.busy && <p className="text-sm text-ink-secondary">Resetuję dostęp i wydaję nowy token…</p>}
+          {!resetModal.busy && resetModal.error && (
+            <Notice variant="error">{resetModal.error}</Notice>
+          )}
+          {!resetModal.busy && resetModal.token && (
+            <CopyField value={resetModal.token} label="Token odbioru" />
+          )}
+        </Dialog>
       )}
-    </div>
+    </AppShell>
   );
 }
 
-function ClaimModal({
-  playerName,
-  link,
-  busy,
-  error,
-  onClose,
-}: {
-  playerName: string;
-  link: string | null;
-  busy: boolean;
-  error: string | null;
-  onClose: () => void;
-}) {
+function CopyField({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!link) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [link, onClose]);
-
+  const fieldId = useId();
   async function copy() {
-    if (!link) return;
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(value);
     } catch {
-      const field = document.getElementById("claim-link-field") as HTMLInputElement | null;
+      const field = document.getElementById(fieldId) as HTMLInputElement | null;
       if (field) {
         field.focus();
         field.select();
@@ -2346,170 +773,30 @@ function ClaimModal({
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   }
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Link do odbioru dla: ${playerName}`}
-        className="card w-full max-w-md bg-elevated"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="display text-meta tracking-[0.25em] text-moss">Link do odbioru</p>
-            <h2 className="mt-1 break-words text-lg text-ink-primary">{playerName}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-11 shrink-0 rounded-lg px-3 text-ink-muted hover:text-ink-primary"
-          >
-            Zamknij
-          </button>
-        </div>
-
-        {busy && <p className="mt-4 text-sm text-ink-secondary">Wydaję jednorazowy link do odbioru…</p>}
-
-        {!busy && error && <p className="mt-4 text-sm text-danger">{error}</p>}
-
-        {!busy && link && (
-          <>
-            <label htmlFor="claim-link-field" className="mt-4 block text-sm text-ink-secondary">
-              Wyślij ten jednorazowy link do: {playerName}
-            </label>
-            <div className="mt-2 flex gap-2">
-              <input
-                id="claim-link-field"
-                readOnly
-                value={link}
-                className="min-h-11 w-full rounded-lg border border-line bg-card-soft px-3 font-mono text-sm text-ink-secondary"
-              />
-              <button
-                type="button"
-                onClick={copy}
-                className="min-h-11 shrink-0 rounded-lg border border-brass/40 bg-brass/10 px-4 text-brass hover:bg-brass/20"
-              >
-                {copied ? "Skopiowano" : "Kopiuj"}
-              </button>
-            </div>
-            <p className="mt-3 text-meta text-ink-muted">
-              Ten link działa raz. Skopiuj go teraz — nie zostanie pokazany ponownie.
-            </p>
-          </>
-        )}
+    <>
+      <label htmlFor={fieldId} className="block text-sm text-ink-secondary">
+        {label}
+      </label>
+      <div className="mt-2 flex gap-2">
+        <input
+          id={fieldId}
+          readOnly
+          value={value}
+          className="min-h-11 w-full rounded-control border border-line bg-card-soft px-3 font-mono text-sm text-ink-secondary"
+        />
+        <Button variant="secondary" onClick={() => void copy()}>
+          {copied ? "Skopiowano" : "Kopiuj"}
+        </Button>
       </div>
-    </div>
+    </>
   );
 }
 
-function ResetAccessModal({
-  playerName,
-  token,
-  busy,
-  error,
-  onClose,
-}: {
-  playerName: string;
-  token: string | null;
-  busy: boolean;
-  error: string | null;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!token) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [token, onClose]);
-
-  async function copy() {
-    if (!token) return;
-    try {
-      await navigator.clipboard.writeText(token);
-    } catch {
-      const field = document.getElementById("reset-token-field") as HTMLInputElement | null;
-      if (field) {
-        field.focus();
-        field.select();
-        try {
-          document.execCommand("copy");
-        } catch {
-          // Manual copy still available via the selected text.
-        }
-      }
-    }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  }
-
+export default function StorytellerPage() {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Reset dostępu dla: ${playerName}`}
-        className="card w-full max-w-md bg-elevated"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="display text-meta tracking-[0.25em] text-moss">Reset dostępu</p>
-            <h2 className="mt-1 break-words text-lg text-ink-primary">{playerName}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-11 shrink-0 rounded-lg px-3 text-ink-muted hover:text-ink-primary"
-          >
-            Zamknij
-          </button>
-        </div>
-
-        {busy && (
-          <p className="mt-4 text-sm text-ink-secondary">Resetuję dostęp i wydaję nowy token…</p>
-        )}
-
-        {!busy && error && <p className="mt-4 text-sm text-danger">{error}</p>}
-
-        {!busy && token && (
-          <>
-            <label htmlFor="reset-token-field" className="mt-4 block text-sm text-ink-secondary">
-              Wyślij ten nowy jednorazowy token do: {playerName}
-            </label>
-            <div className="mt-2 flex gap-2">
-              <input
-                id="reset-token-field"
-                readOnly
-                value={token}
-                className="min-h-11 w-full rounded-lg border border-line bg-card-soft px-3 font-mono text-sm text-ink-secondary"
-              />
-              <button
-                type="button"
-                onClick={copy}
-                className="min-h-11 shrink-0 rounded-lg border border-brass/40 bg-brass/10 px-4 text-brass hover:bg-brass/20"
-              >
-                {copied ? "Skopiowano" : "Kopiuj"}
-              </button>
-            </div>
-            <p className="mt-3 text-meta text-ink-muted">
-              Ten token działa raz i zastępuje poprzedni dostęp. Skopiuj go teraz — nie zostanie
-              pokazany ponownie.
-            </p>
-          </>
-        )}
-      </div>
-    </div>
+    <Suspense fallback={<LoadingShell />}>
+      <StorytellerPageInner />
+    </Suspense>
   );
 }

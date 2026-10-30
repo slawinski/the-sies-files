@@ -5,6 +5,7 @@ import {
   driveOperationalCycle,
   claimAllPlayers,
   executeDemonToEnd,
+  commandVersion,
 } from "./fixtures";
 
 // E2E-05 — Saint execution (audit spec 24 §4): executing a functioning Saint
@@ -24,9 +25,9 @@ test("E2E-05: Saint execution yields an evil victory", async ({ page, browser })
   )!.playerId;
 
   // Nominate, vote, and execute the Saint.
-  v = (await (await st.post(`/api/v1/games/${gameId}/investigation/nominations/open`, {
+   v = await commandVersion(await st.post(`/api/v1/games/${gameId}/investigation/nominations/open`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v },
-  })).json()).version;
+   }), v);
   const nominator = sessions.find((s) => s.playerId !== saint)!;
   const nomination = await nominator.request.post(`/api/v1/games/${gameId}/nominations`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { nomineeId: saint } },
@@ -35,9 +36,9 @@ test("E2E-05: Saint execution yields an evil victory", async ({ page, browser })
   const nominationBody = await nomination.json();
   v = nominationBody.version;
 
-  v = (await (await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/voting/start`, {
+  v = await commandVersion(await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/voting/start`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v },
-  })).json()).version;
+  }), v);
   const stProjection = await (await st.get(`/api/v1/games/${gameId}/storyteller`)).json();
   for (const p of stProjection.players as Array<{ id: string }>) {
     const session = sessions.find((s) => s.playerId === p.id);
@@ -46,11 +47,11 @@ test("E2E-05: Saint execution yields an evil victory", async ({ page, browser })
       `/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/votes/intent`,
       { data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { intent: true } } },
     );
-    if (res.ok()) v = (await res.json()).version;
+    v = await commandVersion(res, v);
   }
-  v = (await (await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/votes/lock`, {
+  v = await commandVersion(await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/votes/lock`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v },
-  })).json()).version;
+  }), v);
 
   const executed = await st.post(`/api/v1/games/${gameId}/investigation/resolve-execution`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v },

@@ -4,6 +4,7 @@ import {
   generateAndCommitSetup,
   driveOperationalCycle,
   claimAllPlayers,
+  commandVersion,
 } from "./fixtures";
 
 // E2E-08 — restart recovery (audit spec 24 §4): mid-formal-process consistency
@@ -21,18 +22,18 @@ test("E2E-08: mid-vote consistency and replay verification pass", async ({ page,
   v = await driveOperationalCycle(st, sessions, gameId, v);
 
   // Open nominations and start the voting pass — a formal process in flight.
-  v = (await (await st.post(`/api/v1/games/${gameId}/investigation/nominations/open`, {
+  v = await commandVersion(await st.post(`/api/v1/games/${gameId}/investigation/nominations/open`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v },
-  })).json()).version;
+  }), v);
   const nomination = await sessions[0].request.post(`/api/v1/games/${gameId}/nominations`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { nomineeId: playerIds[1] } },
   });
   expect(nomination.ok()).toBeTruthy();
   const nominationBody = await nomination.json();
   v = nominationBody.version;
-  v = (await (await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/voting/start`, {
+  v = await commandVersion(await st.post(`/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/voting/start`, {
     data: { commandId: crypto.randomUUID(), expectedVersion: v },
-  })).json()).version;
+  }), v);
   const firstVote = await sessions[0].request.post(
     `/api/v1/games/${gameId}/nominations/${nominationBody.nominationId}/votes/intent`,
     { data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { intent: true } } },

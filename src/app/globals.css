@@ -25,6 +25,54 @@
   --danger: #db7d66; /* was #b95c4b — AA on tinted banners/buttons */
   --success: #8ba06c; /* was #7c9460 — AA on tinted chips */
   --border: #3a3c31;
+
+  /* ---- Visual Design System v2 (20_VISUAL_DESIGN_SYSTEM_v2.md) ---------- */
+  /* spacing (base unit 4px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* radius */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* elevation — dark UI relies on surface contrast, not big shadows */
+  --shadow-paper: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --shadow-sheet: 0 -12px 32px rgba(0, 0, 0, 0.28);
+
+  /* motion (v2 §20) */
+  --motion-fast: 140ms;
+  --motion-base: 200ms;
+  --motion-reveal: 280ms;
+  --motion-map: 420ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* z-index (v2 §21) */
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-nav: 30;
+  --z-sheet: 50;
+  --z-dialog: 60;
+  --z-private: 70;
+  --z-toast: 80;
+
+  /* semantic surface/action tokens (spec 19 §14) */
+  --surface-primary: var(--bg-card);
+  --surface-document: var(--paper);
+  --surface-formal: color-mix(in srgb, var(--bg-card) 88%, var(--rust) 12%);
+  --action-primary: var(--brass);
+  --action-formal: var(--rust);
+  --focus-ring: var(--brass);
+  --nav-height: 4rem;
 }
 
 @theme inline {
@@ -46,7 +94,30 @@
   --color-line: var(--border);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --font-display: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Menlo, Consolas,
+    monospace;
+
+  /* v2 radius tokens (semantic names — never override Tailwind defaults) */
+  --radius-card: var(--radius-lg);
+  --radius-tile: var(--radius-md);
+  --radius-control: 12px;
+  --radius-paper: var(--radius-md);
+  --radius-chip: var(--radius-pill);
+
+  /* v2 elevation */
+  --shadow-paper: var(--shadow-paper);
+  --shadow-sheet: var(--shadow-sheet);
+
+  /* v2 motion */
+  --ease-standard: var(--ease-standard);
+
+  /* v2 z-index namespace */
+  --z-sticky: var(--z-sticky);
+  --z-nav: var(--z-nav);
+  --z-sheet: var(--z-sheet);
+  --z-dialog: var(--z-dialog);
+  --z-private: var(--z-private);
+  --z-toast: var(--z-toast);
 }
 
 html {
@@ -93,17 +164,122 @@ body {
 }
 
 /* Display / dossier heading accent */
-.display {
-  font-family: var(--font-display);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+@layer components {
+  .display {
+    font-family: var(--font-display);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* Eyebrow / section label — editorial mono accent (v2 §4). Default color is
+     secondary; utility color classes (text-rust etc.) still win because this
+     lives in the components layer. */
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  /* Semantic meta typography token (audit spec 24 §7): 13px minimum for
+     user-facing metadata; critical body copy stays >= 16px. */
+  .text-meta {
+    font-size: 0.8125rem; /* 13px */
+    line-height: 1.25rem; /* 20px */
+  }
 }
 
-/* Semantic meta typography token (audit spec 24 §7): 13px minimum for
-   user-facing metadata; critical body copy stays >= 16px. */
-.text-meta {
-  font-size: 0.8125rem; /* 13px */
-  line-height: 1.25rem; /* 20px */
+/* ============================================================
+   Visual Design System v2 — utility layer (20_VISUAL_DESIGN_SYSTEM_v2.md)
+   ============================================================ */
+
+/* Safe-area helpers (audit 18 §9) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Content bottom padding = player nav height + safe area (spec 19 §3). */
+.content-bottom-nav {
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 16px);
+}
+
+/* Texture is a localized material cue, not a wallpaper (v2 §8).
+   Paper fiber: 2–5% opacity, never under-interfering with text. */
+.texture-paper {
+  position: relative;
+}
+.texture-paper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: repeating-linear-gradient(
+      0deg,
+      rgba(23, 24, 20, 0.6) 0px,
+      rgba(23, 24, 20, 0) 1px,
+      rgba(23, 24, 20, 0) 3px,
+      rgba(23, 24, 20, 0.35) 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(23, 24, 20, 0.35) 0px,
+      rgba(23, 24, 20, 0) 1px,
+      rgba(23, 24, 20, 0) 5px,
+      rgba(23, 24, 20, 0.2) 6px
+    );
+}
+.texture-paper > * {
+  position: relative;
+}
+
+/* Shell grain: 1–2.5% opacity, large scale (v2 §8). */
+.texture-shell {
+  position: relative;
+}
+.texture-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.015;
+  background-image: radial-gradient(
+    circle at 25% 15%,
+    rgba(238, 233, 220, 0.5) 0px,
+    transparent 55%,
+    transparent 100%
+  );
+  background-size: 220px 220px;
+}
+.texture-shell > * {
+  position: relative;
+}
+
+/* Formal-mode accent line (v2 §16) — restrained rust intervention. */
+.formal-line {
+  border-top: 2px solid var(--rust);
+}
+
+/* Skeleton surface for loading states (spec 19 §5 / audit 18 UX-16). */
+.skeleton {
+  border-radius: var(--radius-control);
+  background: var(--bg-card-soft);
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* Visible focus (docs/11 §15) */

@@ -66,7 +66,7 @@ async function runCycle(gameId: string, version: number, playerIds: string[], im
 describe("R1 — realtime, checkpoints, replay, presence, audit", () => {
   it("creates automatic checkpoints at setup-commit and operational-completion boundaries", async () => {
     const { gameId, playerIds, version } = await createGameWithPlayers(13);
-    let v = (await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: version })).version;
+    let v = (await generateSetup({ gameId, commandId: randomUUID(), expectedVersion: version, seed: 'regression-baseline-v1' })).version;
     v = (await commitSetup({ gameId, commandId: randomUUID(), expectedVersion: v })).version;
 
     const setupCkpt = await prisma.checkpoint.findFirst({ where: { gameId, reason: "SETUP_COMMITTED" } });

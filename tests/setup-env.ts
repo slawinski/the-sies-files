@@ -1,5 +1,11 @@
-import { config } from "dotenv";
-import path from "node:path";
+import { afterAll } from 'vitest';
+import { acquireLease, assertLease, resolveTarget } from '../scripts/test-database.mjs';
 
-// Load the TEST database URL before any test imports the Prisma client.
-config({ path: path.resolve(process.cwd(), ".env.test") });
+// Resolve before Prisma loads. No dotenv file is read by the test workflow.
+const target = resolveTarget();
+Object.assign(process.env, target.env);
+if (process.env.BASELINE_DB_LEASE) assertLease(target);
+else {
+  const lease = acquireLease(target);
+  afterAll(() => lease.release());
+}
