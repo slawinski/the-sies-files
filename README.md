@@ -1,5 +1,15 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Regression baseline
+
+See the [baseline runbook](docs/regression-baseline.md) for isolated test-resource
+setup and the [failure ledger](docs/regressions/README.md) for source-bound results.
+The earlier three S1 production runs each passed 179 unit assertions and nine
+browser scenarios. One later mechanical-fix production run passed 188 unit
+assertions and nine browser scenarios; it is a separate captured identity, not
+three repetitions of the final tree. Retain local `baseline-results/` evidence:
+root ESLint and TypeScript exclude these historical source capsules.
+
 ## Getting Started
 
 First, run the development server:

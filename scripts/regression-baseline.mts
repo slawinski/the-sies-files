@@ -65,13 +65,25 @@ export function capture(root: string, output?: string) {
 
 type Manifest = ReturnType<typeof capture>;
 export function verifySource(manifest: Manifest, root: string) {
-  return manifest.entries.filter(e => {
-    try {
-      const file = path.join(root, e.path); const st = fs.lstatSync(file);
-      const bytes = e.target !== undefined ? fs.readlinkSync(file) : fs.readFileSync(file);
-      return (st.mode & 0o777) !== e.mode || hash(bytes) !== e.sha256;
-    } catch { return true; }
-  }).map(e => e.path);
+  const before = new Map(manifest.entries.map(e => [e.path, e]));
+  const changed = new Set<string>();
+  // Reconstructions have no Git metadata. Inventory every policy-approved path,
+  // including additions that a copied .gitignore might otherwise hide.
+  const visit = (dir: string) => {
+    for (const name of fs.readdirSync(path.join(root, dir))) {
+      const relative = dir ? `${dir}/${name}` : name;
+      if (excluded(relative)) continue;
+      const file = path.join(root, relative); const st = fs.lstatSync(file);
+      if (st.isDirectory()) { visit(relative); continue; }
+      const expected = before.get(relative); before.delete(relative);
+      const target = st.isSymbolicLink() ? fs.readlinkSync(file) : undefined;
+      if (!expected || (!st.isFile() && !st.isSymbolicLink()) ||
+          expected.mode !== (st.mode & 0o777) || expected.target !== target ||
+          expected.sha256 !== hash(target ?? fs.readFileSync(file))) changed.add(relative);
+    }
+  };
+  visit('');
+  return [...new Set([...changed, ...before.keys()])].sort();
 }
 export async function assertPortFree(port: number) {
   // macOS can bind IPv4 and IPv6 separately, so probe both explicitly.
@@ -99,6 +111,7 @@ export async function runStages(stages: Stage[], cwd: string, env: NodeJS.Proces
         const started = Date.now(); const fd = fs.openSync(path.join(out, stage.name + '.log'), 'w', 0o600);
         const child = spawn(stage.command, stage.args, { cwd, env: { ...env, ...stage.env }, detached: true, stdio: ['ignore', fd, fd] });
         let escalation: NodeJS.Timeout | undefined;
+        let timedOut = false;
         const kill = () => {
           if (!child.pid || escalation) return;
           try { process.kill(-child.pid, 'SIGTERM'); } catch { return; }
@@ -106,10 +119,12 @@ export async function runStages(stages: Stage[], cwd: string, env: NodeJS.Proces
           escalation = setTimeout(() => { try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* Owned group already exited. */ } }, 10_000);
         };
         killActive = kill;
-        const timer = setTimeout(kill, stage.timeout ?? 900_000);
+        const timeout = stage.timeout ?? 900_000;
+        const timer = setTimeout(() => { timedOut = true; kill(); }, timeout);
         const result = await new Promise<StageResult>(resolve => {
           child.once('error', error => resolve({ name: stage.name, status: 'failed', exit: null, reason: error.message }));
-          child.once('close', (exit, signal) => resolve({ name: stage.name, status: exit === 0 && !interrupted ? 'passed' : 'failed', exit, signal }));
+          child.once('close', (exit, signal) => resolve({ name: stage.name, status: exit === 0 && !interrupted && !timedOut ? 'passed' : 'failed', exit, signal,
+            ...(timedOut ? { reason: `timeout after ${timeout}ms` } : {}) }));
         });
         clearTimeout(timer); clearTimeout(escalation); killActive = undefined; fs.closeSync(fd);
         results.push({ ...result, command: stage.command, args: stage.args, started: new Date(started).toISOString(), durationMs: Date.now() - started });

@@ -131,6 +131,45 @@ test('source verification refuses a changed specimen', () => {
   fs.writeFileSync(path.join(dir, 'source.ts'), 'mutated');
   expect(verifySource(manifest, dir)).toEqual(['source.ts']);
 });
+test.each(['added', 'removed', 'modified', 'mode', 'symlink', 'file-to-symlink'])('reconstructed source detects %s paths without Git', kind => {
+  const dir = tree();
+  fs.symlinkSync('source.ts', path.join(dir, 'link'));
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'ignored-*.ts\n');
+  const manifest = capture(dir, path.join(dir, 'baseline-results/capsule'));
+  const work = path.join(dir, 'baseline-results/capsule/source');
+  expect(fs.existsSync(path.join(work, '.git'))).toBe(false);
+  expect(verifySource(manifest, work)).toEqual([]);
+  let changed = 'source.ts';
+  if (kind === 'added') { changed = 'ignored-added.test.ts'; fs.writeFileSync(path.join(work, changed), 'new test'); }
+  if (kind === 'removed') fs.unlinkSync(path.join(work, changed));
+  if (kind === 'modified') fs.writeFileSync(path.join(work, changed), 'changed');
+  if (kind === 'mode') fs.chmodSync(path.join(work, changed), 0o755);
+  if (kind === 'symlink') { changed = 'link'; fs.unlinkSync(path.join(work, changed)); fs.symlinkSync('.gitignore', path.join(work, changed)); }
+  if (kind === 'file-to-symlink') { fs.unlinkSync(path.join(work, changed)); fs.symlinkSync('.gitignore', path.join(work, changed)); }
+  expect(verifySource(manifest, work)).toEqual([changed]);
+});
+test('reconstructed source excludes declared generated outputs without reading them', () => {
+  const dir = tree(); const manifest = capture(dir, path.join(dir, 'baseline-results/capsule'));
+  const work = path.join(dir, 'baseline-results/capsule/source');
+  fs.mkdirSync(path.join(work, 'node_modules'));
+  fs.symlinkSync('/nonexistent/private', path.join(work, 'node_modules/link'));
+  fs.writeFileSync(path.join(work, 'next-env.d.ts'), 'generated');
+  expect(verifySource(manifest, work)).toEqual([]);
+});
+test('root tooling excludes retained capsules while still including current source', async () => {
+  const parent = path.resolve('baseline-results'); fs.mkdirSync(parent, { recursive: true });
+  const capsule = fs.mkdtempSync(path.join(parent, 'tooling-contract-')); trees.push(capsule);
+  const file = path.join(capsule, 'source.ts'); fs.writeFileSync(file, 'const invalid: number = "capsule";');
+  const ignored = execFileSync(process.execPath, ['--input-type=module', '-e',
+    'import { ESLint } from "eslint"; const e = new ESLint(); console.log(JSON.stringify([await e.isPathIgnored(process.argv[1]), await e.isPathIgnored("src/lib/cn.ts")]));', file], { encoding: 'utf8' });
+  expect(JSON.parse(ignored)).toEqual([true, false]);
+  const ts = await import('typescript');
+  const config = ts.readConfigFile(path.resolve('tsconfig.json'), ts.sys.readFile);
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, process.cwd());
+  expect(parsed.errors).toEqual([]);
+  expect(parsed.fileNames).not.toContain(file);
+  expect(parsed.fileNames).toContain(path.resolve('src/lib/cn.ts'));
+});
 test('occupied port is rejected without terminating its server', async () => {
   const server = createServer((_req, res) => res.end('unrelated'));
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -148,4 +187,16 @@ test('timed-out owned process is terminated and its partial report survives', as
   expect(results[0].status).toBe('failed');
   expect(results[0].signal).toBeTruthy();
   expect(fs.readFileSync(path.join(dir, 'baseline-results/run/interrupted.log'), 'utf8')).toContain('partial evidence');
+});
+test('deadline fails a graceful zero exit, persists the reason and only blocks dependents', async () => {
+  const dir = tree(); const out = path.join(dir, 'baseline-results/run');
+  const results = await runStages([
+    { name: 'deadline', command: process.execPath, args: ['-e', "process.on('SIGTERM', () => { console.log('graceful shutdown'); process.exit(0); }); setInterval(() => {}, 1000)"], timeout: 500 },
+    { name: 'dependent', command: process.execPath, args: ['-e', 'process.exit(0)'], requires: ['deadline'] },
+    { name: 'independent', command: process.execPath, args: ['-e', 'process.exit(0)'] },
+  ], dir, process.env, out);
+  expect(results.map(r => r.status)).toEqual(['failed', 'blocked', 'passed']);
+  expect(results[0]).toMatchObject({ exit: 0, reason: 'timeout after 500ms' });
+  expect(JSON.parse(fs.readFileSync(path.join(out, 'stages.json'), 'utf8'))).toEqual(results);
+  expect(fs.readFileSync(path.join(out, 'deadline.log'), 'utf8')).toContain('graceful shutdown');
 });

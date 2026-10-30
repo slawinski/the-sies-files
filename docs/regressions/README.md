@@ -1,7 +1,7 @@
 # Regression baseline account — 2026-10-30
 
-The measured baseline is complete. No application defect remains observed and
-unexplained. This is bounded evidence, not a claim that arbitrary random inputs
+The earlier measured S0/S1 baseline is complete. This is bounded evidence,
+not a claim that arbitrary random inputs
 or all future schedules pass. Earlier failures remain in their raw reports;
 none is allowlisted, marked expected-failure, skipped, or overwritten.
 
@@ -58,12 +58,52 @@ the lockfile hash. The three production runs independently install, reset,
 migrate, build and start; they do not reuse `.next`, incremental types or DB data.
 
 S1 includes all 156 inherited unit tests plus 23 tooling contracts. Discovery
-and outcomes match exactly in every final run, including the presentation tests
+and outcomes match exactly in every earlier S1 final run, including the presentation tests
 and E2E-09. There are **zero failed, skipped, pending, todo or dependency-blocked
 tests** in the final profiles. The release golden path reaches ROLE_REVEAL,
 first Operational and cycle-one Investigation in all four final full runs.
 Production/browser totals are **537/537 unit assertions and 27/27 browser
 journeys** over three canonical runs, not independent coverage of new scenarios.
+
+### Mechanical review follow-up
+
+F012–F014 add nine boundary assertions (188 total unit assertions including the
+156 inherited identities). The focused baseline-tooling file passes 23/23;
+root lint and nonincremental types pass with the historical capsules retained.
+These checks are distinct from the earlier 179/9 full profiles above.
+
+The post-fix production capture uses `B/review-mechanical-final/` and includes
+the five existing presentation simplifications unchanged. Its disposable
+PostgreSQL 16 cluster is newly initialized at
+`T/sies-review-pg16.eLxrPD/data`, loopback port **55441**, account
+`baseline_review`, database `sies_review_final_test`. It is separate from the
+earlier cluster on 55439 and all original databases. The caller owns any later
+app-scope repairs; this run does not claim browser regressions for those findings.
+The completed run exited **zero**: all **15 stages passed**, **188/188 unit
+assertions** and **9/9 browser scenarios** passed, with zero failures, skips,
+pending/todo, interrupted, timed-out or blocked tests. Native discovery and
+outcomes agree. The independent identity audit confirms all **156 inherited
+unit identities** still pass, plus **32 tooling assertions** (nine more than
+earlier S1). The captured source identity is
+`1ea07c124e836989a2931f218346245bc10827eda120bb73669c321193d5cf04`,
+observer SHA-256 `ef44b3c126ed016e111998358b69e67de465429ae7bbd852b9fcb79296248227`,
+fresh build ID `UWsicoVFBLPSNvjuw2w4q`. Lock identity is unchanged.
+
+`run.json` records `complete=true`, `changedSource=[]`,
+`originalSourceUnchanged=true` and `serverPortReleased=true`. The post-run audit
+`T/sies-review-mechanical-audit.json` independently rechecks native inventories,
+reconstructed source, captured simplification bytes and both released ports.
+Root `npm run lint` and `npm run typecheck -- --incremental false` passed again
+after retaining this new capsule; parsed TypeScript inventory contains **zero**
+capsule files and ESLint reports the capsule player page ignored. The new owned
+cluster is stopped; its private data/logs and all evidence remain retained.
+
+This is **one** post-fix production run, not three repeated runs of the current
+source or a new development control. This result paragraph, the root README
+pointer and the corresponding runbook result note were written after measurement:
+they are documentation-only additions, not bytes attributed to this captured
+identity. No runtime/app/tooling/test bytes changed after the run. Hosted CI,
+app-scope repairs and publication were not performed.
 
 ## Failure occurrence reconciliation
 
@@ -92,6 +132,9 @@ cleanup failures that did not produce failed native test assertions.
 | All 9 `Invalid URL` failures in `T/sies-s0-corrected-evidence/browser-production.json` | [F009](F009-external-config-defaults.md): external observer lost imported config defaults; corrected control passes 9/9 |
 | `B/interrupted-probe/`, browser stage deliberately terminated; retained server found on port 3100 | [F010](F010-detached-server-cleanup.md): new cleanup bug; fixed probe proves port released, still returns nonzero/incomplete as cancellation requires |
 | Focused port test: promise resolved instead of rejecting occupied IPv4 port | [F011](F011-dual-stack-port-probe.md): new preflight bug, IPv6 bind insufficient on macOS; real unrelated server survives corrected refusal |
+| Review boundary regression: deadline and dependent both incorrectly passed after child handled SIGTERM with exit zero | [F012](F012-timeout-zero-exit.md): deadline flag and persisted diagnostic; independent stage still runs |
+| Review root-tooling probe: 1,782 capsule TypeScript files and ESLint capsule exclusion false | [F013](F013-retained-capsule-tooling.md): exclude retained evidence in both root configurations, without deleting capsules |
+| Review Git-free reconstruction probe: added ignored test returned no changed paths | [F014](F014-reconstructed-source-inventory.md): re-inventory policy-approved paths and compare metadata, with six mutation controls |
 
 Intentional proof-first reds are not application observations: missing capture
 and DB modules; missing succession predicate; missing stage/source/port helpers.
@@ -131,6 +174,10 @@ used for measurement. The owned private cluster is stopped after verification.
 Raw reports/source capsules remain private. No environment or secret file was
 read or archived; synthetic secret fixtures verify exclusion policy.
 
-There are no observed application repairs to defer. Future changes should use
-the [runbook](../regression-baseline.md), repeat paired profiles and diagnose
+Later review identified app-scope findings #1, #2 and #6 (privacy cover,
+no-execution investigation closure and deep-linked reveal gating). They are
+outside these mechanical fixes and remain with the caller for separate scope;
+the earlier green baseline does not disprove them. The five existing uncommitted
+presentation simplifications are preserved, not repaired or reverted here.
+Future changes should use the [runbook](../regression-baseline.md), repeat paired profiles and diagnose
 new failures; a successful rerun or different seed is never sufficient cause.

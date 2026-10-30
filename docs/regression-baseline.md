@@ -123,6 +123,13 @@ Each run stores `stages.json`, `run.json`, native `unit.json`/`browser.json`, bo
 discovery inventories, ordinary stage logs and first-attempt traces in
 `browser-artifacts/`. Missing/truncated or incomplete reports, failed/blocked
 stages, changed source or raw failed assertions produce a nonzero result.
+Deadline expiry is a failure even when graceful SIGTERM shutdown exits zero;
+the timeout diagnostic is retained and independent stages still run. Final
+source verification re-inventories policy-approved reconstructed paths without
+Git, detecting additions as well as content, mode, link changes and deletions.
+Copied Git-ignore rules cannot hide new source. Declared secret/generated/output
+exclusions still apply. Retained `baseline-results/` capsules are excluded from
+root ESLint and TypeScript checks; do not delete evidence to make checks pass.
 There is no failure allowlist and no automatic inherited-defect classification.
 Review provenance **and** cause manually under `docs/regressions/`. A green rerun
 does not explain an earlier failure. Keep raw reports private.
@@ -166,7 +173,21 @@ For a future change:
 5. Record provenance and cause separately. An unmatched source/profile or
    missing report is incomplete evidence, not an inherited-defect label.
 
-The final ledger/runbook commit is documentation-only and has a different full
-source digest from measured S1. Its app/tooling/test bytes are identical; no
-runtime evidence is attributed to documentation that did not exist during the
-runs. Hosted CI execution, review and publication belong to the caller.
+The earlier ledger/runbook reconciliation was documentation-only and had a
+different full source digest from measured S1. The three 179/9 production runs
+remain valid for that earlier S1, not the later simplifications or review fixes.
+The subsequent mechanical review fixes are documented in F012–F014; their new
+tests change the unit denominator. Post-fix production evidence is listed in
+the ledger separately, by its own captured source identity. No runtime evidence
+is attributed to documentation that did not exist during a run. Hosted CI
+execution, app-scope findings, review and publication belong to the caller.
+
+One later production run, `baseline-results/review-mechanical-final/`, measures
+the mechanical fixes and preserved presentation simplifications: **188/188 unit
+assertions**, **9/9 browser scenarios**, all **15 stages passed**, exit zero.
+Its source identity is
+`1ea07c124e836989a2931f218346245bc10827eda120bb73669c321193d5cf04`.
+The ledger records the native-inventory/identity audit, fresh build and isolated
+PG16 cluster cleanup. Root lint and nonincremental typechecking also pass with
+capsules retained. This note was added after the run; it is not evidence of
+three repetitions, a later development profile, or hosted CI for the final tree.
