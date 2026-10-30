@@ -6,7 +6,7 @@ the baseline work. Raw capsules and reports are private local artifacts, not PR 
 
 ## Capture and reconstruction
 
-On Node 24, run `node scripts/regression-baseline.mts "$PWD" "$PWD/baseline-results/s0"`.
+On Node 24, run `npx tsx scripts/regression-baseline.mts "$PWD" "$PWD/baseline-results/s0"`.
 The output must not already exist. `source/` contains reconstructable included bytes;
 `manifest.json` records SHA-256 identities, permissions, link targets, tests, exclusions,
 Git ancestry and observer identity. `tracked.patch` contains only included paths.
@@ -98,3 +98,37 @@ their explicit seeds and remain unchanged; UUID/session/command IDs still vary
 and are not role-determinism proofs. E2E-01/02/07/09 require no call-site edits:
 their shared helper now supplies the fixed seed. No application assertions or
 LIVE/readiness expectations were weakened.
+
+## Routine baseline entry point
+
+After `npm ci`, install the existing Chromium browser with
+`npx playwright install chromium` (CI uses `--with-deps`) and make PostgreSQL
+client tools available in PATH. Supply the explicit disposable local database
+through process environment; do not create or load an environment file.
+
+```
+npm run baseline -- run baseline-results/run-1 production
+npm run baseline -- run baseline-results/dev-control development
+```
+
+Use a new output directory each time. Optionally append the absolute path to an
+S0 `manifest.json` for the application/assets/dependency-delta check. The command
+captures and reconstructs source, performs a locked install there, collects
+versions, independent lint/types/unit/build results and native test discoveries,
+then resets again and runs a fresh one-worker mobile-Chromium server. Production
+browser checks require that run's successful build and record its BUILD_ID;
+development controls discard production `.next` output before starting dev.
+No generated Next types or configuration are written in the original checkout.
+
+Each run stores `stages.json`, `run.json`, native `unit.json`/`browser.json`, both
+discovery inventories, ordinary stage logs and first-attempt traces in
+`browser-artifacts/`. Missing/truncated or incomplete reports, failed/blocked
+stages, changed source or raw failed assertions produce a nonzero result.
+There is no failure allowlist and no automatic inherited-defect classification.
+Review provenance **and** cause manually under `docs/regressions/`. A green rerun
+does not explain an earlier failure. Keep raw reports private.
+
+CI calls this same production entry point and always uploads the report/log
+paths, not source capsules, even on failure. A raw failure remains a failing CI
+step. Three independently reset canonical runs establish the initial local
+baseline; routine CI runs one complete canonical profile per commit.

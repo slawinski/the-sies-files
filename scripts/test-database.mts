@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 export function resolveTarget(env: Partial<NodeJS.ProcessEnv> = process.env) {
   const fail = () => { throw new Error('Explicit local disposable *_test DATABASE_URL required; conflicting URLs and connection overrides refused'); };
@@ -51,6 +51,46 @@ export function assertLease(target: Target, token = process.env.BASELINE_DB_LEAS
     process.kill(owner.pid, 0);
   } catch { throw new Error('Disposable database ownership missing or expired'); }
 }
+function serverOwner(target: Target, token?: string) {
+  assertLease(target, token);
+  return JSON.parse(fs.readFileSync(lockPath(target.key), 'utf8')) as { token: string; pid: number; serverPid?: number };
+}
+export async function stopOwnedServer(target: Target, token?: string) {
+  const owner = serverOwner(target, token);
+  if (!owner.serverPid) return;
+  const pid = owner.serverPid;
+  try { process.kill(-pid, 'SIGTERM'); } catch { return; }
+  for (let i = 0; i < 50; i++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (serverOwner(target, token).serverPid !== pid) return;
+    try { process.kill(-pid, 0); } catch { return; }
+  }
+  // This group was started by our wrapper and recorded under this live lease.
+  if (serverOwner(target, token).serverPid === pid) {
+    try { process.kill(-pid, 'SIGKILL'); } catch { /* Owned group exited. */ }
+  }
+}
+async function serve(target: Target, token: string, profile: string) {
+  const owner = serverOwner(target, token);
+  if (owner.serverPid) throw new Error('Owned server already recorded');
+  const child = spawn('npm', ['run', profile === 'production' ? 'start' : 'dev', '--', '--port', '3100'], {
+    env: { ...target.env, NODE_ENV: profile === 'production' ? 'production' : 'development', RATE_LIMIT_DISABLED: '1' },
+    detached: true, stdio: 'inherit',
+  });
+  if (!child.pid) throw new Error('Owned server could not start');
+  fs.writeFileSync(lockPath(target.key), JSON.stringify({ ...owner, serverPid: child.pid }));
+  const stop = () => { try { process.kill(-child.pid!, 'SIGTERM'); } catch { /* Already exited. */ } };
+  process.on('SIGINT', stop); process.on('SIGTERM', stop);
+  try {
+    process.exitCode = await new Promise<number>(resolve => {
+      child.once('error', () => resolve(1)); child.once('exit', code => resolve(code ?? 1));
+    });
+  } finally {
+    process.off('SIGINT', stop); process.off('SIGTERM', stop);
+    const current = serverOwner(target, token);
+    if (current.serverPid === child.pid) { delete current.serverPid; fs.writeFileSync(lockPath(target.key), JSON.stringify(current)); }
+  }
+}
 export function run(command: string, args: string[], env: NodeJS.ProcessEnv, cwd = process.cwd()) {
   const r = spawnSync(command, args, { cwd, env, stdio: 'inherit' });
   if (r.status !== 0) throw new Error(`Test resource stage failed: ${command} (exit ${r.status})`);
@@ -62,11 +102,18 @@ export function resetDatabase(target: Target, token?: string, cwd = process.cwd(
   run('npx', ['prisma', 'migrate', 'deploy'], target.env, cwd);
 }
 if (process.argv[1] && path.basename(process.argv[1]) === 'test-database.mts') {
-  if (!['reset', 'verify'].includes(process.argv[2])) throw new Error('Use reset or verify');
+  if (!['reset', 'verify', 'serve'].includes(process.argv[2])) throw new Error('Use reset, verify or serve');
   const target = resolveTarget();
-  const lease = acquireLease(target);
-  try {
-    resetDatabase(target, lease.token);
-    if (process.argv[2] === 'verify') run('npm', ['test'], { ...target.env, BASELINE_DB_LEASE: lease.token });
-  } finally { lease.release(); }
+  if (process.argv[2] === 'serve') {
+    if (!process.env.BASELINE_DB_LEASE || !['development', 'production'].includes(process.argv[3])) throw new Error('Owned server requires a live baseline lease and profile');
+    void serve(target, process.env.BASELINE_DB_LEASE, process.argv[3]).catch(error => {
+      console.error((error as Error).message); process.exitCode = 1;
+    });
+  } else {
+    const lease = process.env.BASELINE_DB_LEASE ? (assertLease(target), { token: process.env.BASELINE_DB_LEASE, release() {} }) : acquireLease(target);
+    try {
+      resetDatabase(target, lease.token);
+      if (process.argv[2] === 'verify') run('npm', ['test'], { ...target.env, BASELINE_DB_LEASE: lease.token });
+    } finally { lease.release(); }
+  }
 }

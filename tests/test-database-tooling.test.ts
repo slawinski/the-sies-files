@@ -31,8 +31,9 @@ test('second owner cannot acquire or impersonate a database lease', () => {
 test('a different database cannot claim an already owned port', () => {
   const a = resolveTarget({ DATABASE_URL: `postgresql://u@127.0.0.1/port_a_${process.pid}_test` });
   const b = resolveTarget({ DATABASE_URL: `postgresql://u@localhost/port_b_${process.pid}_test` });
-  const lease = acquireLease(a, 3100);
-  try { expect(() => acquireLease(b, 3100)).toThrow('already owned'); }
+  const port = 40000 + process.pid % 20000;
+  const lease = acquireLease(a, port);
+  try { expect(() => acquireLease(b, port)).toThrow('already owned'); }
   finally { lease.release(); }
-  acquireLease(b, 3100).release();
+  acquireLease(b, port).release();
 });

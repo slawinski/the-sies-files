@@ -14,6 +14,7 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:reset": "bash scripts/reset-e2e-db.sh",
+    "baseline": "tsx scripts/regression-baseline.mts",
     "verify:release": "npm run lint && npm run typecheck && npm test && bash scripts/verify-clean-db.sh && npm run build",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

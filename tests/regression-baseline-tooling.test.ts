@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { capture } from '../scripts/regression-baseline.mjs';
+import { capture, runStages, verifySource, assertPortFree, readInventories } from '../scripts/regression-baseline.mjs';
 import { hasSuccessionPrerequisites, scenarioSpecimen, commandVersion } from './e2e/fixtures';
 import { createServer } from 'node:http';
 import { request } from '@playwright/test';
@@ -98,4 +98,54 @@ test('command failures retain HTTP/domain/version evidence and successful versio
     await context.dispose();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
+});
+test('failed checks do not short-circuit independent stages, but build dependencies stay blocked', async () => {
+  const dir = tree(); const out = path.join(dir, 'baseline-results/run');
+  const results = await runStages([
+    { name: 'unit', command: process.execPath, args: ['-e', 'process.exit(1)'] },
+    { name: 'build', command: process.execPath, args: ['-e', 'process.exit(2)'] },
+    { name: 'browser-production', command: process.execPath, args: ['-e', 'process.exit(0)'], requires: ['build'] },
+    { name: 'browser-development', command: process.execPath, args: ['-e', 'process.exit(0)'] },
+  ], dir, process.env, out);
+  expect(results.map(r => r.status)).toEqual(['failed', 'failed', 'blocked', 'passed']);
+  expect(JSON.parse(fs.readFileSync(path.join(out, 'stages.json'), 'utf8'))).toHaveLength(4);
+});
+test('missing or truncated reports cannot become a green inventory', () => {
+  const dir = tree();
+  expect(() => readInventories(dir)).toThrow('Missing or truncated native report');
+  fs.writeFileSync(path.join(dir, 'unit.json'), '{');
+  expect(() => readInventories(dir)).toThrow('Missing or truncated native report');
+});
+test('inventories preserve blocked browser identities and reject omitted unit outcomes', () => {
+  const dir = tree();
+  fs.writeFileSync(path.join(dir, 'unit-discovery.json'), JSON.stringify([{ file: 'test.ts', name: 'suite > case' }]));
+  fs.writeFileSync(path.join(dir, 'unit.json'), JSON.stringify({ testResults: [{ name: 'test.ts', assertionResults: [{ ancestorTitles: ['suite'], title: 'case', status: 'passed', failureMessages: [] }] }] }));
+  fs.writeFileSync(path.join(dir, 'browser-discovery.json'), JSON.stringify({ suites: [{ specs: [{ id: 'id', file: 'case.spec.ts', title: 'journey', tests: [{ projectName: 'mobile-chromium', expectedStatus: 'passed', results: [] }] }] }] }));
+  expect(readInventories(dir, 'build failed').counts.browser.blocked).toBe(1);
+  fs.writeFileSync(path.join(dir, 'unit.json'), JSON.stringify({ testResults: [] }));
+  expect(() => readInventories(dir, 'build failed')).toThrow('Incomplete unit');
+});
+test('source verification refuses a changed specimen', () => {
+  const dir = tree(); const manifest = capture(dir);
+  expect(verifySource(manifest, dir)).toEqual([]);
+  fs.writeFileSync(path.join(dir, 'source.ts'), 'mutated');
+  expect(verifySource(manifest, dir)).toEqual(['source.ts']);
+});
+test('occupied port is rejected without terminating its server', async () => {
+  const server = createServer((_req, res) => res.end('unrelated'));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing port');
+  try {
+    await expect(assertPortFree(address.port)).rejects.toThrow('occupied');
+    expect(await (await fetch(`http://127.0.0.1:${address.port}`)).text()).toBe('unrelated');
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+test('timed-out owned process is terminated and its partial report survives', async () => {
+  const dir = tree();
+  const results = await runStages([{ name: 'interrupted', command: process.execPath,
+    args: ['-e', "console.log('partial evidence'); setInterval(() => {}, 1000)"], timeout: 200 }], dir, process.env, path.join(dir, 'baseline-results/run'));
+  expect(results[0].status).toBe('failed');
+  expect(results[0].signal).toBeTruthy();
+  expect(fs.readFileSync(path.join(dir, 'baseline-results/run/interrupted.log'), 'utf8')).toContain('partial evidence');
 });

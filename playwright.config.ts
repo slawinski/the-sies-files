@@ -15,7 +15,9 @@ export default defineConfig({
   use: { baseURL: 'http://localhost:3100', trace: 'retain-on-failure' },
   projects: [{ name: 'mobile-chromium', use: { ...devices['Pixel 7'] } }],
   webServer: {
-    command: production ? 'npm run start -- --port 3100' : 'npm run dev -- --port 3100',
+    command: process.env.BASELINE_DB_LEASE
+      ? `npx tsx scripts/test-database.mts serve ${production ? 'production' : 'development'}`
+      : production ? 'npm run start -- --port 3100' : 'npm run dev -- --port 3100',
     env: { ...target.env, NODE_ENV: production ? 'production' : 'development', RATE_LIMIT_DISABLED: '1' } as Record<string, string>,
     url: 'http://localhost:3100',
     reuseExistingServer: false,
