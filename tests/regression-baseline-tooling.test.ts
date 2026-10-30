@@ -1,0 +1,53 @@
+import { afterEach, expect, test } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { capture } from '../scripts/regression-baseline.mts';
+
+const trees: string[] = [];
+afterEach(() => { for (const tree of trees.splice(0)) fs.rmSync(tree, { recursive: true, force: true }); });
+function tree() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'baseline-contract-'));
+  trees.push(dir);
+  execFileSync('git', ['init', '-q', dir]);
+  fs.writeFileSync(path.join(dir, 'source.ts'), 'original');
+  fs.writeFileSync(path.join(dir, '.env.secret'), 'DO NOT CAPTURE');
+  execFileSync('git', ['add', '.'], { cwd: dir });
+  execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture'], { cwd: dir });
+  return dir;
+}
+test('reconstructs dirty and untracked source with metadata without changing original', () => {
+  const dir = tree();
+  fs.writeFileSync(path.join(dir, 'source.ts'), 'edited');
+  fs.writeFileSync(path.join(dir, 'extra.test.ts'), 'test');
+  fs.chmodSync(path.join(dir, 'source.ts'), 0o755);
+  fs.symlinkSync('source.ts', path.join(dir, 'link'));
+  const before = capture(dir);
+  const out = path.join(dir, 'baseline-results', 's0');
+  const result = capture(dir, out);
+  expect(result.sourceId).toBe(before.sourceId);
+  expect(fs.readFileSync(path.join(out, 'source/source.ts'), 'utf8')).toBe('edited');
+  expect(fs.statSync(path.join(out, 'source/source.ts')).mode & 0o777).toBe(0o755);
+  expect(fs.readlinkSync(path.join(out, 'source/link'))).toBe('source.ts');
+  expect(result.tests).toContain('extra.test.ts');
+  expect(capture(dir).sourceId).toBe(before.sourceId);
+});
+test('excludes even tracked secret fixtures and generated outputs', () => {
+  const dir = tree();
+  for (const name of ['private.key', 'next-env.d.ts']) fs.writeFileSync(path.join(dir, name), 'excluded');
+  const result = capture(dir, path.join(dir, 'baseline-results/s0'));
+  expect(result.entries.map(e => e.path)).toEqual(['source.ts']);
+  expect(result.excluded.map(e => e.path)).toContain('.env.secret');
+  expect(fs.existsSync(path.join(dir, 'baseline-results/s0/source/.env.secret'))).toBe(false);
+  expect(fs.readFileSync(path.join(dir, 'baseline-results/s0/tracked.patch'), 'utf8')).not.toContain('DO NOT CAPTURE');
+});
+test('a source edit changes identity', () => {
+  const dir = tree(); const before = capture(dir).sourceId;
+  fs.writeFileSync(path.join(dir, 'source.ts'), 'different');
+  expect(capture(dir).sourceId).not.toBe(before);
+});
+test('refuses an escaping symlink', () => {
+  const dir = tree(); fs.symlinkSync('../outside-secret', path.join(dir, 'escape'));
+  expect(() => capture(dir)).toThrow('Escaping symlink');
+});
