@@ -36,14 +36,14 @@ export interface StorytellerBlocker {
 export function selectStorytellerPresentation(game: StorytellerGameProjection): StorytellerPresentationMode {
   if (game.result !== null || game.status === "ENDED") return "GAME_ENDED";
 
-  const active = (game.operational?.actions ?? []).find(
+  const actions = game.operational?.actions ?? [];
+  const active = actions.find(
     (a) => a.status === "WAITING_FOR_PLAYER" || a.status === "WAITING_FOR_STORYTELLER",
   );
-  const unresolved = (game.operational?.actions ?? []).filter((a) => a.status !== "RESOLVED");
 
   if (active?.status === "WAITING_FOR_STORYTELLER") return "OPERATIONAL_BLOCKED_BY_ST";
   if (active?.status === "WAITING_FOR_PLAYER") return "OPERATIONAL_BLOCKED_BY_PLAYER";
-  if ((game.operational?.actions.length ?? 0) > 0 && unresolved.length === 0) {
+  if (actions.length > 0 && actions.every((a) => a.status === "RESOLVED")) {
     return "OPERATIONAL_READY_TO_ADVANCE";
   }
   if (game.nominations.some((n) => n.status === "VOTING")) return "VOTING";
@@ -60,9 +60,7 @@ export function selectPrimaryStorytellerBlocker(game: StorytellerGameProjection)
   const actions = game.operational?.actions ?? [];
   const waitingForPlayer = actions.find((a) => a.status === "WAITING_FOR_PLAYER");
   const waitingForStoryteller = actions.find((a) => a.status === "WAITING_FOR_STORYTELLER");
-  const unresolved = actions.filter((a) => a.status !== "RESOLVED");
 
-  // 1. Explicit Storyteller decision required.
   if (waitingForStoryteller) {
     return {
       kind: "ST_DECISION",
@@ -83,7 +81,6 @@ export function selectPrimaryStorytellerBlocker(game: StorytellerGameProjection)
     };
   }
 
-  // 2. A player action is blocking the game.
   if (waitingForPlayer) {
     return {
       kind: "PLAYER_WAITING",
@@ -94,7 +91,6 @@ export function selectPrimaryStorytellerBlocker(game: StorytellerGameProjection)
     };
   }
 
-  // 3. Voting actions required.
   const voting = game.nominations.filter((n) => n.status === "VOTING");
   const running = voting.find((n) => n.passStatus === "RUNNING");
   if (running) {
@@ -124,8 +120,7 @@ export function selectPrimaryStorytellerBlocker(game: StorytellerGameProjection)
     };
   }
 
-  // 4. Phase advancement is ready.
-  if (actions.length > 0 && unresolved.length === 0) {
+  if (actions.length > 0 && actions.every((a) => a.status === "RESOLVED")) {
     return {
       kind: "PHASE_ADVANCE_OPERATIONAL",
       title: "Zakończ fazę operacyjną",
@@ -164,7 +159,6 @@ export function selectPrimaryStorytellerBlocker(game: StorytellerGameProjection)
     }
   }
 
-  // 5. Setup readiness.
   if (game.status === "ROLE_REVEAL") {
     return {
       kind: "START_OPERATIONAL",

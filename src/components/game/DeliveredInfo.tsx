@@ -1,6 +1,3 @@
-// DeliveredInfo — renders operational info results in plain Polish
-// (shared by the case summary and the journal timeline).
-
 import type { DeliveredInfoDto, InfoResultDto } from "@/lib/client-api";
 import { characterDisplayName } from "@/modules/trouble-brewing/characters";
 

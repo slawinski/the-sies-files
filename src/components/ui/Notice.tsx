@@ -2,9 +2,6 @@ import type { HTMLAttributes } from "react";
 import { CircleAlert, CircleCheck, EyeOff, Info, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-// Notice — inline state banner (spec 19 §5). `private` marks shoulder-surfing
-// risk; `warning`/`error` are assertive, everything else is polite.
-
 export type NoticeVariant = "info" | "private" | "warning" | "error" | "success";
 
 const VARIANT_CLASSES: Record<NoticeVariant, string> = {

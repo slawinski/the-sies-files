@@ -7,18 +7,19 @@
 import type { ReactNode } from "react";
 import type { StorytellerGameProjection } from "@/lib/client-api";
 import type { StorytellerView } from "@/lib/presentation/types";
+import { t } from "@/i18n/t";
 import StorytellerRail from "@/components/ui/StorytellerRail";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { Pencil } from "lucide-react";
 
 const SECTIONS: Array<{ view: StorytellerView; label: string }> = [
-  { view: "control", label: "Control" },
-  { view: "players", label: "Gracze" },
-  { view: "grimoire", label: "Grimuar" },
-  { view: "scenario", label: "Scenariusz" },
-  { view: "audit", label: "Audyt" },
-  { view: "system", label: "System" },
+  { view: "control", label: t("stNav.control") },
+  { view: "players", label: t("stNav.players") },
+  { view: "grimoire", label: t("stNav.grimoire") },
+  { view: "scenario", label: t("stNav.scenario") },
+  { view: "audit", label: t("stNav.audit") },
+  { view: "system", label: t("stNav.system") },
 ];
 
 export default function StorytellerShell({
@@ -58,7 +59,7 @@ export default function StorytellerShell({
       <div className="min-w-0 flex-1">
         {/* Narrow-viewport section selector (rail is lg-only). */}
         <nav
-          aria-label="Sekcje prowadzącego"
+          aria-label={t("stNav.aria")}
           className="mb-4 flex gap-1.5 overflow-x-auto pb-1 lg:hidden"
         >
           {SECTIONS.map((section) => {
