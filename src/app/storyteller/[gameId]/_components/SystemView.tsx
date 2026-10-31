@@ -37,6 +37,7 @@ const RECOVERY_KINDS: { id: RecoveryKind; label: string }[] = [
 
 const REALTIME_STAT: Record<RealtimeHealth, { label: string; tone: BadgeVariant }> = {
   LIVE: { label: "LIVE", tone: "moss" },
+  SYNCHRONIZING: { label: "AKTUALIZACJA…", tone: "brass" },
   RECONNECTING: { label: "ŁĄCZENIE…", tone: "brass" },
   OFFLINE: { label: "OFFLINE", tone: "danger" },
 };

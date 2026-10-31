@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { validVersion } from "@/lib/projection-reconciliation";
 
-export type RealtimeHealth = "LIVE" | "RECONNECTING" | "OFFLINE";
+export type RealtimeHealth = "LIVE" | "SYNCHRONIZING" | "RECONNECTING" | "OFFLINE";
 
 /** Trailing-debounce window that coalesces invalidate bursts (docs/04 §10). */
 const INVALIDATE_DEBOUNCE_MS = 150;
@@ -17,19 +18,21 @@ export const HEARTBEAT_OK_EVENT = "tsf:presence-heartbeat-ok";
 
 /**
  * Subscribes to the game's SSE invalidation stream and reports connection
- * health. Never marks LIVE on mount — only after the stream's `open` event.
- * On `invalidate` messages, calls `onInvalidate` with a trailing debounce so
- * bursts of events (one command → several events) cause a single refetch.
+ * health independently of applied projection readiness. Lifecycle boundaries
+ * require HTTP truth; neither opening a socket nor a heartbeat certifies it.
  */
 export function useGameEventStream(
   gameId: string | null,
   onInvalidate: () => void,
+  reconciliation?: { ready: boolean; boundary: () => void; target: (version: number) => void },
 ): RealtimeHealth {
-  const [health, setHealth] = useState<RealtimeHealth>("RECONNECTING");
+  const [health, setHealth] = useState<"OPEN" | "RECONNECTING" | "OFFLINE">("RECONNECTING");
   const sourceRef = useRef<EventSource | null>(null);
   const debounceRef = useRef<number | null>(null);
   const onInvalidateRef = useRef(onInvalidate);
   onInvalidateRef.current = onInvalidate;
+  const reconciliationRef = useRef(reconciliation);
+  reconciliationRef.current = reconciliation;
 
   useEffect(() => {
     if (!gameId) {
@@ -41,9 +44,7 @@ export function useGameEventStream(
     sourceRef.current = source;
 
     const queueInvalidate = () => {
-      if (debounceRef.current !== null) {
-        window.clearTimeout(debounceRef.current);
-      }
+      if (debounceRef.current !== null) return;
       debounceRef.current = window.setTimeout(() => {
         debounceRef.current = null;
         onInvalidateRef.current();
@@ -56,38 +57,68 @@ export function useGameEventStream(
         setHealth("OFFLINE");
       } else {
         setHealth(
-          sourceRef.current?.readyState === EventSource.OPEN ? "LIVE" : "RECONNECTING",
+          source.readyState === EventSource.OPEN ? "OPEN" : "RECONNECTING",
         );
       }
     };
 
     const handleHeartbeatFailed = () => setHealth("OFFLINE");
+    const boundary = () => {
+      reconciliationRef.current?.boundary();
+      onInvalidateRef.current();
+    };
+    const open = () => { evaluateHealth(); boundary(); };
+    const metadata = (event: Event) => {
+      try {
+        const value = JSON.parse((event as MessageEvent).data);
+        if (value.gameId !== gameId) return;
+        if (!validVersion(value.version)) throw new Error("Invalid stream version");
+        reconciliationRef.current?.target(value.version);
+      } catch {
+        reconciliationRef.current?.boundary();
+      }
+      queueInvalidate();
+    };
+    const foreground = () => { if (document.visibilityState !== "hidden") boundary(); };
+    const online = () => { evaluateHealth(); boundary(); };
+    const heartbeatOk = () => {
+      evaluateHealth();
+      if (!reconciliationRef.current?.ready) onInvalidateRef.current();
+    };
 
-    source.addEventListener("open", evaluateHealth);
+    source.addEventListener("open", open);
     source.addEventListener("error", evaluateHealth);
-    source.addEventListener("invalidate", queueInvalidate);
+    source.addEventListener("hello", metadata);
+    source.addEventListener("invalidate", metadata);
 
     window.addEventListener("offline", evaluateHealth);
-    window.addEventListener("online", evaluateHealth);
+    window.addEventListener("online", online);
     window.addEventListener(HEARTBEAT_FAILED_EVENT, handleHeartbeatFailed);
-    window.addEventListener(HEARTBEAT_OK_EVENT, evaluateHealth);
+    window.addEventListener(HEARTBEAT_OK_EVENT, heartbeatOk);
+    window.addEventListener("focus", foreground);
+    window.addEventListener("pageshow", foreground);
+    document.addEventListener("visibilitychange", foreground);
 
     return () => {
       if (debounceRef.current !== null) {
         window.clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      source.removeEventListener("open", evaluateHealth);
+      source.removeEventListener("open", open);
       source.removeEventListener("error", evaluateHealth);
-      source.removeEventListener("invalidate", queueInvalidate);
+      source.removeEventListener("hello", metadata);
+      source.removeEventListener("invalidate", metadata);
       source.close();
       sourceRef.current = null;
       window.removeEventListener("offline", evaluateHealth);
-      window.removeEventListener("online", evaluateHealth);
+      window.removeEventListener("online", online);
       window.removeEventListener(HEARTBEAT_FAILED_EVENT, handleHeartbeatFailed);
-      window.removeEventListener(HEARTBEAT_OK_EVENT, evaluateHealth);
+      window.removeEventListener(HEARTBEAT_OK_EVENT, heartbeatOk);
+      window.removeEventListener("focus", foreground);
+      window.removeEventListener("pageshow", foreground);
+      document.removeEventListener("visibilitychange", foreground);
     };
   }, [gameId]);
 
-  return health;
+  return health === "OPEN" ? (reconciliation?.ready ? "LIVE" : "SYNCHRONIZING") : health;
 }
