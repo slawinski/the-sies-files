@@ -4,7 +4,7 @@
 // 21 §9). The active blocker always gets the largest, highest card; the rest
 // of the session is subordinate. No audit log lives here.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -138,6 +138,13 @@ export default function ControlView({
     action: () => void;
     variant: "formal" | "danger";
   } | null>(null);
+  useEffect(() => { setConfirm(null); }, [game.gameId, game.version]);
+  const connection = {
+    LIVE: { label: "LIVE", tone: "success" },
+    SYNCHRONIZING: { label: "AKTUALIZACJA…", tone: "brass" },
+    RECONNECTING: { label: "ŁĄCZENIE…", tone: "brass" },
+    OFFLINE: { label: "OFFLINE", tone: "danger" },
+  } as const;
 
   const actions = game.operational?.actions ?? [];
   const waitingForStoryteller = actions.find((a) => a.status === "WAITING_FOR_STORYTELLER") ?? null;
@@ -374,7 +381,7 @@ export default function ControlView({
           <Surface variant="system">
             <p className="eyebrow">Zdrowie sesji</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <StatTile label="Połączenie" value={realtime} tone={realtime === "LIVE" ? "success" : realtime === "RECONNECTING" ? "brass" : "danger"} />
+              <StatTile label="Połączenie" value={connection[realtime].label} tone={connection[realtime].tone} />
               <StatTile label="Wersja" value={game.version} tone="neutral" />
             </div>
             {control && (

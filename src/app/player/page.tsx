@@ -134,7 +134,7 @@ function PlayerPageInner() {
   usePresenceHeartbeat(gameId);
   const { busy, actionError, stale, setActionError, run, runWithResult } =
     useVersionedMutation(apply, { scope: gameId, ready: projection.ready, acknowledge: projection.acknowledge });
-  const canCommand = () => game !== null && currentGame.current === game && projection.ready && !busy;
+  const canCommand = () => game !== null && currentGame.current?.gameId === game.gameId && currentGame.current?.version === game.version && projection.ready && !busy;
   useEffect(() => { setScanMessage(null); setScanError(null); setNomineeId(null); }, [gameId]);
 
   // Reset the target picker whenever the active action changes.
@@ -333,6 +333,10 @@ function PlayerPageInner() {
                 onVote={(id, intent) => void handleVote(id, intent)}
                 onAcknowledgeRole={() => void handleAcknowledgeRole()}
                 onNavigate={navigate}
+                freshnessNotice={!projection.ready ? <Notice variant={error ? "error" : "warning"}>
+                  {error ?? "Aktualizacja sprawy…"}
+                  <Button variant="quiet" onClick={() => void load()}>Spróbuj ponownie</Button>
+                </Notice> : undefined}
               />
             )}
             {view === "people" && (

@@ -215,7 +215,8 @@ function StorytellerPageInner() {
   // succeeds — a version conflict is worth an explicit acknowledgement.
   const { busy, actionError, stale, setActionError, run, runWithResult } =
     useVersionedMutation(load, { scope: gameId, ready: projection.ready, acknowledge: projection.acknowledge });
-  const canCommand = () => game !== null && currentGame.current === game && projection.ready && !busy;
+  const canCommand = () => game !== null && currentGame.current?.gameId === game.gameId && currentGame.current?.version === game.version && projection.ready && !busy;
+  const commandsBusy = busy || !projection.ready;
 
   function mutate(
     path: string,
@@ -598,7 +599,7 @@ function StorytellerPageInner() {
               </div>
             )}
 
-            <StorytellerShell active={view} onNavigate={navigate} renaming={renamingGame} onStartRename={() => { setGameNameDraft(game.name); setRenamingGame(true); }} onCancelRename={() => { setRenamingGame(false); setGameNameDraft(""); }} onCommitRename={() => void handleRenameGame()} gameNameDraft={gameNameDraft} onGameNameDraftChange={setGameNameDraft} renameEnabled={renameEnabled} busy={busy} game={game}>
+            <StorytellerShell active={view} onNavigate={navigate} renaming={renamingGame} onStartRename={() => { setGameNameDraft(game.name); setRenamingGame(true); }} onCancelRename={() => { setRenamingGame(false); setGameNameDraft(""); }} onCommitRename={() => void handleRenameGame()} gameNameDraft={gameNameDraft} onGameNameDraftChange={setGameNameDraft} renameEnabled={renameEnabled} busy={commandsBusy} game={game}>
               {privacyCovered ? (
                 <Notice variant="private">Zasłonięto — odsłoń widok, aby kontynuować.</Notice>
               ) : <>
@@ -617,7 +618,7 @@ function StorytellerPageInner() {
                   control={control}
                   realtime={realtime}
                   nameById={nameById}
-                  busy={busy}
+                  busy={commandsBusy}
                   gameEnded={gameEnded}
                   ready={ready}
                   need={need}
@@ -640,7 +641,7 @@ function StorytellerPageInner() {
               {view === "players" && (
                 <PlayersView
                   game={game}
-                  busy={busy}
+                  busy={commandsBusy}
                   renameEnabled={renameEnabled}
                   onAddPlayer={(name) => handleAddPlayer(name)}
                   onRenamePlayer={(playerId, name) => void handleRenamePlayer(playerId, name)}
@@ -653,7 +654,7 @@ function StorytellerPageInner() {
               {view === "grimoire" && (
                 <GrimoireView
                   game={game}
-                  busy={busy}
+                  busy={commandsBusy}
                   privacyCovered={privacyCovered}
                   onGenerateSetup={() => void handleGenerateSetup()}
                   onCommitSetup={() => void handleCommitSetup()}
@@ -662,7 +663,7 @@ function StorytellerPageInner() {
               {view === "scenario" && (
                 <ScenarioView
                   game={game}
-                  busy={busy}
+                  busy={commandsBusy}
                   revealClueId={revealClueId}
                   onRevealClueIdChange={setRevealClueId}
                   revealTargetPlayerId={revealTargetPlayerId}
@@ -720,7 +721,7 @@ function StorytellerPageInner() {
                   checkpointReason={checkpointReason}
                   onCheckpointReasonChange={setCheckpointReason}
                   onCreateCheckpoint={() => void handleCreateCheckpoint()}
-                  checkpointBusy={busy}
+                  checkpointBusy={commandsBusy}
                   checkpointNote={checkpointNote}
                   recoveryKind={recoveryKind}
                   onRecoveryKindChange={setRecoveryKind}
@@ -731,7 +732,7 @@ function StorytellerPageInner() {
                   recoveryReason={recoveryReason}
                   onRecoveryReasonChange={setRecoveryReason}
                   onSubmitRecovery={() => void handleRecoveryOverride()}
-                  recoveryBusy={busy}
+                  recoveryBusy={commandsBusy || controlError || !control || control.version < game.version}
                   formatTime={formatTime}
                 />
               )}

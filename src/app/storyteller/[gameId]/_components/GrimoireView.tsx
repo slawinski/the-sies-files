@@ -5,7 +5,7 @@
 // herring, Demon bluffs, regenerate + commit. Committed: read-only board with
 // status badges. The Storyteller privacy cover blanks role names instantly.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { StorytellerGameProjection } from "@/lib/client-api";
 import Badge from "@/components/ui/Badge";
@@ -32,6 +32,7 @@ export default function GrimoireView({
   onCommitSetup: () => void;
 }) {
   const [confirmCommit, setConfirmCommit] = useState(false);
+  useEffect(() => { setConfirmCommit(false); }, [game.gameId, game.version]);
   const setup = game.setup;
   const committed = setup?.committed ?? false;
   const candidate = setup?.candidate ?? null;

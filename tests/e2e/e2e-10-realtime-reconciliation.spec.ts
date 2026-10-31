@@ -53,9 +53,17 @@ for (const role of ["player", "storyteller"] as const) {
     await expect(target.getByRole("status").filter({ hasText: "LIVE" })).toHaveCount(0);
     await expect.poll(() => requested).toBe(true);
     await expect(target.getByText("AKTUALIZACJA…", { exact: true }).first()).toBeVisible();
+    if (role === "storyteller") {
+      await target.getByPlaceholder("np. Ela").fill("Keep this draft");
+      await expect(target.getByRole("button", { name: "Dodaj do kręgu" })).toBeDisabled();
+    }
     release();
     await expect(target.getByText("After missed update", { exact: true }).first()).toBeVisible();
     await expect(target.getByRole("status").filter({ hasText: "LIVE" }).first()).toBeVisible();
+    if (role === "storyteller") {
+      await expect(target.getByPlaceholder("np. Ela")).toHaveValue("Keep this draft");
+      await expect(target.getByRole("button", { name: "Dodaj do kręgu" })).toBeEnabled();
+    }
     await playerContext.close();
   });
 }

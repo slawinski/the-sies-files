@@ -5,7 +5,7 @@
 // overrides. Purely presentational: all data and side effects come from the
 // page controller via props.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Activity, HeartPulse, Lock, ShieldAlert, Unlock } from "lucide-react";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -107,6 +107,7 @@ export default function SystemView({
 }: SystemViewProps) {
   const [dangerOpen, setDangerOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  useEffect(() => { setConfirmOpen(false); }, [control?.gameId, control?.version, recoveryKind, recoveryTargetId]);
   /** Raw-id fallback used only while the picker sits on its sentinel option. */
   const [advancedTarget, setAdvancedTarget] = useState("");
 
@@ -417,6 +418,7 @@ export default function SystemView({
             </Button>
             <Button
               variant="danger"
+              disabled={recoveryBusy || !canSubmit}
               onClick={() => {
                 setConfirmOpen(false);
                 setAdvancedTarget("");
