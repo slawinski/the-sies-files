@@ -4,7 +4,7 @@
 // event stream and mutations, resolves the view from the URL, and delegates
 // rendering to the view components. No card/button styling lives here.
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -18,6 +18,7 @@ import {
 import { useGameEventStream } from "@/components/useGameEventStream";
 import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
 import { useVersionedMutation } from "@/components/useVersionedMutation";
+import { useProjectionReconciliation } from "@/components/useProjectionReconciliation";
 import { isPlayerView, type PlayerView } from "@/lib/presentation/types";
 import {
   requiredTargetCount,
@@ -35,8 +36,6 @@ import PlayerCaseView from "./_components/PlayerCaseView";
 import PlayerPeopleView from "./_components/PlayerPeopleView";
 import PlayerJournalView from "./_components/PlayerJournalView";
 import PlayerMapView from "./_components/PlayerMapView";
-
-type View = "loading" | "ready" | "unclaimed" | "error";
 
 function isDuplicateOutcome(
   outcome: ScanResponseDto["outcome"],
@@ -102,9 +101,14 @@ function PlayerPageInner() {
   const rawView = searchParams.get("view");
   const requestedView: PlayerView = isPlayerView(rawView) ? rawView : "case";
 
-  const [state, setState] = useState<View>("loading");
-  const [game, setGame] = useState<PlayerGameProjection | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const projection = useProjectionReconciliation(null, signal => api<PlayerGameProjection>("/api/v1/me", { signal }));
+  const { refresh } = projection;
+  const game = projection.data;
+  const failure = projection.error as ApiClientError | null;
+  const error = failure ? friendlyMessage(failure.code ?? "UNKNOWN", "Nie udało się wczytać twojej sprawy.") : null;
+  const state = game ? "ready" : failure?.status === 401 ? "unclaimed" : error ? "error" : "loading";
+  const currentGame = useRef(game);
+  currentGame.current = game;
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [nomineeId, setNomineeId] = useState<string | null>(null);
@@ -112,42 +116,26 @@ function PlayerPageInner() {
   const [scanError, setScanError] = useState<string | null>(null);
 
   const fetchProjection = useCallback(async (): Promise<PlayerGameProjection> => {
-    const next = await api<PlayerGameProjection>("/api/v1/me");
-    setGame(next);
-    setState("ready");
-    setError(null);
-    return next;
-  }, []);
+    const outcome = await refresh();
+    if (outcome.status === "applied") return outcome.projection;
+    throw outcome.status === "failed" ? outcome.error : new Error("Aktualizacja oczekuje.");
+  }, [refresh]);
 
   const apply = useCallback(async () => {
-    try {
-      await fetchProjection();
-    } catch (err) {
-      const e = err as ApiClientError;
-      if (e.status === 401 || e.code === "UNAUTHORIZED") {
-        setState("unclaimed");
-      } else {
-        setError(friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się wczytać twojej sprawy."));
-        setState("error");
-      }
-    }
+    await fetchProjection();
   }, [fetchProjection]);
 
   const load = useCallback(async () => {
-    setState("loading");
-    setError(null);
-    await apply();
-  }, [apply]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    await refresh();
+  }, [refresh]);
 
   const gameId = game?.gameId ?? null;
-  const realtime = useGameEventStream(gameId, () => void apply());
+  const realtime = useGameEventStream(gameId, () => void projection.refresh(), projection);
   usePresenceHeartbeat(gameId);
-  const { busy, actionError, stale, setBusy, setActionError, setStale, run } =
-    useVersionedMutation(apply);
+  const { busy, actionError, stale, setActionError, run, runWithResult } =
+    useVersionedMutation(apply, { scope: gameId, ready: projection.ready, acknowledge: projection.acknowledge });
+  const canCommand = () => game !== null && currentGame.current === game && projection.ready && !busy;
+  useEffect(() => { setScanMessage(null); setScanError(null); setNomineeId(null); }, [gameId]);
 
   // Reset the target picker whenever the active action changes.
   const activeActionId = game?.activeAction?.id ?? null;
@@ -156,7 +144,7 @@ function PlayerPageInner() {
   }, [activeActionId]);
 
   async function handleAcknowledgeRole() {
-    if (!game) return;
+    if (!game || !canCommand()) return;
     await run(() =>
       api(`/api/v1/games/${game.gameId}/role-reveal/ack`, {
         method: "POST",
@@ -166,7 +154,7 @@ function PlayerPageInner() {
   }
 
   async function handleSubmitAction() {
-    if (!game?.activeAction) return;
+    if (!game?.activeAction || !canCommand()) return;
     await run(() =>
       api(`/api/v1/games/${game.gameId}/operational/actions/${game.activeAction!.id}/submit`, {
         method: "POST",
@@ -188,7 +176,7 @@ function PlayerPageInner() {
   }
 
   async function handleNominate() {
-    if (!game || !nomineeId) return;
+    if (!game || !nomineeId || !canCommand()) return;
     const ok = await run(() =>
       api(`/api/v1/games/${game.gameId}/nominations`, {
         method: "POST",
@@ -203,7 +191,7 @@ function PlayerPageInner() {
   }
 
   async function handleVote(nominationId: string, intent: boolean) {
-    if (!game) return;
+    if (!game || !canCommand()) return;
     await run(() =>
       api(`/api/v1/games/${game.gameId}/nominations/${nominationId}/votes/intent`, {
         method: "POST",
@@ -217,43 +205,19 @@ function PlayerPageInner() {
   }
 
   async function scanWithToken(token: string): Promise<void> {
-    if (!game) return;
-    setBusy(true);
+    if (!game || !canCommand()) return;
     setScanMessage(null);
     setScanError(null);
-    setStale(false);
-    try {
-      const res = await api<ScanResponseDto>(`/api/v1/games/${game.gameId}/scenario/qr/scan`, {
+    const result = await runWithResult(() => api<ScanResponseDto>(`/api/v1/games/${game.gameId}/scenario/qr/scan`, {
         method: "POST",
         body: JSON.stringify({
           commandId: crypto.randomUUID(),
           expectedVersion: game.version,
           payload: { token },
         }),
-      });
-      let scenario: PlayerScenarioDto | null = null;
-      try {
-        scenario = (await fetchProjection()).scenario;
-      } catch {
-        // Refetch failed — the outcome summary keeps generic wording.
-      }
-      setScanMessage(describeScanOutcome(res.outcome, scenario));
-    } catch (err) {
-      const e = err as ApiClientError;
-      if (e.code === "VERSION_CONFLICT") {
-        await apply();
-        setStale(true);
-      } else if (e.code === "TERRAIN_UNAVAILABLE") {
-        setScanError(
-          "Teren niedostępny — skanowanie możliwe tylko podczas śledztwa, poza formalnymi nominacjami.",
-        );
-      } else if (e.code === "QR_ALREADY_CONSUMED") {
-        setScanError("Ten kod został już wykorzystany.");
-      } else {
-        setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
-      }
-    } finally {
-      setBusy(false);
+      }));
+    if (result.ok && result.value && currentGame.current?.gameId === game.gameId) {
+      setScanMessage(describeScanOutcome(result.value.outcome, currentGame.current.scenario));
     }
   }
 
@@ -268,11 +232,7 @@ function PlayerPageInner() {
   // restores the requested destination; a reload starts the reveal covered again.
   const view: PlayerView = revealActive ? "case" : requestedView;
   const formal = mode === "FORMAL_VOTING" || mode === "FORMAL_NOMINATION";
-  const connectionBlocked =
-    game !== null &&
-    realtime !== "LIVE" &&
-    (game.activeAction !== null ||
-      game.nominations.some((n) => n.status === "VOTING" && n.passStatus === "RUNNING"));
+  const connectionBlocked = !projection.ready;
 
   const headerMode = mode === "GAME_ENDED" ? "critical" : formal ? "formal" : "quiet";
   const sortedRoster = game ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat) : [];
@@ -326,10 +286,15 @@ function PlayerPageInner() {
 
         {state === "ready" && game && (
           <div className="flex flex-col gap-3">
+            {!projection.ready && (
+              <Notice variant={error ? "error" : "warning"}>
+                {error ?? "Aktualizacja sprawy — polecenia czekają na bieżący stan."}
+                <Button variant="quiet" onClick={() => void load()}>Spróbuj ponownie</Button>
+              </Notice>
+            )}
             {stale && (
               <Notice variant="warning">
-                Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Ponów ostatnią
-                akcję.
+                Ta sprawa zmieniła się w innej karcie. Sprawdź bieżący stan przed ponowieniem akcji.
               </Notice>
             )}
             {actionError && (
@@ -360,7 +325,7 @@ function PlayerPageInner() {
                   if (max !== null) toggleTarget(id, max);
                 }}
                 onSubmitAction={() => void handleSubmitAction()}
-                busy={busy}
+                busy={busy || !projection.ready}
                 connectionBlocked={connectionBlocked}
                 nomineeId={nomineeId}
                 onSelectNominee={setNomineeId}
@@ -381,7 +346,7 @@ function PlayerPageInner() {
             {view === "map" && (
               <PlayerMapView
                 game={game}
-                busy={busy}
+                busy={busy || !projection.ready}
                 scanMessage={scanMessage}
                 scanError={scanError}
                 onScan={scanWithToken}

@@ -24,9 +24,10 @@ export const HEARTBEAT_OK_EVENT = "tsf:presence-heartbeat-ok";
 export function useGameEventStream(
   gameId: string | null,
   onInvalidate: () => void,
-  reconciliation?: { ready: boolean; boundary: () => void; target: (version: number) => void },
+  reconciliation?: { gameId: string | null; ready: boolean; boundary: () => void; target: (version: number) => void },
 ): RealtimeHealth {
   const [health, setHealth] = useState<"OPEN" | "RECONNECTING" | "OFFLINE">("RECONNECTING");
+  const [streamGame, setStreamGame] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
   const debounceRef = useRef<number | null>(null);
   const onInvalidateRef = useRef(onInvalidate);
@@ -35,6 +36,8 @@ export function useGameEventStream(
   reconciliationRef.current = reconciliation;
 
   useEffect(() => {
+    setStreamGame(gameId);
+    setHealth("RECONNECTING");
     if (!gameId) {
       setHealth("OFFLINE");
       return;
@@ -64,11 +67,13 @@ export function useGameEventStream(
 
     const handleHeartbeatFailed = () => setHealth("OFFLINE");
     const boundary = () => {
+      if (reconciliationRef.current && reconciliationRef.current.gameId !== gameId) return;
       reconciliationRef.current?.boundary();
       onInvalidateRef.current();
     };
     const open = () => { evaluateHealth(); boundary(); };
     const metadata = (event: Event) => {
+      if (reconciliationRef.current && reconciliationRef.current.gameId !== gameId) return;
       try {
         const value = JSON.parse((event as MessageEvent).data);
         if (value.gameId !== gameId) return;
@@ -120,5 +125,6 @@ export function useGameEventStream(
     };
   }, [gameId]);
 
+  if (streamGame !== gameId) return "RECONNECTING";
   return health === "OPEN" ? (reconciliation?.ready ? "LIVE" : "SYNCHRONIZING") : health;
 }

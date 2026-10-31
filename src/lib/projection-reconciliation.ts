@@ -9,14 +9,16 @@ export class ProjectionGate {
   private intent = 0;
   private disposed = false;
   private version = -1;
-  constructor(private readonly gameId: string) {}
+  constructor(private gameId: string | null, private readonly discovery = false) {}
   begin() { return ++this.intent; }
   current(ticket: number) { return !this.disposed && ticket === this.intent; }
   accept(ticket: number, candidate: ProjectionMetadata): boolean {
     if (!this.current(ticket)) return false;
-    if (!candidate || candidate.gameId !== this.gameId || !validVersion(candidate.version)) {
+    if (!candidate || typeof candidate.gameId !== "string" || !candidate.gameId ||
+      (!this.discovery && candidate.gameId !== this.gameId) || !validVersion(candidate.version)) {
       throw new Error("Nieprawidłowa odpowiedź aktualizacji.");
     }
+    if (this.discovery && candidate.gameId !== this.gameId) { this.gameId = candidate.gameId; this.version = -1; }
     if (candidate.version < this.version) return false;
     this.version = candidate.version;
     return true;
@@ -25,6 +27,7 @@ export class ProjectionGate {
 }
 
 export interface ReconciliationState {
+  gameId: string | null;
   ready: boolean;
   target: number;
   applied: number | null;
@@ -39,7 +42,7 @@ const FALLBACK_MS = 30000;
 
 /** One read and one pending obligation per effect lifetime. Timers are completion-scheduled. */
 export class ReconciliationCoordinator<T extends ProjectionMetadata> {
-  snapshot: ReconciliationState = { ready: false, target: 0, applied: null, error: null };
+  snapshot: ReconciliationState = { gameId: null, ready: false, target: 0, applied: null, error: null };
   private readonly gate: ProjectionGate;
   private boundary = 0;
   private satisfiedBoundary = -1;
@@ -54,10 +57,10 @@ export class ReconciliationCoordinator<T extends ProjectionMetadata> {
   private debouncing = false;
   private cancel: (() => void) | null = null;
 
-  constructor(gameId: string, private readonly work: (signal: AbortSignal) => Promise<T>,
+  constructor(gameId: string | null, private readonly work: (signal: AbortSignal) => Promise<T>,
     private readonly publish: (projection: T) => void,
     private readonly notify: (state: ReconciliationState) => void = () => {}) {
-    this.gate = new ProjectionGate(gameId);
+    this.gate = new ProjectionGate(gameId, gameId === null);
   }
 
   private update(patch: Partial<ReconciliationState>) {
@@ -73,6 +76,7 @@ export class ReconciliationCoordinator<T extends ProjectionMetadata> {
   raiseTarget(version: number) {
     if (this.disposed || !validVersion(version) || version <= this.snapshot.target) return;
     this.update({ target: version, ready: this.snapshot.ready && (this.snapshot.applied ?? -1) >= version });
+    if (!this.active && !this.snapshot.ready && !this.debouncing) { this.schedule(150); this.debouncing = true; }
   }
   requireBoundary() {
     if (this.disposed) return;
@@ -126,8 +130,11 @@ export class ReconciliationCoordinator<T extends ProjectionMetadata> {
           return { status: "superseded" };
         }
         this.publish(projection);
+        if (this.snapshot.gameId !== null && this.snapshot.gameId !== projection.gameId) {
+          this.snapshot = { ...this.snapshot, target: 0, applied: null };
+        }
         this.satisfiedBoundary = boundary;
-        this.update({ applied: projection.version, error: null,
+        this.update({ gameId: projection.gameId, applied: projection.version, error: null,
           ready: boundary === this.boundary && projection.version >= this.snapshot.target });
         return { status: "applied", projection };
       } catch (error) {
