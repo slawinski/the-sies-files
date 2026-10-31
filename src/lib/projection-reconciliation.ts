@@ -88,7 +88,6 @@ export class ReconciliationCoordinator<T extends ProjectionMetadata> {
   invalidate(version: number) {
     this.raiseTarget(version);
     this.pending = true;
-    // Leading bounded debounce: continuous events cannot postpone the read forever.
     if (!this.active && !this.debouncing) { this.schedule(150); this.debouncing = true; }
   }
   setVisible(visible: boolean) {
@@ -151,7 +150,8 @@ export class ReconciliationCoordinator<T extends ProjectionMetadata> {
           const failed = unapplied || this.snapshot.error !== null || (this.snapshot.applied ?? -1) < this.snapshot.target;
           if (failed) this.retryAfter = Date.now() + RETRY_MS;
           const needsRead = this.pending || this.satisfiedBoundary !== this.boundary || !this.snapshot.ready;
-          this.schedule(needsRead ? (failed ? RETRY_MS : 150) : FALLBACK_MS);
+          const followUpDelay = failed ? RETRY_MS : 150;
+          this.schedule(needsRead ? followUpDelay : FALLBACK_MS);
         }
       }
     })();
