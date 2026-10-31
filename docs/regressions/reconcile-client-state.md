@@ -3,8 +3,8 @@
 This work starts at merged PR2 (`3a4152670b54b5cee8e17f58dfb25a75615c8677`).
 Earlier baseline counts are not this branch's denominator. All browser runs below
 use mobile Chromium, one worker, no retries, and a new disposable database on an
-owned PostgreSQL 16 cluster at loopback port 55447 (focused runs) or 55448
-(final canonical profiles). Existing databases and secret
+owned PostgreSQL 16 cluster at loopback port 55447 (original focused runs), 55448
+(original final profiles), or 55449 (review follow-up below). Existing databases and secret
 environment files were not inspected. Prisma's CLI prints that it loads `.env` in
 the original checkout; both database URL variables were explicitly supplied and
 its datasource diagnostic confirms the disposable target. Canonical baseline
@@ -67,6 +67,9 @@ discovery; it asserts obsolete-source closure and rejection of the old response.
 This is local single-process evidence, not a deployment-topology or global
 consistency claim. The caller still owns external review, browser QA and shipping.
 
+The later review follow-up adds a separate same-document Storyteller journey;
+the original full-document journey above remains as a distinct disposal control.
+
 ## Canonical production and development verification
 
 The continuation completed the repository's canonical entry point on Node
@@ -99,3 +102,101 @@ not the final documentation-only update; application and test bytes are the
 measured bytes. Both owned clusters used during continuation were stopped;
 source capsules, cluster directories and raw reports are retained. The original
 PostgreSQL 14 service was left untouched.
+
+## Review follow-up: findings #1–#5
+
+Source review: `/tmp/compound-engineering-501/ce-code-review/20261031-delegated-425fe8e/`
+(`review.json` and `cross-persona-corroboration.json`), reviewing HEAD
+`425fe8e10d4255dfee8432ba60ff23b057e34e7d`. All five findings retain confidence
+75 and their validator/corroboration evidence. #1, #2, #3 and #5 are mechanical
+repairs of existing privacy, cleanup, outcome and verification contracts. #4
+retains **manual** classification: parent arbitration authorized only the existing
+R4/R8 audit ownership repair, not automatic-fix permission, a new API or policy.
+
+Applied boundaries:
+
+- #1 keys `PlayerCaseView` by accepted game ID plus player ID, never version.
+  Mounted tests change both game and same-game player identity with A's role
+  already revealed; B starts covered and requires its own gesture. A real
+  same-identity checkpoint refresh preserves the open reveal. Existing form and
+  selection preservation cases remain unchanged.
+- #2 separates lifetime-owned mutation-lock cleanup in `finally` from authorized
+  result/error publication. Both 401 and 403 mounted command-refresh cases clear
+  the private page, recover the same game, and successfully issue another command.
+  Cleanup still checks captured active generation identity, so an old generation
+  cannot release a replacement generation's lock.
+- #3 rejects blocked delivery from an already-open scanner and waits for callback
+  fulfillment before showing acceptance. The mounted camera specimen injects
+  `BarcodeDetector`/camera browser stubs, not a production endpoint. A DOM observer
+  records even transient false acceptance; a held required read produces zero
+  scan POSTs and no acceptance. After catch-up a fresh gesture/decode sends exactly
+  one real command; its held acknowledgement cannot show success early. The prior
+  generic acknowledged-outcome/failed-refresh/no-replay test is unchanged.
+- #4 stores one accepted normalized filter/head/cursor snapshot, blocks pagination
+  while a replacement head is pending, and checks append ownership before intent
+  advancement and publication. No query cache, server contract or feed redesign
+  was added. The reverse-order case holds a new filtered head with old More still
+  visible and disabled, attempts the old control, verifies zero cursor requests,
+  then accepts the filtered head without mixed rows. The original held-pagination
+  case still tests the opposite ordering, retry and sequence deduplication.
+- #5 uses the real homepage Next Link, browser back to home, then that Link into
+  the authorized current game B. A window sentinel survives the entire journey;
+  the current-game response must select B. Actual A projection/control/audit/claim
+  responses are held until B mounts, then released without A modal/error writes.
+  This proves **same-document controller disposal**, not direct dynamic-param-only
+  reuse or the key in isolation. No router global or production test endpoint was
+  introduced. The original full-document specimen remains distinct.
+
+### Review red/green evidence
+
+Every directory below is under ignored `baseline-results/`; native logs, JSON,
+failure traces, snapshots and source capsules are retained, including failed runs.
+
+| Run / captured source ID | Actual result / causal account |
+| --- | --- |
+| `reconcile-review-red` / `adcd258d578e42f0f586b544e76ba68f596c93b545b7dbd37ead839df4d5954a` | Seven new specimens failed before production edits. #1 failed to cover B in both identity cases; #2 remained busy after both auth statuses; #4 left More enabled. #5's sentinel was lost across the old `goto` journey, discriminating document replacement from same-document navigation. The first #3 failure was at final success observation, not a reliable observation of the brief blocked-success defect. |
+| `reconcile-review-camera-red` / `ce0d3bed376fd29fa21f2aaa602fe4d6309568cdb751f023cc4a59401bf7d90c` | Still before production edits: strengthened camera test's DOM observer recorded acceptance while the required read was held and zero scan POSTs were sent. This is the discriminating #3 red, including transient acceptance. |
+| `reconcile-review-green` / `747cbdcad320fcbdef191e027606bbbcbc96276decd8fcd5c3d1bb57181593fb` | Six passed; #4's exact More locator no longer matched because passing head-pending as pagination busy changed its label to `Wczytuję…`. Separated disabled pagination from actual page-loading busy in the presentational view, retaining the disabled assertion and the existing More label. No timeout or assertion was weakened. |
+| `reconcile-review-green-2` / `8a407f82c8d9e542bf16d65c480563b719eb012e69b14b4ec3bb42907a3fbcd2` | All eight selected cases passed: seven review additions plus the unchanged original audit race. Same-identity refresh now waits for the checkpoint-version response; scanner observer also asserts no transient acceptance before acknowledgement. |
+
+Root lint and `tsc --noEmit --incremental false` passed for the last source ID;
+their logs and stage results are in `reconcile-review-root-checks/`. `git diff
+--check` passed. The two pre-existing uncommitted simplifications in
+`src/lib/command-refresh.ts` and `src/lib/projection-reconciliation.ts` are
+byte-identical to the first review-red capture and were not edited by this step.
+No plan body, dependency, lockfile, auth stance or game rule changed.
+
+### Current canonical profiles
+
+Both profiles ran the existing `npm run baseline -- run NEW_OUTPUT PROFILE`
+entry point, once each after the fixes, against separately named new disposable
+databases on a newly initialized private UTF-8 PostgreSQL **16.15** cluster at
+loopback **55449**. Neither existing clusters nor original databases were used.
+Both captured source ID
+`8a407f82c8d9e542bf16d65c480563b719eb012e69b14b4ec3bb42907a3fbcd2`.
+The earlier `d7980f…` profiles above remain historical, not current evidence.
+
+| Profile / retained directory | Actual native outcomes | Stages / build |
+| --- | --- | --- |
+| `reconcile-review-production/` | 212/212 unit assertions; 38/38 mobile Chromium scenarios | 15/15 passed; production BUILD_ID `unEYEyeQSZPR2hCEz87B3` |
+| `reconcile-review-development/` | 212/212 unit assertions; 38/38 mobile Chromium scenarios | 16/16 passed; fresh dev output and separate dev server (the preliminary build is not the browser's runtime) |
+
+The 38 scenarios include **all twenty original E2E-10 cases**, **all eleven
+inherited browser cases**, and **seven review additions**. Native discovery and
+execution inventories agree; all failed, pending, skipped, todo, timed-out,
+interrupted and blocked counts are zero in these two profiles. Both `run.json`
+files record `complete: true`, `changedSource: []`,
+`originalSourceUnchanged: true`, `serverPortReleased: true`, and released leases
+and owned subprocesses. Each retains stage logs, native discovery/outcome JSON,
+source manifest and browser artifacts. No retries, allowlists, forced clicks or
+timeout increases were used. The new owned cluster is stopped; its directory,
+private server log and all evidence remain retained. Disk availability remained
+89 GiB; no earlier capsules were removed.
+
+These paragraphs and README pointers were appended **after** measurement, so
+the full source digest identifies the pre-append documentation, while all
+application/test bytes are the measured bytes. No commit, push, simplification
+pass or new code review was performed. Optional mounted malformed-stream and
+held-pre-command-main-read coverage from the review remains outside this bounded
+follow-up; authorization clearing/recovery is now covered by #2. No unresolved
+finding requires a new policy/API decision; the #5 key-isolation caveat remains.

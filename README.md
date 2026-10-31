@@ -10,6 +10,15 @@ assertions and nine browser scenarios; it is a separate captured identity, not
 three repetitions of the final tree. Retain local `baseline-results/` evidence:
 root ESLint and TypeScript exclude these historical source capsules.
 
+The [client reconciliation evidence](docs/regressions/reconcile-client-state.md)
+records the review follow-up for findings #1–#5, retained test-first reds, and
+one current canonical production plus one development run: **212/212 unit
+assertions and 38/38 browser scenarios per profile**, including all 31 earlier
+browser cases and seven review additions. Both measured source
+`8a407f82c8d9e542bf16d65c480563b719eb012e69b14b4ec3bb42907a3fbcd2`;
+the earlier 212/31 profiles measured a different source. This README note was
+added after measurement; see the ledger for profile logs and coverage limits.
+
 ## Getting Started
 
 First, run the development server:

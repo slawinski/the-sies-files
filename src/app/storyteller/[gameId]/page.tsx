@@ -68,6 +68,8 @@ function LoadingShell() {
   );
 }
 
+const auditFilter = (categories: AuditCategoryDto[]) => [...new Set(categories)].sort().join(",");
+
 function StorytellerPageInner() {
   const params = useParams<{ gameId: string }>();
   const gameId = params.gameId;
@@ -93,10 +95,13 @@ function StorytellerPageInner() {
   const [audit, setAudit] = useState<StorytellerAuditDto | null>(null);
   const [auditCategories, setAuditCategories] = useState<AuditCategoryDto[]>([]);
   const [auditLoadingMore, setAuditLoadingMore] = useState(false);
+  const [auditHeadPending, setAuditHeadPending] = useState(false);
   const [auditError, setAuditError] = useState(false);
   const [controlError, setControlError] = useState(false);
   const controlGate = useRef(new ProjectionGate(gameId));
   const auditIntent = useRef(0);
+  const pendingAuditHead = useRef<number | null>(null);
+  const acceptedAudit = useRef<{ filter: string; head: number; snapshot: StorytellerAuditDto } | null>(null);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -150,9 +155,19 @@ function StorytellerPageInner() {
 
   const loadAudit = useCallback(
     async (categories: AuditCategoryDto[], cursor?: number) => {
+      const filter = auditFilter(categories);
+      const accepted = acceptedAudit.current;
+      if (cursor !== undefined && (pendingAuditHead.current !== null || !accepted ||
+          accepted.filter !== filter || accepted.snapshot.nextCursor !== cursor)) return;
       const intent = ++auditIntent.current;
-      const current = () => alive.current && intent === auditIntent.current;
-      if (cursor === undefined) setAuditLoadingMore(false);
+      const current = () => alive.current && intent === auditIntent.current &&
+        (cursor === undefined || (pendingAuditHead.current === null && acceptedAudit.current?.head === accepted?.head &&
+          acceptedAudit.current?.filter === filter && acceptedAudit.current?.snapshot.nextCursor === cursor));
+      if (cursor === undefined) {
+        pendingAuditHead.current = intent;
+        setAuditHeadPending(true);
+        setAuditLoadingMore(false);
+      } else setAuditLoadingMore(true);
       const query = new URLSearchParams();
       if (categories.length > 0) query.set("categories", categories.join(","));
       if (cursor !== undefined) query.set("cursor", String(cursor));
@@ -163,19 +178,21 @@ function StorytellerPageInner() {
         );
         if (!current()) return;
         setAuditError(false);
-        if (cursor !== undefined) {
-          setAudit((prev) => ({
-            categories: res.categories,
-            nextCursor: res.nextCursor,
-            events: [...new Map([...(prev?.events ?? []), ...res.events].map(event => [event.sequence, event])).values()],
-          }));
-        } else {
-          setAudit(res);
-        }
+        const snapshot = cursor !== undefined ? { ...res,
+          events: [...new Map([...(accepted?.snapshot.events ?? []), ...res.events].map(event => [event.sequence, event])).values()],
+        } : res;
+        acceptedAudit.current = { filter, head: cursor === undefined ? intent : accepted!.head, snapshot };
+        setAudit(snapshot);
       } catch {
         if (current()) setAuditError(true);
       } finally {
-        if (current()) setAuditLoadingMore(false);
+        if (alive.current && intent === auditIntent.current) {
+          setAuditLoadingMore(false);
+          if (pendingAuditHead.current === intent) {
+            pendingAuditHead.current = null;
+            setAuditHeadPending(false);
+          }
+        }
       }
     },
     [gameId],
@@ -681,6 +698,7 @@ function StorytellerPageInner() {
                   audit={audit}
                   auditError={auditError}
                   auditLoadingMore={auditLoadingMore}
+                  auditPaginationBlocked={auditHeadPending || acceptedAudit.current?.filter !== auditFilter(auditCategories)}
                   onRetry={() => void loadAudit(auditCategoriesRef.current)}
                   selectedCategories={auditCategories}
                   onToggleCategory={(id) => {
@@ -705,7 +723,6 @@ function StorytellerPageInner() {
                   }}
                   onLoadMore={() => {
                     if (!audit?.nextCursor) return;
-                    setAuditLoadingMore(true);
                     void loadAudit(auditCategoriesRef.current, audit.nextCursor);
                   }}
                   formatTime={formatTime}

@@ -33,6 +33,7 @@ export interface AuditViewProps {
   audit: StorytellerAuditDto | null; // null while loading
   auditError: boolean; // load failed
   auditLoadingMore: boolean;
+  auditPaginationBlocked?: boolean;
   selectedCategories: AuditCategoryDto[]; // [] = all
   onToggleCategory: (id: AuditCategoryDto) => void;
   onClearCategories: () => void;
@@ -45,6 +46,7 @@ export default function AuditView({
   audit,
   auditError,
   auditLoadingMore,
+  auditPaginationBlocked = false,
   selectedCategories,
   onToggleCategory,
   onClearCategories,
@@ -306,7 +308,7 @@ export default function AuditView({
 
           {audit.nextCursor !== null && (
             <div className="mt-4 flex justify-center">
-              <Button variant="quiet" onClick={onLoadMore} busy={auditLoadingMore}>
+              <Button variant="quiet" onClick={onLoadMore} busy={auditLoadingMore} disabled={auditPaginationBlocked}>
                 {auditLoadingMore ? "Wczytuję…" : "Więcej"}
               </Button>
             </div>

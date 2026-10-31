@@ -25,22 +25,29 @@ export function useVersionedMutation(apply: () => Promise<unknown>, options: {
 
   const runWithResult = useCallback(async <T,>(action: () => Promise<T>): Promise<{ ok: boolean; value: T | null }> => {
     const generation = lifetime.current;
-    const valid = () => generation.active && generation === lifetime.current && current.current.current();
+    const ownsLifetime = () => generation.active && generation === lifetime.current;
+    const valid = () => ownsLifetime() && current.current.current();
     if (!valid() || !current.current.ready() || running.current) return { ok: false, value: null };
     running.current = true;
     setBusy(true); setActionError(null); setStale(false);
-    const result = await executeCommand(action,
-      () => valid() ? apply() : Promise.resolve(),
-      value => { if (valid()) current.current.acknowledge(value); });
-    if (!valid()) return { ok: false, value: null };
-    if (result.commandError) {
-      const e = result.commandError as ApiClientError;
-      if (e.code === "VERSION_CONFLICT") setStale(true);
-      else setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
+    try {
+      const result = await executeCommand(action,
+        () => valid() ? apply() : Promise.resolve(),
+        value => { if (valid()) current.current.acknowledge(value); });
+      if (!valid()) return { ok: false, value: null };
+      if (result.commandError) {
+        const e = result.commandError as ApiClientError;
+        if (e.code === "VERSION_CONFLICT") setStale(true);
+        else setActionError(friendlyMessage(e.code ?? "UNKNOWN", "Coś poszło nie tak."));
+      }
+      return { ok: result.committed, value: result.value };
+    } finally {
+      // Authorization controls publication, not cleanup of this lifetime's lock.
+      if (ownsLifetime()) {
+        running.current = false;
+        setBusy(false);
+      }
     }
-    setBusy(false);
-    running.current = false;
-    return { ok: result.committed, value: result.value };
   }, [apply]);
   const run = useCallback(async (action: () => Promise<unknown>) => (await runWithResult(action)).ok, [runWithResult]);
   return { busy, actionError, stale, setBusy, setActionError, setStale, run, runWithResult };

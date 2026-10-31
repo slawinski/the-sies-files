@@ -325,6 +325,7 @@ function PlayerPageInner() {
 
             {view === "case" && (
               <PlayerCaseView
+                key={`${game.gameId}:${game.me.playerId}`}
                 game={game}
                 selectedIds={selectedIds}
                 onToggleTarget={(id) => {

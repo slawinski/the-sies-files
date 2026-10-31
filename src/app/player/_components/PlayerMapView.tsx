@@ -96,7 +96,10 @@ export default function PlayerMapView({
         title="Skaner kodów QR"
         description="Zeskanuj kod znaleziony na terenie śledztwa. Kamera włączy się dopiero po twojej zgodzie."
       >
-        <QrScanner onScan={async token => { if (!busy) await onScan(token); }} />
+        <QrScanner onScan={async token => {
+          if (busy) throw new Error("Scan paused while catching up");
+          await onScan(token);
+        }} />
 
         {scanMessage && (
           <Notice variant="success" className="mt-3">
