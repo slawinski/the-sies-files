@@ -55,7 +55,8 @@ test("E2E-07: annex QR unlocks the western map layer with server authorization",
   await expect(playerPage.getByText("Strumień", { exact: true })).toHaveCount(0);
 
   // Ensure the realtime stream is connected before scanning (dev cold-start
-  // compilation can delay the SSE open; a scan before it is missed forever).
+  // compilation can delay the SSE open). E2E-10 separately proves pre-subscribe
+  // and lost-invalidation recovery without another mutation.
   await expect(playerPage.getByText("LIVE", { exact: true })).toBeVisible({
     timeout: 30_000,
   });

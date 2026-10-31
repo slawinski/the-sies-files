@@ -38,6 +38,15 @@ export function useProjectionReconciliation<T extends ProjectionMetadata>(
   const refresh = useCallback((): Promise<RefreshOutcome<T>> => owner.current?.refresh() ?? Promise.resolve({ status: "superseded" }), []);
   const boundary = useCallback(() => owner.current?.requireBoundary(), []);
   const target = useCallback((version: number) => owner.current?.raiseTarget(version), []);
+  const isCurrent = useCallback((gameId: string | null) => {
+    const state = owner.current?.snapshot;
+    const error = state?.error;
+    return state?.gameId === gameId && !(error instanceof ApiClientError && (error.status === 401 || error.status === 403));
+  }, []);
+  const canCommand = useCallback((metadata: ProjectionMetadata) => {
+    const state = owner.current?.snapshot;
+    return state?.ready === true && state.gameId === metadata.gameId && state.applied === metadata.version;
+  }, []);
   const acknowledge = useCallback((value: unknown) => {
     if (value && typeof value === "object" && "version" in value && typeof value.version === "number") {
       owner.current?.raiseTarget(value.version);
@@ -47,5 +56,5 @@ export function useProjectionReconciliation<T extends ProjectionMetadata>(
   const current = state.scope === scope;
   return { data: current ? state.data : null, gameId: current ? state.data?.gameId ?? scope : scope,
     error: current ? state.freshness.error : null,
-    ready: current && state.freshness.ready, refresh, boundary, target, acknowledge };
+    ready: current && state.freshness.ready, refresh, boundary, target, acknowledge, canCommand, isCurrent };
 }

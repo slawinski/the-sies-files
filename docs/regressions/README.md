@@ -181,3 +181,9 @@ the earlier green baseline does not disprove them. The five existing uncommitted
 presentation simplifications are preserved, not repaired or reverted here.
 Future changes should use the [runbook](../regression-baseline.md), repeat paired profiles and diagnose
 new failures; a successful rerun or different seed is never sufficient cause.
+
+## Later client reconciliation work
+
+The [client reconciliation account](reconcile-client-state.md) records the
+post-PR2 race specimens, fixture/tooling failures and new release-profile evidence.
+It does not reattribute the historical measurements above to the new application.

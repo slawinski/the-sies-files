@@ -11,6 +11,28 @@ function deferred<T>() {
 afterEach(() => vi.useRealTimers());
 
 describe("scoped projection publication", () => {
+  it("publishes only latest equal-version payload and retains no obsolete async error", async () => {
+    const gate = new ProjectionGate("a");
+    let displayed = "initial";
+    let error: string | null = null;
+    const read = async (work: Promise<ReturnType<typeof projection>>) => {
+      const ticket = gate.begin();
+      try {
+        const response = await work;
+        if (gate.accept(ticket, response)) { displayed = response.name; error = null; }
+      } catch (failure) { if (gate.current(ticket)) error = (failure as Error).message; }
+    };
+    const old = deferred<ReturnType<typeof projection>>();
+    const oldFailure = deferred<ReturnType<typeof projection>>();
+    const first = read(old.promise);
+    const second = read(oldFailure.promise);
+    await read(Promise.resolve(projection(15, "a", "latest presence")));
+    old.resolve(projection(15, "a", "obsolete presence"));
+    oldFailure.reject(new Error("obsolete failure"));
+    await Promise.all([first, second]);
+    expect(displayed).toBe("latest presence");
+    expect(error).toBeNull();
+  });
   it("rejects old successes and failures after newer intent, including equal versions", () => {
     const gate = new ProjectionGate("a");
     const old = gate.begin();
@@ -39,6 +61,19 @@ describe("scoped projection publication", () => {
 });
 
 describe("authoritative reconciliation", () => {
+  it("resets a discovery scope's watermark only when the current /me read changes identity", async () => {
+    vi.useFakeTimers();
+    const work = vi.fn().mockResolvedValueOnce(projection(40)).mockResolvedValueOnce(projection(2, "b"));
+    const c = new ReconciliationCoordinator(null, work, () => {});
+    await c.refresh();
+    c.raiseTarget(41);
+    await c.refresh();
+    expect(c.snapshot.gameId).toBe("b");
+    expect(c.snapshot.applied).toBe(2);
+    expect(c.snapshot.target).toBe(0);
+    expect(c.snapshot.ready).toBe(true);
+    c.dispose();
+  });
   it("does not starve a read during continuous invalidation bursts", async () => {
     vi.useFakeTimers();
     const work = vi.fn().mockResolvedValue(projection(3));

@@ -133,8 +133,9 @@ function PlayerPageInner() {
   const realtime = useGameEventStream(gameId, () => void projection.refresh(), projection);
   usePresenceHeartbeat(gameId);
   const { busy, actionError, stale, setActionError, run, runWithResult } =
-    useVersionedMutation(apply, { scope: gameId, ready: projection.ready, acknowledge: projection.acknowledge });
-  const canCommand = () => game !== null && currentGame.current?.gameId === game.gameId && currentGame.current?.version === game.version && projection.ready && !busy;
+    useVersionedMutation(apply, { scope: gameId, ready: () => game !== null && projection.canCommand(game),
+      current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge });
+  const canCommand = () => game !== null && projection.canCommand(game) && !busy;
   useEffect(() => { setScanMessage(null); setScanError(null); setNomineeId(null); }, [gameId]);
 
   // Reset the target picker whenever the active action changes.
@@ -215,6 +216,14 @@ function PlayerPageInner() {
           expectedVersion: game.version,
           payload: { token },
         }),
+      }).catch((error: ApiClientError) => {
+        if (currentGame.current?.gameId === game.gameId) {
+          setScanError(error.code === "TERRAIN_UNAVAILABLE"
+            ? "Teren niedostępny — skanowanie możliwe tylko podczas śledztwa, poza formalnymi nominacjami."
+            : error.code === "QR_ALREADY_CONSUMED" ? "Ten kod został już wykorzystany."
+            : friendlyMessage(error.code ?? "UNKNOWN", "Coś poszło nie tak."));
+        }
+        throw error;
       }));
     if (result.ok && result.value && currentGame.current?.gameId === game.gameId) {
       setScanMessage(describeScanOutcome(result.value.outcome, currentGame.current.scenario));

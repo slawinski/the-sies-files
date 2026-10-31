@@ -82,8 +82,6 @@ function StorytellerPageInner() {
   const failure = projection.error as ApiClientError | null;
   const loading = !game && !failure;
   const fatalError = failure ? friendlyMessage(failure.code ?? "UNKNOWN", "Nie udało się wczytać tej sprawy.") : null;
-  const currentGame = useRef(game);
-  currentGame.current = game;
   const [renamingGame, setRenamingGame] = useState(false);
   const [gameNameDraft, setGameNameDraft] = useState("");
 
@@ -214,8 +212,9 @@ function StorytellerPageInner() {
   // The stale banner persists until the user dismisses it or the next mutation
   // succeeds — a version conflict is worth an explicit acknowledgement.
   const { busy, actionError, stale, setActionError, run, runWithResult } =
-    useVersionedMutation(load, { scope: gameId, ready: projection.ready, acknowledge: projection.acknowledge });
-  const canCommand = () => game !== null && currentGame.current?.gameId === game.gameId && currentGame.current?.version === game.version && projection.ready && !busy;
+    useVersionedMutation(load, { scope: gameId, ready: () => game !== null && projection.canCommand(game),
+      current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge });
+  const canCommand = () => game !== null && projection.canCommand(game) && !busy;
   const commandsBusy = busy || !projection.ready;
 
   function mutate(
@@ -682,6 +681,7 @@ function StorytellerPageInner() {
                   audit={audit}
                   auditError={auditError}
                   auditLoadingMore={auditLoadingMore}
+                  onRetry={() => void loadAudit(auditCategoriesRef.current)}
                   selectedCategories={auditCategories}
                   onToggleCategory={(id) => {
                     const next = auditCategories.includes(id)
@@ -742,7 +742,7 @@ function StorytellerPageInner() {
         )}
       </AppShellContent>
 
-      {!privacyCovered && claimModal && (
+      {game && !privacyCovered && claimModal && (
         <Dialog
           open
           onClose={() => setClaimModal(null)}
@@ -759,7 +759,7 @@ function StorytellerPageInner() {
         </Dialog>
       )}
 
-      {!privacyCovered && resetModal && (
+      {game && !privacyCovered && resetModal && (
         <Dialog
           open
           onClose={() => setResetModal(null)}

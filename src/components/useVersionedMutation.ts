@@ -5,7 +5,7 @@ import { ApiClientError, friendlyMessage } from "@/lib/client-api";
 import { executeCommand } from "@/lib/command-refresh";
 
 export function useVersionedMutation(apply: () => Promise<unknown>, options: {
-  scope: string | null; ready: boolean; acknowledge: (value: unknown) => void;
+  scope: string | null; ready: () => boolean; current: () => boolean; acknowledge: (value: unknown) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -25,8 +25,8 @@ export function useVersionedMutation(apply: () => Promise<unknown>, options: {
 
   const runWithResult = useCallback(async <T,>(action: () => Promise<T>): Promise<{ ok: boolean; value: T | null }> => {
     const generation = lifetime.current;
-    const valid = () => generation.active && generation === lifetime.current;
-    if (!valid() || !current.current.ready || running.current) return { ok: false, value: null };
+    const valid = () => generation.active && generation === lifetime.current && current.current.current();
+    if (!valid() || !current.current.ready() || running.current) return { ok: false, value: null };
     running.current = true;
     setBusy(true); setActionError(null); setStale(false);
     const result = await executeCommand(action,

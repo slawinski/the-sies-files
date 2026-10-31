@@ -24,7 +24,7 @@ export const HEARTBEAT_OK_EVENT = "tsf:presence-heartbeat-ok";
 export function useGameEventStream(
   gameId: string | null,
   onInvalidate: () => void,
-  reconciliation?: { gameId: string | null; ready: boolean; boundary: () => void; target: (version: number) => void },
+  reconciliation: { gameId: string | null; ready: boolean; boundary: () => void; target: (version: number) => void },
 ): RealtimeHealth {
   const [health, setHealth] = useState<"OPEN" | "RECONNECTING" | "OFFLINE">("RECONNECTING");
   const [streamGame, setStreamGame] = useState<string | null>(null);
@@ -65,20 +65,24 @@ export function useGameEventStream(
       }
     };
 
-    const handleHeartbeatFailed = () => setHealth("OFFLINE");
     const boundary = () => {
       if (reconciliationRef.current && reconciliationRef.current.gameId !== gameId) return;
       reconciliationRef.current?.boundary();
       onInvalidateRef.current();
     };
     const open = () => { evaluateHealth(); boundary(); };
+    const interrupted = () => { evaluateHealth(); boundary(); };
+    const handleHeartbeatFailed = () => { setHealth("OFFLINE"); boundary(); };
     const metadata = (event: Event) => {
       if (reconciliationRef.current && reconciliationRef.current.gameId !== gameId) return;
       try {
         const value = JSON.parse((event as MessageEvent).data);
+        if (!value || typeof value.gameId !== "string" || !validVersion(value.version)) throw new Error("Invalid stream metadata");
         if (value.gameId !== gameId) return;
-        if (!validVersion(value.version)) throw new Error("Invalid stream version");
         reconciliationRef.current?.target(value.version);
+        // Open already required a post-subscription read. Hello raises its
+        // watermark, but does not invent a second boundary at the same version.
+        if (event.type === "hello") return;
       } catch {
         reconciliationRef.current?.boundary();
       }
@@ -92,11 +96,11 @@ export function useGameEventStream(
     };
 
     source.addEventListener("open", open);
-    source.addEventListener("error", evaluateHealth);
+    source.addEventListener("error", interrupted);
     source.addEventListener("hello", metadata);
     source.addEventListener("invalidate", metadata);
 
-    window.addEventListener("offline", evaluateHealth);
+    window.addEventListener("offline", interrupted);
     window.addEventListener("online", online);
     window.addEventListener(HEARTBEAT_FAILED_EVENT, handleHeartbeatFailed);
     window.addEventListener(HEARTBEAT_OK_EVENT, heartbeatOk);
@@ -110,12 +114,12 @@ export function useGameEventStream(
         debounceRef.current = null;
       }
       source.removeEventListener("open", open);
-      source.removeEventListener("error", evaluateHealth);
+      source.removeEventListener("error", interrupted);
       source.removeEventListener("hello", metadata);
       source.removeEventListener("invalidate", metadata);
       source.close();
       sourceRef.current = null;
-      window.removeEventListener("offline", evaluateHealth);
+      window.removeEventListener("offline", interrupted);
       window.removeEventListener("online", online);
       window.removeEventListener(HEARTBEAT_FAILED_EVENT, handleHeartbeatFailed);
       window.removeEventListener(HEARTBEAT_OK_EVENT, heartbeatOk);
