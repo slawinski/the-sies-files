@@ -149,7 +149,7 @@ export function selectPrimaryStorytellerBlocker(game: StorytellerGameProjection)
         view: "control",
       };
     }
-    if (investigation?.nominationState === "CLOSED") {
+    if (!investigation || investigation.nominationState === "CLOSED") {
       return {
         kind: "NOMINATIONS_OPEN",
         title: "Otwórz nominacje",

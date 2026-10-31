@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createStorytellerGame, generateAndCommitSetup, driveOperationalCycle, claimAllPlayers } from "./fixtures";
+import { createStorytellerGame, generateAndCommitSetup, driveOperationalCycle, claimAllPlayers, commandVersion } from "./fixtures";
 
 // E2E-09 — UX shell regression (UX audit 18 / spec 19 §13): the redesigned
 // player shell exposes four stable destinations, the deliberate role reveal
@@ -21,8 +21,37 @@ test("E2E-09: player shell — reveal gate, bottom nav, journal, scanner sheet",
     data: { commandId: crypto.randomUUID(), expectedVersion: v, payload: { token: "tsf-qr-letter-001" } },
   });
   expect(scanLetter.ok()).toBeTruthy();
+  const deepLinkProjection = await (await sessions[1].request.get("/api/v1/me")).json();
+  expect(deepLinkProjection.scenario.clues.length).toBeGreaterThan(0);
 
   const playerPage = await contexts[0].newPage();
+  // Bookmarks and reloads must gate every destination, even with delivered clues.
+  for (const [index, view] of ["people", "journal", "map"].entries()) {
+    const deepLinkPage = await contexts[index + 1].newPage();
+    await deepLinkPage.goto(`/player?view=${view}`);
+    await deepLinkPage.reload();
+    await expect(deepLinkPage.getByRole("button", { name: "Pokaż moją rolę" })).toBeVisible();
+    await expect(deepLinkPage.getByText("Player 12", { exact: true })).toHaveCount(0);
+    await expect(deepLinkPage.getByText("Otrzymano nową wskazówkę")).toHaveCount(0);
+    await expect(deepLinkPage.locator(".map-viewport")).toHaveCount(0);
+    await expect(deepLinkPage.getByRole("navigation", { name: "Nawigacja gracza" })).toHaveCount(0);
+    await deepLinkPage.getByRole("button", { name: "Pokaż moją rolę" }).click();
+    await expect(deepLinkPage.getByRole("button", { name: "Zapamiętałem — ukryj" })).toBeVisible();
+    await deepLinkPage.reload();
+    await expect(deepLinkPage.getByRole("button", { name: "Pokaż moją rolę" })).toBeVisible();
+    await expect(deepLinkPage.getByRole("button", { name: "Zapamiętałem — ukryj" })).toHaveCount(0);
+    await deepLinkPage.getByRole("button", { name: "Pokaż moją rolę" }).click();
+    await deepLinkPage.getByRole("button", { name: "Zapamiętałem — ukryj" }).click();
+    await expect(deepLinkPage).toHaveURL(new RegExp(`view=${view}`));
+    await expect(deepLinkPage.getByRole("navigation", { name: "Nawigacja gracza" })).toBeVisible();
+    if (view === "people") await expect(deepLinkPage.getByText("Player 12", { exact: true })).toBeVisible();
+    if (view === "journal") await expect(deepLinkPage.getByText("Otrzymano nową wskazówkę")).toBeVisible();
+    if (view === "map") await expect(deepLinkPage.getByRole("button", { name: "Skanuj kod QR" })).toBeVisible();
+    await deepLinkPage.reload();
+    await expect(deepLinkPage.getByRole("navigation", { name: "Nawigacja gracza" })).toBeVisible();
+    await expect(deepLinkPage.getByRole("button", { name: "Pokaż moją rolę" })).toHaveCount(0);
+    await deepLinkPage.close();
+  }
   await playerPage.goto("/player");
   // The Next.js dev-mode indicator portal sits at the bottom-left and would
   // intercept pointer events over the first bottom-nav item ("Akta"). It is a
@@ -69,5 +98,64 @@ test("E2E-09: player shell — reveal gate, bottom nav, journal, scanner sheet",
   await expect(playerPage).toHaveURL("/player");
   await expect(playerPage.locator(".map-viewport")).toBeVisible();
 
-  await contexts[0].close();
+  for (const context of contexts) await context.close();
+});
+
+test("E2E-09 privacy: cover removes queue identities and every private destination", async ({ page }) => {
+  const st = page.request;
+  const { gameId, version } = await createStorytellerGame(st, "E2E-09 privacy", 13);
+  const setup = await generateAndCommitSetup(st, gameId, version);
+  await commandVersion(await st.post(`/api/v1/games/${gameId}/operational/start`, {
+    data: { commandId: crypto.randomUUID(), expectedVersion: setup.version },
+  }), setup.version);
+  await page.goto(`/storyteller/${gameId}`);
+  await expect(page.getByText("Kolejka operacyjna", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Zasłoń", exact: true }).click();
+  await expect(page.getByText("Player 0", { exact: true })).toHaveCount(0);
+  for (const role of ["Śledczy", "Wróżbitka", "Szpieg"]) {
+    await expect(page.getByText(role, { exact: true })).toHaveCount(0);
+  }
+  await expect(page.locator("ol")).toHaveCount(0);
+  await expect(page.getByText(/Zasłonięto/)).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Sekcje prowadzącego" });
+  for (const label of ["Gracze", "Grimuar", "Scenariusz", "Audyt", "System", "Control"]) {
+    await nav.getByRole("button", { name: label, exact: true }).click();
+    await expect(page.getByText(/Zasłonięto/)).toBeVisible();
+    await expect(page.locator("ol")).toHaveCount(0);
+    await expect(page.getByText("Player 0", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  await page.getByRole("button", { name: "Odkryj", exact: true }).click();
+  await expect(page.getByText("Kolejka operacyjna", { exact: true })).toBeVisible();
+});
+
+test("E2E-09 closure: no-execution day can open nominations and close through Control", async ({ page, browser }) => {
+  const st = page.request;
+  const { gameId, playerIds, version } = await createStorytellerGame(st, "E2E-09 closure", 13);
+  const setup = await generateAndCommitSetup(st, gameId, version);
+  const { sessions, contexts, version: claimedVersion } = await claimAllPlayers(st, browser, gameId, playerIds, setup.version);
+  await driveOperationalCycle(st, sessions, gameId, claimedVersion);
+  await page.goto(`/storyteller/${gameId}`);
+  await expect(page.getByRole("button", { name: "Zamknij śledztwo", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Otwórz nominacje", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Zamknij", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Zamknij śledztwo", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Zamknij", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Otwórz nominacje", exact: true })).toBeVisible();
+  const before = await (await st.get(`/api/v1/games/${gameId}/storyteller`)).json();
+  expect(before.investigation.executionOccurred).toBe(false);
+  expect(before.investigation.currentExecutionCandidatePlayerId).toBeNull();
+  await page.getByRole("button", { name: "Zamknij śledztwo", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "Zamknij śledztwo" });
+  await expect(confirm).toBeVisible();
+  const closed = page.waitForResponse(r => r.url().endsWith("/investigation/close") && r.request().method() === "POST");
+  await confirm.getByRole("button", { name: "Zatwierdź", exact: true }).click();
+  expect((await closed).ok()).toBeTruthy();
+  await expect(confirm).toHaveCount(0);
+  // Completion is persisted; the existing next-night command accepts it.
+  const after = await (await st.get(`/api/v1/games/${gameId}/storyteller`)).json();
+  await commandVersion(await st.post(`/api/v1/games/${gameId}/operational/start`, {
+    data: { commandId: crypto.randomUUID(), expectedVersion: after.version },
+  }), after.version);
+  for (const context of contexts) await context.close();
 });
