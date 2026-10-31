@@ -100,7 +100,7 @@ function PlayerPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawView = searchParams.get("view");
-  const view: PlayerView = isPlayerView(rawView) ? rawView : "case";
+  const requestedView: PlayerView = isPlayerView(rawView) ? rawView : "case";
 
   const [state, setState] = useState<View>("loading");
   const [game, setGame] = useState<PlayerGameProjection | null>(null);
@@ -264,6 +264,9 @@ function PlayerPageInner() {
 
   const mode = game ? selectPlayerPresentation(game) : null;
   const revealActive = mode === "ROLE_REVEAL";
+  // Gate every destination without rewriting the bookmarked URL. Acknowledging
+  // restores the requested destination; a reload starts the reveal covered again.
+  const view: PlayerView = revealActive ? "case" : requestedView;
   const formal = mode === "FORMAL_VOTING" || mode === "FORMAL_NOMINATION";
   const connectionBlocked =
     game !== null &&
@@ -342,7 +345,7 @@ function PlayerPageInner() {
               </Notice>
             )}
 
-            {game.scenario?.conditions.includes("INJURED") && (
+            {!revealActive && game.scenario?.conditions.includes("INJURED") && (
               <Notice variant="warning">Jesteś ranny — znajdź apteczkę.</Notice>
             )}
 

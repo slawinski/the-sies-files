@@ -26,6 +26,7 @@ import ActionDecisionPanel from "@/components/ActionDecisionPanel";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Dialog from "@/components/ui/Dialog";
+import Notice from "@/components/ui/Notice";
 import StatTile from "@/components/ui/StatTile";
 import Surface from "@/components/ui/Surface";
 import { characterDisplayName } from "@/modules/trouble-brewing/characters";
@@ -115,7 +116,7 @@ export default function ControlView({
   gameEnded: boolean;
   ready: boolean;
   need: number;
-  /** Projector safety: masks secret resolutions while covered. */
+  /** Projector safety: removes all secret content, including queue shape. */
   privacyCovered?: boolean;
   onStartOperational: () => void;
   onCompleteOperational: () => void;
@@ -148,6 +149,10 @@ export default function ControlView({
   const candidateId = game.investigation?.currentExecutionCandidatePlayerId ?? null;
   const candidateName = candidateId ? (nameById.get(candidateId) ?? candidateId) : null;
   const travellers = game.players.filter((p) => p.participantKind === "TRAVELLER" && p.alive);
+  const canCloseInvestigation = game.phase === "INVESTIGATION" && !gameEnded &&
+    !game.nominations.some((n) =>
+      n.status === "CREATED" || n.status === "VOTING" || n.status === "DAY_TRIGGER_RESOLUTION",
+    );
 
   const presenceOnline = (control?.presence ?? []).filter((p) => p.connection === "ONLINE").length;
   const presenceStale = (control?.presence ?? []).filter((p) => p.connection === "STALE").length;
@@ -164,6 +169,10 @@ export default function ControlView({
     variant: "formal" | "danger" = "formal",
   ) {
     setConfirm({ title, description, action, variant });
+  }
+
+  if (privacyCovered) {
+    return <Notice variant="private">Zasłonięto — odsłoń widok, aby kontynuować.</Notice>;
   }
 
   return (
@@ -306,7 +315,7 @@ export default function ControlView({
               </Button>
             )}
 
-            {blocker.kind === "CLOSE_INVESTIGATION" && (
+            {canCloseInvestigation && (
               <Button
                 variant="formal"
                 disabled={busy || gameEnded}

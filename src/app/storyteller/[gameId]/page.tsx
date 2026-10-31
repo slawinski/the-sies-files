@@ -559,7 +559,7 @@ function StorytellerPageInner() {
 
         {game && (
           <>
-            {(stale || actionError) && (
+            {!privacyCovered && (stale || actionError) && (
               <div className="mb-4 flex flex-col gap-2">
                 {stale && (
                   <Notice variant="warning">
@@ -583,6 +583,9 @@ function StorytellerPageInner() {
             )}
 
             <StorytellerShell active={view} onNavigate={navigate} renaming={renamingGame} onStartRename={() => { setGameNameDraft(game.name); setRenamingGame(true); }} onCancelRename={() => { setRenamingGame(false); setGameNameDraft(""); }} onCommitRename={() => void handleRenameGame()} gameNameDraft={gameNameDraft} onGameNameDraftChange={setGameNameDraft} renameEnabled={renameEnabled} busy={busy} game={game}>
+              {privacyCovered ? (
+                <Notice variant="private">Zasłonięto — odsłoń widok, aby kontynuować.</Notice>
+              ) : <>
               {view === "control" && blocker && (
                 <ControlView
                   game={game}
@@ -710,12 +713,13 @@ function StorytellerPageInner() {
                   formatTime={formatTime}
                 />
               )}
+              </>}
             </StorytellerShell>
           </>
         )}
       </AppShellContent>
 
-      {claimModal && (
+      {!privacyCovered && claimModal && (
         <Dialog
           open
           onClose={() => setClaimModal(null)}
@@ -732,7 +736,7 @@ function StorytellerPageInner() {
         </Dialog>
       )}
 
-      {resetModal && (
+      {!privacyCovered && resetModal && (
         <Dialog
           open
           onClose={() => setResetModal(null)}

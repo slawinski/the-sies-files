@@ -215,6 +215,10 @@ describe("selectPrimaryStorytellerBlocker", () => {
     expect(selectPrimaryStorytellerBlocker(baseGame()).kind).toBe("NOMINATIONS_OPEN");
   });
 
+  it("offers opening nominations before the first investigation state exists", () => {
+    expect(selectPrimaryStorytellerBlocker(baseGame({ investigation: null })).kind).toBe("NOMINATIONS_OPEN");
+  });
+
   it("reports incomplete roster during setup", () => {
     const game = baseGame({
       status: "SETUP",
