@@ -37,3 +37,18 @@ test('a different database cannot claim an already owned port', () => {
   finally { lease.release(); }
   acquireLease(b, port).release();
 });
+
+test('token-checked port handoff retains exclusive database ownership', () => {
+  const a = resolveTarget({ DATABASE_URL: `postgresql://u@localhost/handoff_a_${process.pid}_test` });
+  const b = resolveTarget({ DATABASE_URL: `postgresql://u@localhost/handoff_b_${process.pid}_test` });
+  const port = 40000 + process.pid % 20000;
+  const lease = acquireLease(a, port);
+  try {
+    expect(() => lease.releasePort('incorrect')).toThrow('ownership');
+    expect(() => acquireLease(b, port)).toThrow('already owned');
+    lease.releasePort(lease.token);
+    expect(() => assertLease(a, lease.token)).not.toThrow();
+    expect(() => acquireLease(a)).toThrow('already owned');
+    acquireLease(b, port).release();
+  } finally { lease.release(); }
+});

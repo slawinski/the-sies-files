@@ -36,7 +36,12 @@ export function acquireLease(target: Target, port?: number) {
       fs.writeFileSync(fd, JSON.stringify({ token, pid: process.pid })); fs.closeSync(fd); owned.push(file);
     }
   } catch { for (const file of owned) fs.unlinkSync(file); throw new Error('Disposable resource already owned; do not reset or kill its owner'); }
-  return { token, release() {
+  return { token, releasePort(proof: string) {
+    const file = port && lockPath(`port:${port}`);
+    if (proof !== token || !file || !owned.includes(file) || JSON.parse(fs.readFileSync(file, 'utf8')).token !== token) throw new Error('Port ownership changed');
+    fs.unlinkSync(file);
+    owned.splice(owned.indexOf(file), 1);
+  }, release() {
     for (const file of owned) {
       if (JSON.parse(fs.readFileSync(file, 'utf8')).token !== token) throw new Error('Resource ownership changed');
       fs.unlinkSync(file);
