@@ -2,6 +2,10 @@ import { expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { completeClaims, derivedTarget, ownedDatabase, REQUIRED_CLAIMS } from "../scripts/playable-recovery.mjs";
 import { resolveTarget } from "../scripts/test-database.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createHash } from "node:crypto";
 
 it("refuses legacy backup arguments rather than treating them as destructive authorization", () => {
   const result = spawnSync("bash", ["scripts/backup-restore.sh", "existing_database", "another_database"], { encoding: "utf8", env: { PATH: process.env.PATH, NODE_ENV: "test" } });
@@ -46,6 +50,22 @@ it("creates and cleans only a successfully allocated owned database", () => {
   expect(r.stdout.trim()).toBe("");
 });
 
+it("refuses cleanup when ownership changes, without dropping the created database", () => {
+  const target = derivedTarget(resolveTarget(), "target");
+  const owned = ownedDatabase(target);
+  const file = path.join(os.tmpdir(), 'sies-baseline-' + createHash('sha256').update(target.key).digest('hex') + '.lock');
+  const original = fs.readFileSync(file, 'utf8');
+  try {
+    owned.create();
+    fs.writeFileSync(file, JSON.stringify({ token: 'different-owner', pid: process.pid }));
+    expect(() => owned.cleanup()).toThrow('ownership');
+    expect(owned.created).toBe(true);
+    const r = spawnSync('psql', ['-XAtc', 'SELECT current_database()'], { env: target.env, encoding: 'utf8' });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe(target.database);
+  } finally { fs.writeFileSync(file, original); owned.cleanup(); }
+});
+
 it.each([undefined, "postgresql://user:secret@remote.invalid/data_test", "postgresql://user:secret@127.0.0.1/data_test?host=remote.invalid"])("refuses unsafe input without credential disclosure", (url) => {
   const result = spawnSync(process.execPath, ["node_modules/tsx/dist/cli.mjs", "scripts/playable-recovery.mts"], {
     env: { PATH: process.env.PATH, NODE_ENV: "test", ...(url ? { DATABASE_URL: url } : {}) }, encoding: "utf8",
@@ -53,4 +73,18 @@ it.each([undefined, "postgresql://user:secret@remote.invalid/data_test", "postgr
   expect(result.status).not.toBe(0);
   expect(result.stderr).not.toContain("secret");
   expect(result.stderr).not.toContain("remote.invalid");
+});
+
+it("refuses a wrong PostgreSQL tool major before connecting or allocating", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'recovery-wrong-tools-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'psql'), '#!/bin/sh\nprintf "psql (PostgreSQL) 15.0\\n"\n', { mode: 0o700 });
+    const result = spawnSync(process.execPath, ['node_modules/tsx/dist/cli.mjs', 'scripts/playable-recovery.mts', '--output', path.join(dir, 'output')], {
+      env: { PATH: dir, NODE_ENV: 'test', DATABASE_URL: 'postgresql://user:secret@127.0.0.1:1/unavailable_test' }, encoding: 'utf8',
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Recovery preflight refused');
+    expect(result.stderr).not.toContain('secret');
+    expect(fs.existsSync(path.join(dir, 'output'))).toBe(false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -9,6 +9,11 @@ import { acquireLease, assertLease, resolveTarget, type Target } from './test-da
 import { assertPortFree, capture, verifySource } from './regression-baseline.mjs';
 
 const hash = (v: string | Buffer) => createHash('sha256').update(v).digest('hex');
+function safeFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  return /^(?:Missing required continuation evidence|Incomplete or failed native recovery inventory|Recovery worker did not complete required evidence|Source\/build fingerprint mismatch|Recorded build mismatch|Build identity changed|Application (?:launch failed|exited before readiness|readiness timed out)|(?:pg_dump|pg_restore|createdb|dropdb|psql|npm|npx) failed \(exit (?:\d+|unavailable)\))$/.test(message)
+    ? message : 'Recovery stage failed; private details withheld';
+}
 export const REQUIRED_CLAIMS = ['archiveRestoration', 'durableRows', 'runtimeProjections', 'persistedSessions', 'duplicateEffectFree', 'legalContinuation'] as const;
 export function completeClaims(value: unknown): boolean {
   return !!value && typeof value === 'object' && REQUIRED_CLAIMS.every(k => (value as Record<string, unknown>)[k] === true);
@@ -90,7 +95,8 @@ export function buildIdentity(work: string, sourceId: string) {
     schemaSha256: hash(fs.readFileSync(path.join(work, 'prisma/schema.prisma'))), migrationsSha256: hash(JSON.stringify(migrations)) };
 }
 
-type Options = { output: string; buildRecord?: string; negativeControl?: 'corrupt-archive' | 'missing-continuation' | 'worker-exit' };
+type NegativeControl = 'corrupt-archive' | 'missing-continuation' | 'worker-exit' | 'dump-failure' | 'launch-failure' | 'readiness-failure' | 'parent-cancel';
+type Options = { output: string; buildRecord?: string; negativeControl?: NegativeControl };
 export async function proveRecovery(options: Options) {
   const base = resolveTarget(); // Fail before subprocesses, allocations, or output writes.
   const out = path.resolve(options.output);
@@ -125,6 +131,7 @@ export async function proveRecovery(options: Options) {
     let sourceId: string;
     if (options.buildRecord) {
       const record = JSON.parse(fs.readFileSync(options.buildRecord, 'utf8'));
+      report.baselineRunId = typeof record.runId === 'string' ? record.runId.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 128) : null;
       const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(options.buildRecord), 'capsule/manifest.json'), 'utf8'));
       if (verifySource(manifest, work).length || !record.build || record.build.sourceId !== manifest.sourceId) throw new Error('Source/build fingerprint mismatch');
       sourceId = manifest.sourceId;
@@ -145,15 +152,15 @@ export async function proveRecovery(options: Options) {
       if (app) throw new Error('Owned app still active');
       await assertPortFree(3100);
       if (JSON.stringify(buildIdentity(work, sourceId)) !== JSON.stringify(identity)) throw new Error('Build identity changed');
-      app = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--port', '3100'], {
+      app = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--port', options.negativeControl === 'launch-failure' ? 'invalid' : '3100'], {
         cwd: work, env: { ...db.env, NODE_ENV: 'production', RATE_LIMIT_DISABLED: '1', NEXT_TELEMETRY_DISABLED: '1' }, detached: true, stdio: 'ignore',
       });
       app.on('error', () => { /* Readiness observes failed spawn without logging env. */ });
       const pid = app.pid;
       if (!pid) throw new Error('Application launch failed');
-      for (let i = 0; i < 300; i++) {
+      for (let i = 0; i < (options.negativeControl === 'readiness-failure' ? 10 : 300); i++) {
         if (interrupted || app.exitCode !== null || app.signalCode !== null) throw new Error('Application exited before readiness');
-        try { if ((await fetch('http://localhost:3100', { signal: AbortSignal.timeout(1000) })).ok) return pid; } catch { /* bounded readiness */ }
+        try { if ((await fetch('http://localhost:3100' + (options.negativeControl === 'readiness-failure' ? '/not-a-recovery-readiness-page' : ''), { signal: AbortSignal.timeout(1000) })).ok) return pid; } catch { /* bounded readiness */ }
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       throw new Error('Application readiness timed out');
@@ -179,11 +186,14 @@ export async function proveRecovery(options: Options) {
             if (msg.action === 'start-source' && lifecycle === 'created') {
               enter('serve-source'); const pid = await start(sourceTarget); report.sourcePid = pid; lifecycle = 'source';
               if (options.negativeControl === 'worker-exit') setTimeout(() => { if (worker) void terminate(worker); }, 10);
+              if (options.negativeControl === 'parent-cancel') setTimeout(() => process.kill(process.pid, 'SIGTERM'), 10);
               return { pid };
             }
             if (msg.action === 'restore-target' && lifecycle === 'source') {
               enter('stop-source'); await terminate(app!); app = undefined; await assertPortFree(3100);
-              enter('dump'); command('pg_dump', ['--format=custom', '--file=' + archive], sourceTarget.env, work);
+              enter('dump');
+              if (options.negativeControl === 'dump-failure') fs.mkdirSync(archive);
+              command('pg_dump', ['--format=custom', '--file=' + archive], sourceTarget.env, work);
               if (options.negativeControl === 'corrupt-archive') fs.truncateSync(archive, 20);
               enter('create-target'); target!.create(work);
               enter('restore'); command('pg_restore', ['--exit-on-error', '--no-owner', '--no-acl', '--dbname=' + targetTarget.database, archive], targetTarget.env, work);
@@ -207,6 +217,7 @@ export async function proveRecovery(options: Options) {
           } finally { pending = false; }
         })().then(value => connection.end(JSON.stringify({ value }) + '\n'), error => {
           report.failureStage = stage;
+          report.failure ??= safeFailure(error);
           connection.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Lifecycle failed' }) + '\n');
         });
       });
@@ -242,7 +253,7 @@ export async function proveRecovery(options: Options) {
   } catch (error) {
     report.complete = false; report.failureStage ??= stage;
     // Only our fixed stage errors escape. Never persist an untrusted exception.
-    report.failure = error instanceof Error && /^(Missing required|Incomplete or failed|Recovery worker|Source\/build|Recorded build|Build identity|PostgreSQL 16)/.test(error.message) ? error.message : 'Recovery stage failed; private details withheld';
+    report.failure ??= safeFailure(error);
   } finally {
     process.off('SIGINT', cancel); process.off('SIGTERM', cancel);
     const failures: string[] = [];
@@ -255,6 +266,7 @@ export async function proveRecovery(options: Options) {
       ['private-archive', async () => { if (privateDir) fs.rmSync(privateDir, { recursive: true, force: true }); }],
     ] as const) { try { await cleanup(); } catch { failures.push(name); } }
     report.cleanup = { complete: !failures.length, failed: failures };
+    report.cancelled = interrupted;
     report.complete = report.complete === true && !failures.length;
     report.finished = new Date().toISOString();
     if (fs.existsSync(out)) fs.writeFileSync(path.join(out, 'recovery.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
@@ -270,7 +282,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     if (args[i] === '--output') options.output = args[i + 1];
     if (args[i] === '--build-record') options.buildRecord = path.resolve(args[i + 1]);
     if (args[i] === '--negative-control') {
-      if (!['corrupt-archive', 'missing-continuation', 'worker-exit'].includes(args[i + 1])) throw new Error('Unknown negative control');
+      if (!['corrupt-archive', 'missing-continuation', 'worker-exit', 'dump-failure', 'launch-failure', 'readiness-failure', 'parent-cancel'].includes(args[i + 1])) throw new Error('Unknown negative control');
       options.negativeControl = args[i + 1] as Options['negativeControl'];
     }
   }
