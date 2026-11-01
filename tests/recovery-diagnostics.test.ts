@@ -91,3 +91,18 @@ it("replays a ghost vote override using its prior value", async () => {
   await recoveryOverride({ gameId, expectedVersion: version, commandId: randomUUID(), reason: "synthetic", payload: { kind: "RESTORE_GHOST_VOTE", playerId: playerIds[0] } });
   expect((await verifyReplay(gameId, checkpointId)).ok).toBe(true);
 });
+
+it("reads one coherent diagnostic target during concurrent authoritative corrections", async () => {
+  const { gameId, checkpointId, playerIds, version } = await specimen();
+  let v = version;
+  for (let i = 0; i < 8; i++) {
+    const [report, correction] = await Promise.all([
+      verifyReplay(gameId, checkpointId),
+      recoveryOverride({ gameId, expectedVersion: v, commandId: randomUUID(), reason: "concurrent synthetic correction", payload: { kind: "CORRECT_ALIVE", playerId: playerIds[0], alive: i % 2 === 0 } }),
+    ]);
+    expect(report.ok).toBe(true);
+    expect([v, v + 1]).toContain(report.targetGameVersion);
+    v = correction.version;
+  }
+  expect((await verifyReplay(gameId, checkpointId)).targetGameVersion).toBe(v);
+});
