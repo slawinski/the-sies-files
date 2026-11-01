@@ -72,6 +72,7 @@ describe("R1 — realtime, checkpoints, replay, presence, audit", () => {
     const setupCkpt = await prisma.checkpoint.findFirst({ where: { gameId, reason: "SETUP_COMMITTED" } });
     expect(setupCkpt).not.toBeNull();
     expect(setupCkpt!.boundaryKey).toBe(`SETUP_COMMITTED:${setupCkpt!.gameVersion}`);
+    expect(await verifyReplay(gameId, setupCkpt!.id)).toMatchObject({ ok: true, scope: "PLAYER_FLAGS", targetGameVersion: v, coverage: { complete: true } });
 
     await runCycle(gameId, v, playerIds);
     const operationalCkpt = await prisma.checkpoint.findFirst({ where: { gameId, reason: "OPERATIONAL_COMPLETED" } });
@@ -79,6 +80,7 @@ describe("R1 — realtime, checkpoints, replay, presence, audit", () => {
 
     const validation = await prisma.checkpoint.findFirst({ where: { id: operationalCkpt!.id } });
     expect(validation!.checksum.length).toBe(64);
+    expect((await verifyReplay(gameId, operationalCkpt!.id)).ok).toBe(true);
   });
 
   it("replay verifier detects divergence after a death", async () => {

@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { runCommand } from "@/lib/command";
 import { DomainError } from "@/lib/errors";
@@ -83,7 +84,7 @@ export async function createCheckpoint({
     actor: "storyteller",
     handler: async ({ tx, game, appendEvent }) => {
       // Normalize (Dates → strings) so the stored JSON hashes identically.
-      const snapshot = JSON.parse(JSON.stringify(await buildSnapshot(prisma, gameId)));
+      const snapshot = JSON.parse(JSON.stringify(await buildSnapshot(tx, gameId)));
       const checksum = computeCheckpointChecksum(snapshot);
       const checkpoint = await tx.checkpoint.create({
         data: {
@@ -293,7 +294,8 @@ export async function recoveryOverride({
         after.ghostVoteAvailable = true;
       }
 
-      await appendEvent(EVENTS.RECOVERY_OVERRIDE_APPLIED, { kind: payload.kind, reason: trimmedReason, before, after });
+      const entity = "playerId" in payload ? { playerId: payload.playerId } : { actionId: payload.actionId };
+      await appendEvent(EVENTS.RECOVERY_OVERRIDE_APPLIED, { kind: payload.kind, ...entity, reason: trimmedReason, before, after });
       return {};
     },
   });
@@ -347,7 +349,7 @@ export async function autoCheckpoint(
 
 // ---------- Event replay verification (audit spec 21 §6) ----------
 
-export const REPLAY_VERSION = 1;
+export const REPLAY_VERSION = 2;
 
 export interface ReplayDiagnostic {
   ok: boolean;
@@ -355,47 +357,128 @@ export interface ReplayDiagnostic {
   fromSequence: number;
   throughSequence: number;
   replayVersion: number;
+  scope: "PLAYER_FLAGS";
+  targetGameVersion: number;
+  targetEventSequence: number;
+  coverage: {
+    checked: string[];
+    notChecked: string[];
+    complete: boolean;
+    unverifiedReasons: { code: string; eventSequence?: number }[];
+  };
   divergences: { path: string; expected: unknown; actual: unknown; eventSequence?: number }[];
 }
 
 export async function verifyReplay(gameId: string, checkpointId: string): Promise<ReplayDiagnostic> {
-  const checkpoint = await prisma.checkpoint.findFirst({ where: { id: checkpointId, gameId } });
+  return prisma.$transaction(async (tx) => verifyReplaySnapshot(tx, gameId, checkpointId), {
+    isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+  });
+}
+
+const counter = z.number().int().nonnegative();
+const replaySnapshotSchema = z.object({
+  game: z.object({ id: z.string().min(1), version: counter, eventSequence: counter }),
+  players: z.array(z.object({ id: z.string().min(1), gameId: z.string().min(1), alive: z.boolean(), ghostVoteAvailable: z.boolean() })),
+});
+// Explicit classification: these events do not directly write either flag.
+// Death/execution notifications are accompanied by PLAYER_DIED; role/effect
+// changes affect abilities, not alive/ghost-vote state. New types require review.
+const FLAG_NEUTRAL_EVENTS = new Set<string>([
+  "GAME_CREATED", "GAME_RENAMED", "GAME_ENDED", "VIRTUAL_CIRCLE_REORDERED",
+  "SETUP_GENERATED", "SETUP_COMMITTED", "ROLE_REVEALED_TO_PLAYER", "TRAVELLER_ALIGNMENT_ASSIGNED",
+  "OPERATIONAL_STARTED", "ACTION_QUEUE_BUILT", "PLAYER_ACTION_SUBMITTED", "STORYTELLER_DECISION_RECORDED",
+  "PRIVATE_INFORMATION_DELIVERED", "OPERATIONAL_COMPLETED", "DEATH_ATTEMPTED", "DEATH_PREVENTED", "DEATH_REDIRECTED",
+  "TRIGGERED_ACTION_CREATED", "CHARACTER_CHANGED", "EFFECT_APPLIED", "EFFECT_EXPIRED", "DEMON_SUCCESSION_RESOLVED",
+  "REGISTRATION_DECISION_REQUIRED", "REGISTRATION_DECISION_RECORDED", "VIRGIN_TRIGGER_CONSUMED",
+  "INVESTIGATION_STARTED", "INVESTIGATION_COMPLETED", "NOMINATIONS_OPENED", "NOMINATIONS_CLOSED",
+  "NOMINATION_CREATED", "VIRGIN_TRIGGER_RESOLVED", "SLAYER_USED", "VOTE_INTENT_RECORDED", "VOTE_LOCKED",
+  "VOTING_STARTED", "VOTE_PASS_ADVANCED", "VOTE_PASS_COMPLETED", "NOMINATION_RESOLVED", "PLAYER_EXECUTED",
+  "QR_SCANNED", "CLUE_DISCOVERED", "TASK_STARTED", "TASK_COMPLETED", "SCENARIO_STAGE_CHANGED", "MAP_UNLOCKED",
+  "SCENARIO_CONDITION_APPLIED", "SCENARIO_CONDITION_CLEARED", "SCENARIO_OVERRIDE_APPLIED",
+  "PLAYER_CLAIM_TOKEN_ISSUED", "PLAYER_CLAIMED", "PLAYER_SESSION_REVOKED", "PLAYER_ACCESS_RESET",
+  "STORYTELLER_ACCESS_RECOVERED", "CHECKPOINT_CREATED",
+]);
+
+async function verifyReplaySnapshot(tx: Prisma.TransactionClient, gameId: string, checkpointId: string): Promise<ReplayDiagnostic> {
+  const checkpoint = await tx.checkpoint.findFirst({ where: { id: checkpointId, gameId } });
   if (!checkpoint) throw new DomainError("GAME_NOT_FOUND", "Checkpoint not found");
-  if (!checkpoint.boundaryKey) throw new DomainError("INVALID_SESSION_STATE", "Checkpoint has no replayable boundary key");
-
-  const snapshot = checkpoint.snapshotJson as {
-    players?: Array<{ id: string; alive: boolean; ghostVoteAvailable: boolean }>;
-  };
+  const game = await tx.gameSession.findUniqueOrThrow({ where: { id: gameId } });
+  const current = await tx.player.findMany({ where: { gameId } });
+  const reasons: ReplayDiagnostic["coverage"]["unverifiedReasons"] = [];
+  const unverified = (code: string, eventSequence?: number) => reasons.push({ code, ...(eventSequence === undefined ? {} : { eventSequence }) });
+  const divergences: ReplayDiagnostic["divergences"] = [];
+  const result = (): ReplayDiagnostic => ({
+    ok: !reasons.length && !divergences.length, checkpointId,
+    fromSequence: checkpoint.lastEventSequence, throughSequence: game.eventSequence,
+    replayVersion: REPLAY_VERSION, scope: "PLAYER_FLAGS", targetGameVersion: game.version, targetEventSequence: game.eventSequence,
+    coverage: { checked: ["checkpoint-integrity", "membership", "event-anchors", "alive", "ghostVoteAvailable"],
+      notChecked: ["phase-obligations", "roles-secrecy", "operational-effects", "scenario-map", "commands-access", "presence-rate-limits"],
+      complete: !reasons.length, unverifiedReasons: reasons }, divergences,
+  });
+  if (computeCheckpointChecksum(checkpoint.snapshotJson) !== checkpoint.checksum) { unverified("CHECKSUM_MISMATCH"); return result(); }
+  const parsed = replaySnapshotSchema.safeParse(checkpoint.snapshotJson);
+  if (!parsed.success) { unverified("UNSUPPORTED_SNAPSHOT_SHAPE"); return result(); }
+  const snapshot = parsed.data;
+  if (snapshot.game.id !== gameId || snapshot.players.some(p => p.gameId !== gameId)) unverified("SNAPSHOT_GAME_MISMATCH");
+  if (!checkpoint.boundaryKey || !Number.isSafeInteger(checkpoint.lastEventSequence) || checkpoint.lastEventSequence < 0 ||
+      checkpoint.lastEventSequence > game.eventSequence || checkpoint.gameVersion < 1 || checkpoint.gameVersion > game.version ||
+      snapshot.game.version !== checkpoint.gameVersion - 1 || snapshot.game.eventSequence > checkpoint.lastEventSequence) unverified("CHECKPOINT_BOUNDS_INVALID");
   const replayed = new Map(
-    (snapshot.players ?? []).map((p) => [p.id, { alive: p.alive, ghostVoteAvailable: p.ghostVoteAvailable }]),
+    snapshot.players.map((p) => [p.id, { alive: p.alive, ghostVoteAvailable: p.ghostVoteAvailable }]),
   );
-
-  const events = await prisma.domainEvent.findMany({
-    where: { gameId, sequence: { gt: checkpoint.lastEventSequence } },
+  if (replayed.size !== snapshot.players.length) unverified("DUPLICATE_SNAPSHOT_PLAYER");
+  if (current.length !== replayed.size || current.some(p => !replayed.has(p.id))) unverified("PLAYER_MEMBERSHIP_MISMATCH");
+  const manual = checkpoint.boundaryKey?.startsWith("MANUAL:") && checkpoint.boundaryKey.split(":").length === 3;
+  if (manual && snapshot.game.eventSequence !== checkpoint.lastEventSequence) unverified("CHECKPOINT_ANCHOR_INVALID");
+  const events = await tx.domainEvent.findMany({
+    where: { gameId, sequence: { gt: snapshot.game.eventSequence } },
     orderBy: { sequence: "asc" },
   });
-
-  const divergences: ReplayDiagnostic["divergences"] = [];
-  let expectedSeq = checkpoint.lastEventSequence;
+  const anchorSequence = checkpoint.lastEventSequence + (manual ? 1 : 0);
+  const anchor = events.find(e => e.sequence === anchorSequence);
+  const anchorPayload = z.object({ checkpointId: z.string().optional(), boundaryKey: z.string().optional() }).safeParse(anchor?.payload);
+  if (!anchor || anchor.eventType !== EVENTS.CHECKPOINT_CREATED || anchor.gameVersion !== checkpoint.gameVersion || !anchorPayload.success ||
+      (manual ? anchorPayload.data.checkpointId !== checkpointId : anchorPayload.data.boundaryKey !== checkpoint.boundaryKey)) unverified("CHECKPOINT_ANCHOR_INVALID");
+  let expectedSeq = snapshot.game.eventSequence;
+  let previousVersion = snapshot.game.version;
   for (const e of events) {
     if (e.sequence !== expectedSeq + 1) {
       divergences.push({ path: `events.sequence.${e.sequence}`, expected: expectedSeq + 1, actual: e.sequence, eventSequence: e.sequence });
+      unverified("EVENT_SEQUENCE_GAP", e.sequence);
     }
     expectedSeq = e.sequence;
-
-    const payload = e.payload as { playerId?: string; kind?: string; alive?: boolean } | null;
-    const p = payload?.playerId ? replayed.get(payload.playerId) : undefined;
-    if (e.eventType === "PLAYER_DIED" && p) p.alive = false;
-    else if (e.eventType === "GHOST_VOTE_GRANTED" && p) p.ghostVoteAvailable = true;
-    else if (e.eventType === "GHOST_VOTE_CONSUMED" && p) p.ghostVoteAvailable = false;
-    else if (e.eventType === "TRAVELLER_EXILED" && p) p.alive = false;
-    else if (e.eventType === "RECOVERY_OVERRIDE_APPLIED" && p) {
-      if (payload?.kind === "CORRECT_ALIVE") p.alive = payload.alive ?? p.alive;
-      if (payload?.kind === "RESTORE_GHOST_VOTE") p.ghostVoteAvailable = true;
+    if (e.gameVersion < previousVersion || e.gameVersion > game.version || e.gameVersion < checkpoint.gameVersion) unverified("EVENT_VERSION_INVALID", e.sequence);
+    previousVersion = e.gameVersion;
+    // Automatic snapshots already contain effects of their boundary command.
+    if (e.sequence <= checkpoint.lastEventSequence) continue;
+    if (["PLAYER_DIED", "GHOST_VOTE_GRANTED", "GHOST_VOTE_CONSUMED", "TRAVELLER_EXILED"].includes(e.eventType)) {
+      const payload = z.object({ playerId: z.string() }).safeParse(e.payload);
+      if (!payload.success) { unverified("MALFORMED_FLAG_EVENT", e.sequence); continue; }
+      const p = replayed.get(payload.data.playerId);
+      if (!p) { unverified("UNKNOWN_EVENT_PLAYER", e.sequence); continue; }
+      if (e.eventType === "PLAYER_DIED" || e.eventType === "TRAVELLER_EXILED") p.alive = false;
+      else p.ghostVoteAvailable = e.eventType === "GHOST_VOTE_GRANTED";
+    } else if (e.eventType === "RECOVERY_OVERRIDE_APPLIED") {
+      const payload = z.object({ kind: z.string(), playerId: z.string().optional(), actionId: z.string().optional(), before: z.record(z.string(), z.unknown()), after: z.record(z.string(), z.unknown()) }).safeParse(e.payload);
+      if (!payload.success) { unverified("MALFORMED_OVERRIDE", e.sequence); continue; }
+      const v = payload.data;
+      if (["RESOLVE_ACTION", "SKIP_ACTION"].includes(v.kind) && v.actionId) continue;
+      if (!["CORRECT_ALIVE", "RESTORE_GHOST_VOTE"].includes(v.kind)) { unverified("UNSUPPORTED_OVERRIDE", e.sequence); continue; }
+      if (!v.playerId) { unverified("LEGACY_OVERRIDE_WITHOUT_IDENTITY", e.sequence); continue; }
+      const p = replayed.get(v.playerId);
+      const field = v.kind === "CORRECT_ALIVE" ? "alive" : "ghostVoteAvailable";
+      if (!p) unverified("UNKNOWN_EVENT_PLAYER", e.sequence);
+      else if (typeof v.before[field] !== "boolean" || typeof v.after[field] !== "boolean") unverified("MALFORMED_OVERRIDE", e.sequence);
+      else if (p[field] !== v.before[field]) unverified("OVERRIDE_BEFORE_MISMATCH", e.sequence);
+      else p[field] = v.after[field];
+    } else if (["PLAYER_ADDED", "PLAYER_REMOVED", "PLAYER_UPDATED"].includes(e.eventType)) {
+      unverified("UNSUPPORTED_MEMBERSHIP_TRANSITION", e.sequence);
+    } else if (!FLAG_NEUTRAL_EVENTS.has(e.eventType)) {
+      unverified("UNKNOWN_EVENT_TYPE", e.sequence);
     }
   }
-
-  const current = await prisma.player.findMany({ where: { gameId } });
+  if (expectedSeq !== game.eventSequence) unverified("TARGET_SEQUENCE_MISMATCH");
+  if (previousVersion !== game.version) unverified("TARGET_VERSION_MISMATCH");
   for (const p of current) {
     const r = replayed.get(p.id);
     if (!r) continue;
@@ -405,14 +488,7 @@ export async function verifyReplay(gameId: string, checkpointId: string): Promis
     }
   }
 
-  return {
-    ok: divergences.length === 0,
-    checkpointId,
-    fromSequence: checkpoint.lastEventSequence,
-    throughSequence: expectedSeq,
-    replayVersion: REPLAY_VERSION,
-    divergences,
-  };
+  return result();
 }
 
 // ---------- Audit categories (audit spec 21 §8) ----------

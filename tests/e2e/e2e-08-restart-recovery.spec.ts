@@ -7,10 +7,8 @@ import {
   commandVersion,
 } from "./fixtures";
 
-// E2E-08 — restart recovery (audit spec 24 §4): mid-formal-process consistency
-// and replay verification prove no active truth lives only in process memory.
-// (The physical server restart is a CI-orchestrated drill; state itself is
-// PostgreSQL-authoritative.)
+// E2E-08 checks in-process consistency and bounded player-flag replay only.
+// Physical restore and continuation require the separate recovery drill.
 test("E2E-08: mid-vote consistency and replay verification pass", async ({ page, browser }) => {
   const st = page.request;
   const { gameId, playerIds, version } = await createStorytellerGame(st, "E2E-08", 13);
@@ -56,5 +54,5 @@ test("E2E-08: mid-vote consistency and replay verification pass", async ({ page,
     data: { checkpointId: checkpointList[checkpointList.length - 1].id },
   });
   expect(replay.ok()).toBeTruthy();
-  expect((await replay.json()).ok).toBe(true);
+  expect(await replay.json()).toMatchObject({ ok: true, replayVersion: 2, scope: "PLAYER_FLAGS", coverage: { complete: true } });
 });

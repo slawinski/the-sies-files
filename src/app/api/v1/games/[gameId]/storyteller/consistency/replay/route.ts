@@ -7,8 +7,8 @@ const schema = z.object({
   checkpointId: z.string().min(1),
 });
 
-// Deep verification: rebuild key state from a checkpoint + subsequent events
-// and compare with the authoritative database (audit spec 21 §6).
+// Bounded PLAYER_FLAGS diagnostics, not whole-game reconstruction or physical
+// restore evidence. Incomplete inputs are explicitly reported as unverified.
 export async function POST(req: Request, { params }: { params: Promise<{ gameId: string }> }) {
   try {
     const { gameId } = await params;
