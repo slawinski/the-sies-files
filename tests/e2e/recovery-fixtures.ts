@@ -74,6 +74,10 @@ export function assertContinuation(before: Rows, after: Rows, actor: string, nom
   const events = added('domain_events').sort((a, b) => Number(a.sequence) - Number(b.sequence));
   equalPrivate(events.map(e => e.eventType), ['VOTE_INTENT_RECORDED', 'VOTE_PASS_ADVANCED'], 'exact event types');
   equalPrivate(events.map(e => e.commandId), [commandId, commandId], 'event command identities');
+  equalPrivate(events.map(e => e.gameVersion), [actualGame.version, actualGame.version], 'event versions');
+  equalPrivate(events.map(e => e.sequence), [Number(game.eventSequence) - 1, game.eventSequence], 'event sequence deltas');
+  equalPrivate(events.map(e => e.actor), [`player:${actor}`, `player:${actor}`], 'event actors');
+  equalPrivate(events.map(e => e.payload), [{ nominationId, playerId: actor, intent: false }, { nominationId, virtualSeat: 2 }], 'event payloads');
   for (const family of ['votes', 'command_receipts', 'domain_events']) {
     expected[family].push(...added(family));
     const sort = (rows: Record<string, unknown>[]) => [...rows].sort((a, b) => String(a.id).localeCompare(String(b.id)));
