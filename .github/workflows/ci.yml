@@ -40,8 +40,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install PostgreSQL client tools (E2E reset)
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Select PostgreSQL 16 client tools (reset and physical recovery)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+          printf '/usr/lib/postgresql/16/bin\n' >> "$GITHUB_PATH"
+          /usr/lib/postgresql/16/bin/pg_dump --version
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -61,6 +65,9 @@ jobs:
             baseline-results/ci-production/*discovery.json
             baseline-results/ci-production/unit.json
             baseline-results/ci-production/browser.json
+            baseline-results/ci-production/recovery/recovery.json
+            baseline-results/ci-production/recovery/recovery-native.json
+            baseline-results/ci-production/recovery/recovery-discovery.json
             baseline-results/ci-production/browser-artifacts/
             baseline-results/ci-production/html/
           retention-days: 14

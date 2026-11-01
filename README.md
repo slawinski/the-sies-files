@@ -19,6 +19,12 @@ browser cases and seven review additions. Both measured source
 the earlier 212/31 profiles measured a different source. This README note was
 added after measurement; see the ledger for profile logs and coverage limits.
 
+The production baseline now also requires a separately owned physical
+[restore-and-continue drill](docs/recovery-drill.md). Its bounded scope, operator
+instructions and [verification ledger](docs/recovery-verification.md) distinguish
+archive restoration, durable/runtime equality and legal continuation from the
+narrow player-flag replay diagnostic.
+
 ## Getting Started
 
 First, run the development server:

@@ -119,6 +119,17 @@ browser checks require that run's successful build and record its BUILD_ID;
 development controls discard production `.next` output before starting dev.
 No generated Next types or configuration are written in the original checkout.
 
+Production additionally requires the [physical recovery drill](recovery-drill.md).
+The baseline awaits its ordinary browser server's exit, releases only its
+token-checked port lease, and retains its database lease. Recovery then leases
+3100 itself and uses two newly created databases and the exact recorded build.
+Its separately discovered E2E-11 case and sanitized native outcome inventory are
+required in `run.json`; the ordinary browser inventory is unchanged. A failed
+ordinary browser stage does not suppress independent recovery when the build
+exists, but neither stage can excuse the other's failure. Development explicitly
+records recovery as `not-applicable`: it deliberately removed production output.
+Use PostgreSQL **16** server and client binaries, not the system's linked major.
+
 Each run stores `stages.json`, `run.json`, native `unit.json`/`browser.json`, both
 discovery inventories, ordinary stage logs and first-attempt traces in
 `browser-artifacts/`. Missing/truncated or incomplete reports, failed/blocked

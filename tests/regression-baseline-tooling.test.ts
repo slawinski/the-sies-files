@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { capture, runStages, verifySource, assertPortFree, readInventories } from '../scripts/regression-baseline.mjs';
+import { capture, runStages, verifySource, assertPortFree, readInventories, readRecoveryInventory } from '../scripts/regression-baseline.mjs';
 import { hasSuccessionPrerequisites, scenarioSpecimen, commandVersion } from './e2e/fixtures';
 import { createServer } from 'node:http';
 import { request } from '@playwright/test';
@@ -115,6 +115,20 @@ test('missing or truncated reports cannot become a green inventory', () => {
   expect(() => readInventories(dir)).toThrow('Missing or truncated native report');
   fs.writeFileSync(path.join(dir, 'unit.json'), '{');
   expect(() => readInventories(dir)).toThrow('Missing or truncated native report');
+});
+
+test('recovery discovery cannot pass with a missing, truncated or omitted native outcome', () => {
+  const dir = tree();
+  fs.writeFileSync(path.join(dir, 'recovery-discovery.json'), JSON.stringify({ suites: [{ specs: [{ id: 'restore-case' }] }] }));
+  expect(() => readRecoveryInventory(dir)).toThrow('Missing or truncated recovery report');
+  fs.writeFileSync(path.join(dir, 'recovery-native.json'), '{');
+  expect(() => readRecoveryInventory(dir)).toThrow('Missing or truncated recovery report');
+  fs.writeFileSync(path.join(dir, 'recovery-native.json'), JSON.stringify({ cases: [] }));
+  expect(() => readRecoveryInventory(dir)).toThrow('Incomplete recovery');
+  fs.writeFileSync(path.join(dir, 'recovery-native.json'), JSON.stringify({ cases: [{ id: 'restore-case', results: [] }] }));
+  expect(() => readRecoveryInventory(dir)).toThrow('Incomplete recovery');
+  fs.writeFileSync(path.join(dir, 'recovery-native.json'), JSON.stringify({ cases: [{ id: 'restore-case', results: [{ status: 'passed' }] }] }));
+  expect(readRecoveryInventory(dir).cases).toHaveLength(1);
 });
 test('inventories preserve blocked browser identities and reject omitted unit outcomes', () => {
   const dir = tree();

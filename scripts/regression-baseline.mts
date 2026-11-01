@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import net from 'node:net';
 import { acquireLease, resolveTarget, stopOwnedServer } from './test-database.mjs';
+import { buildIdentity, completeClaims } from './playable-recovery.mjs';
 
 const hash = (data: string | Buffer) => crypto.createHash('sha256').update(data).digest('hex');
 function git(root: string, args: string[]) {
@@ -97,7 +98,7 @@ export async function assertPortFree(port: number) {
 }
 type Stage = { name: string; command: string; args: string[]; requires?: string[]; timeout?: number; env?: NodeJS.ProcessEnv };
 type StageResult = { name: string; status: 'passed' | 'failed' | 'blocked'; exit: number | null; signal?: string | null; reason?: string; command?: string; args?: string[]; started?: string; durationMs?: number };
-export async function runStages(stages: Stage[], cwd: string, env: NodeJS.ProcessEnv, out: string, onResult?: (result: StageResult) => void) {
+export async function runStages(stages: Stage[], cwd: string, env: NodeJS.ProcessEnv, out: string, onResult?: (result: StageResult) => void | Promise<void>) {
   fs.mkdirSync(out, { recursive: true });
   const results: StageResult[] = [];
   let interrupted = false; let killActive: (() => void) | undefined;
@@ -130,7 +131,7 @@ export async function runStages(stages: Stage[], cwd: string, env: NodeJS.Proces
         results.push({ ...result, command: stage.command, args: stage.args, started: new Date(started).toISOString(), durationMs: Date.now() - started });
       }
       fs.writeFileSync(path.join(out, 'stages.json'), JSON.stringify(results, null, 2));
-      onResult?.(results[results.length - 1]);
+      await onResult?.(results[results.length - 1]);
     }
   } finally { killActive?.(); process.off('SIGINT', stop); process.off('SIGTERM', stop); }
   return results;
@@ -165,6 +166,18 @@ export function readInventories(out: string, browserBlockedReason?: string) {
     unit: Object.fromEntries(['passed', 'failed', 'pending', 'skipped', 'todo'].map(status => [status, unitTests.filter(t => t.status === status).length])),
     browser: Object.fromEntries(['passed', 'failed', 'timedOut', 'skipped', 'interrupted', 'blocked'].map(status => [status, browser.filter(t => t.results[0].status === status).length])),
   } };
+}
+
+export function readRecoveryInventory(out: string) {
+  const read = (name: string) => {
+    try { return JSON.parse(fs.readFileSync(path.join(out, name), 'utf8')); }
+    catch { throw new Error(`Missing or truncated recovery report: ${name}`); }
+  };
+  const specs = (s: { specs?: { id: string }[]; suites?: typeof s[] }): { id: string }[] => [...(s.specs ?? []), ...(s.suites ?? []).flatMap(specs)];
+  const discovered = specs(read('recovery-discovery.json')).map(s => s.id).sort();
+  const native = read('recovery-native.json') as { cases: { id: string; results: { status: string }[] }[] };
+  if (!discovered.length || !Array.isArray(native.cases) || JSON.stringify(discovered) !== JSON.stringify(native.cases.map(c => c.id).sort()) || native.cases.some(c => !c.results.length)) throw new Error('Incomplete recovery discovery/outcome inventory');
+  return { discovered, cases: native.cases };
 }
 export async function measure(root: string, out: string, profile: 'development' | 'production', reference?: string) {
   root = fs.realpathSync(root); out = path.resolve(out);
@@ -216,18 +229,38 @@ export async function measure(root: string, out: string, profile: 'development' 
       stage('reset-browser', 'npx', ['tsx', 'scripts/test-database.mts', 'reset'], ['generate']),
       stage('browser-discovery', 'npx', ['playwright', 'test', '--list', '--reporter=json']),
       stage('browser', 'npm', ['run', 'test:e2e', '--', '--reporter=list,json', '--output=' + path.join(out, 'browser-artifacts')], ['reset-browser', ...(profile === 'production' ? ['build'] : [])]),
+      ...(profile === 'production' ? [stage('recovery', 'npm', ['run', 'recovery:prove', '--', '--output', path.join(out, 'recovery'), '--build-record', path.join(out, 'run.json')], ['build', 'generate'])] : []),
     ];
     // Discovery writes to a different native reporter file; it must not overwrite outcomes.
     stages.find(s => s.name === 'browser-discovery')!.env = { ...env, PLAYWRIGHT_JSON_OUTPUT_FILE: path.join(out, 'browser-discovery.json') };
     stages.find(s => s.name === 'build')!.env = { ...env, NODE_ENV: 'production' };
-    const results = await runStages(stages, work, env, out, result => {
+    const results = await runStages(stages, work, env, out, async result => {
       if (result.name === 'build' && result.status === 'passed') {
         const build = path.join(work, '.next/BUILD_ID');
-        if (fs.existsSync(build)) metadata.build = { sourceId: manifest.sourceId, id: fs.readFileSync(build, 'utf8').trim(), lockSha256: hash(fs.readFileSync(path.join(work, 'package-lock.json'))) };
+        if (fs.existsSync(build)) metadata.build = buildIdentity(work, manifest.sourceId);
+      }
+      if (result.name === 'browser') {
+        await stopOwnedServer(target, lease.token);
+        await assertPortFree(3100);
+        lease.releasePort(lease.token);
+        metadata.serverPortReleased = true;
       }
       write();
     });
     metadata.stages = results;
+    if (profile === 'development') metadata.recovery = { status: 'not-applicable', reason: 'Physical recovery requires the production build; development output is deliberately rebuilt by the dev server' };
+    else {
+      const recoveryStage = results.find(s => s.name === 'recovery');
+      if (recoveryStage?.status === 'blocked') metadata.recovery = { status: 'blocked', reason: recoveryStage.reason };
+      else {
+        try {
+          const inventory = readRecoveryInventory(path.join(out, 'recovery'));
+          const report = JSON.parse(fs.readFileSync(path.join(out, 'recovery/recovery.json'), 'utf8'));
+          if (!report.complete || !report.cleanup?.complete || !completeClaims(report.claims) || inventory.cases.some(c => c.results.some(r => r.status !== 'passed'))) throw new Error('Recovery claims or native outcomes incomplete');
+          metadata.recovery = { status: 'passed', inventory, report };
+        } catch (error) { metadata.recovery = { status: 'failed', reason: (error as Error).message }; }
+      }
+    }
     let rawFailures = true;
     try {
       const browserStage = results.find(s => s.name === 'browser');
@@ -239,7 +272,7 @@ export async function measure(root: string, out: string, profile: 'development' 
     metadata.originalSourceUnchanged = capture(root).sourceId === manifest.sourceId;
     await stopOwnedServer(target, lease.token);
     await assertPortFree(3100); metadata.serverPortReleased = true;
-    metadata.complete = results.every(s => s.status === 'passed') && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || !!metadata.build);
+    metadata.complete = results.every(s => s.status === 'passed') && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed'));
     write();
     return metadata.complete === true;
   } catch (error) { metadata.complete = false; metadata.blocker = (error as Error).message; write(); return false; }
