@@ -16,6 +16,7 @@ export default function ConnectionStatus({
 }) {
   const config = {
     LIVE: { label: "LIVE", tone: "text-moss", dot: "bg-moss", pulse: false },
+    SYNCHRONIZING: { label: "AKTUALIZACJA…", tone: "text-brass", dot: "bg-brass", pulse: false },
     RECONNECTING: { label: "ŁĄCZENIE…", tone: "text-brass", dot: "bg-brass", pulse: true },
     OFFLINE: { label: "OFFLINE", tone: "text-danger", dot: "bg-danger", pulse: false },
   }[health];

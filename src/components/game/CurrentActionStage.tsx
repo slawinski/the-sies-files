@@ -83,7 +83,7 @@ export default function CurrentActionStage({
 
       {connectionBlocked && (
         <Notice variant="warning" className="mt-3">
-          Brak połączenia — poczekaj na powrót sieci, zanim zatwierdzisz wybór.
+          Poczekaj na aktualizację sprawy, zanim zatwierdzisz wybór.
         </Notice>
       )}
 

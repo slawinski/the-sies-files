@@ -17,17 +17,20 @@ export default function PrivateReveal({
   nameById,
   busy,
   onAcknowledge,
+  freshnessNotice,
 }: {
   role: RoleRevealDto;
   nameById: Map<string, string>;
   busy: boolean;
   onAcknowledge: () => void;
+  freshnessNotice?: React.ReactNode;
 }) {
   const [revealed, setRevealed] = useState(false);
 
   return (
     <div className="fixed inset-0 z-private flex min-h-dvh flex-col overflow-y-auto bg-canvas">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10">
+        {freshnessNotice}
         {!revealed ? (
           <div className="text-center">
             <p className="text-[11px] uppercase tracking-[0.3em] text-moss">The Sieś Files</p>

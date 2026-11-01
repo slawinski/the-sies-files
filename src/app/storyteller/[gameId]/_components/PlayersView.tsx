@@ -4,7 +4,7 @@
 // (spec 19 §7.3 / screen spec 21 §11). Inline actions move into a per-row
 // overflow menu; reordering requires explicit Arrange-circle mode.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, UserRound } from "lucide-react";
 import type { StorytellerGameProjection, StorytellerPlayerDto } from "@/lib/client-api";
 import Badge from "@/components/ui/Badge";
@@ -43,6 +43,7 @@ export default function PlayersView({
   const [editingName, setEditingName] = useState("");
   const [removeTarget, setRemoveTarget] = useState<StorytellerPlayerDto | null>(null);
   const [resetTarget, setResetTarget] = useState<StorytellerPlayerDto | null>(null);
+  useEffect(() => { setRemoveTarget(null); setResetTarget(null); }, [game.gameId, game.version]);
 
   const sorted = [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat);
   const rosterLocked = !renameEnabled;

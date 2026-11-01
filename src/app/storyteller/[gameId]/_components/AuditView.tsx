@@ -33,10 +33,12 @@ export interface AuditViewProps {
   audit: StorytellerAuditDto | null; // null while loading
   auditError: boolean; // load failed
   auditLoadingMore: boolean;
+  auditPaginationBlocked?: boolean;
   selectedCategories: AuditCategoryDto[]; // [] = all
   onToggleCategory: (id: AuditCategoryDto) => void;
   onClearCategories: () => void;
   onLoadMore: () => void;
+  onRetry: () => void;
   formatTime: (iso: string) => string;
 }
 
@@ -44,10 +46,12 @@ export default function AuditView({
   audit,
   auditError,
   auditLoadingMore,
+  auditPaginationBlocked = false,
   selectedCategories,
   onToggleCategory,
   onClearCategories,
   onLoadMore,
+  onRetry,
   formatTime,
 }: AuditViewProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
@@ -155,9 +159,10 @@ export default function AuditView({
 
       {!audit && !auditError && <Skeleton variant="list" className="mt-4" />}
 
-      {!audit && auditError && (
+      {auditError && (
         <Notice variant="error" className="mt-4">
-          Nie udało się wczytać dziennika zdarzeń.
+          Nie udało się wczytać dziennika zdarzeń. Poprzedni widok może być nieaktualny.
+          <Button variant="quiet" onClick={onRetry}>Odśwież dziennik</Button>
         </Notice>
       )}
 
@@ -303,7 +308,7 @@ export default function AuditView({
 
           {audit.nextCursor !== null && (
             <div className="mt-4 flex justify-center">
-              <Button variant="quiet" onClick={onLoadMore} busy={auditLoadingMore}>
+              <Button variant="quiet" onClick={onLoadMore} busy={auditLoadingMore} disabled={auditPaginationBlocked}>
                 {auditLoadingMore ? "Wczytuję…" : "Więcej"}
               </Button>
             </div>

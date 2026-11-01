@@ -5,6 +5,17 @@ not a claim that arbitrary random inputs
 or all future schedules pass. Earlier failures remain in their raw reports;
 none is allowlisted, marked expected-failure, skipped, or overwritten.
 
+Later branch-specific evidence lives in the
+[client reconciliation ledger](reconcile-client-state.md). Its review follow-up
+retains the original `d7980f8712240ca34cfebacd2d18ebdb82bfebfd8c8e7c8c011dd68a2f1c415e`
+212-unit/31-browser profiles as historical and records new source
+`8a407f82c8d9e542bf16d65c480563b719eb012e69b14b4ec3bb42907a3fbcd2`:
+212/212 unit and 38/38 browser passes in each of production and development.
+See `baseline-results/reconcile-review-{production,development}/` for native
+reports and stage logs, and the ledger for all review red/green source IDs,
+manual #4 scope and the same-document navigation coverage caveat. This pointer
+was added after those measurements.
+
 ## Source and runtime envelope
 
 | Identity | Meaning |
@@ -181,3 +192,9 @@ the earlier green baseline does not disprove them. The five existing uncommitted
 presentation simplifications are preserved, not repaired or reverted here.
 Future changes should use the [runbook](../regression-baseline.md), repeat paired profiles and diagnose
 new failures; a successful rerun or different seed is never sufficient cause.
+
+## Later client reconciliation work
+
+The [client reconciliation account](reconcile-client-state.md) records the
+post-PR2 race specimens, fixture/tooling failures and new release-profile evidence.
+It does not reattribute the historical measurements above to the new application.

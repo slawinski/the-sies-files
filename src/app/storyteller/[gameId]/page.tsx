@@ -24,6 +24,8 @@ import {
 import { useGameEventStream } from "@/components/useGameEventStream";
 import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
 import { useVersionedMutation } from "@/components/useVersionedMutation";
+import { useProjectionReconciliation } from "@/components/useProjectionReconciliation";
+import { ProjectionGate } from "@/lib/projection-reconciliation";
 import { isStorytellerView, type StorytellerView } from "@/lib/presentation/types";
 import { selectPrimaryStorytellerBlocker } from "@/lib/presentation/storyteller-mode";
 import { formatTime, phaseLabel } from "@/lib/presentation/labels";
@@ -66,6 +68,8 @@ function LoadingShell() {
   );
 }
 
+const auditFilter = (categories: AuditCategoryDto[]) => [...new Set(categories)].sort().join(",");
+
 function StorytellerPageInner() {
   const params = useParams<{ gameId: string }>();
   const gameId = params.gameId;
@@ -74,9 +78,12 @@ function StorytellerPageInner() {
   const rawView = searchParams.get("view");
   const view: StorytellerView = isStorytellerView(rawView) ? rawView : "control";
 
-  const [game, setGame] = useState<StorytellerGameProjection | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fatalError, setFatalError] = useState<string | null>(null);
+  const projection = useProjectionReconciliation(gameId, signal => api<StorytellerGameProjection>(`/api/v1/games/${gameId}/storyteller`, { signal }));
+  const { refresh, target } = projection;
+  const game = projection.data;
+  const failure = projection.error as ApiClientError | null;
+  const loading = !game && !failure;
+  const fatalError = failure ? friendlyMessage(failure.code ?? "UNKNOWN", "Nie udało się wczytać tej sprawy.") : null;
   const [renamingGame, setRenamingGame] = useState(false);
   const [gameNameDraft, setGameNameDraft] = useState("");
 
@@ -88,7 +95,21 @@ function StorytellerPageInner() {
   const [audit, setAudit] = useState<StorytellerAuditDto | null>(null);
   const [auditCategories, setAuditCategories] = useState<AuditCategoryDto[]>([]);
   const [auditLoadingMore, setAuditLoadingMore] = useState(false);
+  const [auditHeadPending, setAuditHeadPending] = useState(false);
   const [auditError, setAuditError] = useState(false);
+  const [controlError, setControlError] = useState(false);
+  const controlGate = useRef(new ProjectionGate(gameId));
+  const auditIntent = useRef(0);
+  const pendingAuditHead = useRef<number | null>(null);
+  const acceptedAudit = useRef<{ filter: string; head: number; snapshot: StorytellerAuditDto } | null>(null);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    const gate = new ProjectionGate(gameId);
+    controlGate.current = gate;
+    ++auditIntent.current;
+    return () => { alive.current = false; gate.dispose(); };
+  }, [gameId]);
   const auditCategoriesRef = useRef<AuditCategoryDto[]>([]);
 
   const [checkpointReason, setCheckpointReason] = useState("");
@@ -117,18 +138,36 @@ function StorytellerPageInner() {
   } | null>(null);
 
   const loadAux = useCallback(async () => {
+    const gate = controlGate.current;
+    const ticket = gate.begin();
     try {
       const controlRes = await api<StorytellerControlDto>(
         `/api/v1/games/${gameId}/storyteller/control`,
       );
+      if (!gate.accept(ticket, controlRes)) return;
       setControl(controlRes);
+      setControlError(false);
+      target(controlRes.version);
     } catch {
-      // Keep the previous snapshot; the control cards are non-critical.
+      if (gate.current(ticket)) setControlError(true);
     }
-  }, [gameId]);
+  }, [gameId, target]);
 
   const loadAudit = useCallback(
     async (categories: AuditCategoryDto[], cursor?: number) => {
+      const filter = auditFilter(categories);
+      const accepted = acceptedAudit.current;
+      if (cursor !== undefined && (pendingAuditHead.current !== null || !accepted ||
+          accepted.filter !== filter || accepted.snapshot.nextCursor !== cursor)) return;
+      const intent = ++auditIntent.current;
+      const current = () => alive.current && intent === auditIntent.current &&
+        (cursor === undefined || (pendingAuditHead.current === null && acceptedAudit.current?.head === accepted?.head &&
+          acceptedAudit.current?.filter === filter && acceptedAudit.current?.snapshot.nextCursor === cursor));
+      if (cursor === undefined) {
+        pendingAuditHead.current = intent;
+        setAuditHeadPending(true);
+        setAuditLoadingMore(false);
+      } else setAuditLoadingMore(true);
       const query = new URLSearchParams();
       if (categories.length > 0) query.set("categories", categories.join(","));
       if (cursor !== undefined) query.set("cursor", String(cursor));
@@ -137,39 +176,36 @@ function StorytellerPageInner() {
         const res = await api<StorytellerAuditDto>(
           `/api/v1/games/${gameId}/storyteller/audit${qs ? `?${qs}` : ""}`,
         );
-        if (cursor !== undefined) {
-          setAudit((prev) => ({
-            categories: res.categories,
-            nextCursor: res.nextCursor,
-            events: [...(prev?.events ?? []), ...res.events],
-          }));
-        } else {
-          setAudit(res);
-        }
+        if (!current()) return;
+        setAuditError(false);
+        const snapshot = cursor !== undefined ? { ...res,
+          events: [...new Map([...(accepted?.snapshot.events ?? []), ...res.events].map(event => [event.sequence, event])).values()],
+        } : res;
+        acceptedAudit.current = { filter, head: cursor === undefined ? intent : accepted!.head, snapshot };
+        setAudit(snapshot);
       } catch {
-        if (cursor === undefined) setAuditError(true);
+        if (current()) setAuditError(true);
+      } finally {
+        if (alive.current && intent === auditIntent.current) {
+          setAuditLoadingMore(false);
+          if (pendingAuditHead.current === intent) {
+            pendingAuditHead.current = null;
+            setAuditHeadPending(false);
+          }
+        }
       }
     },
     [gameId],
   );
 
   const load = useCallback(async () => {
-    try {
-      const next = await api<StorytellerGameProjection>(`/api/v1/games/${gameId}/storyteller`);
-      setGame(next);
-      setFatalError(null);
-      void loadAux();
-    } catch (err) {
-      const e = err as ApiClientError;
-      setFatalError(friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się wczytać tej sprawy."));
-    } finally {
-      setLoading(false);
-    }
-  }, [gameId, loadAux]);
+    await refresh();
+  }, [refresh]);
 
+  const gameVersion = game?.version;
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (gameVersion !== undefined) { void loadAux(); void loadAudit(auditCategoriesRef.current); }
+  }, [gameVersion, loadAux, loadAudit]);
 
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get("auditCat") ?? "";
@@ -183,23 +219,27 @@ function StorytellerPageInner() {
 
   const refetchAll = useCallback(() => {
     void load();
+    void loadAux();
     void loadAudit(auditCategoriesRef.current);
-  }, [load, loadAudit]);
+  }, [load, loadAux, loadAudit]);
 
-  const realtime = useGameEventStream(gameId, refetchAll);
+  const realtime = useGameEventStream(gameId, refetchAll, projection);
   usePresenceHeartbeat(gameId);
 
   // The stale banner persists until the user dismisses it or the next mutation
   // succeeds — a version conflict is worth an explicit acknowledgement.
-  const { busy, actionError, stale, setActionError, setStale, run, runWithResult } =
-    useVersionedMutation(load);
+  const { busy, actionError, stale, setActionError, run, runWithResult } =
+    useVersionedMutation(load, { scope: gameId, ready: () => game !== null && projection.canCommand(game),
+      current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge });
+  const canCommand = () => game !== null && projection.canCommand(game) && !busy;
+  const commandsBusy = busy || !projection.ready;
 
   function mutate(
     path: string,
     method: "POST" | "PATCH" | "DELETE",
     payload: Record<string, unknown> = {},
   ) {
-    if (!game) return Promise.resolve(false);
+    if (!game || !canCommand()) return Promise.resolve(false);
     return run(() =>
       api(path, {
         method,
@@ -244,9 +284,8 @@ function StorytellerPageInner() {
   }
 
   async function issueClaim(player: StorytellerPlayerDto) {
-    if (!game) return;
-    try {
-      const res = await api<ClaimTokenResponse>(
+    if (!game || !canCommand()) return;
+    const result = await runWithResult(() => api<ClaimTokenResponse>(
         `/api/v1/games/${gameId}/players/${player.id}/claim-token`,
         {
           method: "POST",
@@ -255,38 +294,35 @@ function StorytellerPageInner() {
             expectedVersion: game.version,
           }),
         },
-      );
+      ));
+    if (!alive.current) return;
+    if (result.ok && result.value) {
+      const res = result.value;
       setClaimModal({
         player,
         link: res.claimToken ? `${window.location.origin}/claim#${res.claimToken}` : null,
         busy: false,
         error: res.claimToken ? null : "Dla tego gracza wydano już link do odbioru.",
       });
-      await load();
-    } catch (err) {
-      const e = err as ApiClientError;
-      if (e.code === "VERSION_CONFLICT") {
-        await load();
-        setStale(true);
-      }
+    } else {
       setClaimModal({
         player,
         link: null,
         busy: false,
-        error: friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się wydać linku do odbioru."),
+        error: "Nie udało się wydać linku do odbioru.",
       });
     }
   }
 
   function openClaim(player: StorytellerPlayerDto) {
+    if (!canCommand()) return;
     setClaimModal({ player, link: null, busy: true, error: null });
     void issueClaim(player);
   }
 
   async function resetPlayerAccess(player: StorytellerPlayerDto) {
-    if (!game) return;
-    try {
-      const res = await api<AccessResetResponseDto>(
+    if (!game || !canCommand()) return;
+    const result = await runWithResult(() => api<AccessResetResponseDto>(
         `/api/v1/games/${gameId}/players/${player.id}/access/reset`,
         {
           method: "POST",
@@ -295,25 +331,23 @@ function StorytellerPageInner() {
             expectedVersion: game.version,
           }),
         },
-      );
+      ));
+    if (!alive.current) return;
+    if (result.ok && result.value) {
+      const res = result.value;
       setResetModal({ player, token: res.claimToken, busy: false, error: null });
-      await load();
-    } catch (err) {
-      const e = err as ApiClientError;
-      if (e.code === "VERSION_CONFLICT") {
-        await load();
-        setStale(true);
-      }
+    } else {
       setResetModal({
         player,
         token: null,
         busy: false,
-        error: friendlyMessage(e.code ?? "UNKNOWN", "Nie udało się zresetować dostępu."),
+        error: "Nie udało się zresetować dostępu.",
       });
     }
   }
 
   function openResetAccess(player: StorytellerPlayerDto) {
+    if (!canCommand()) return;
     setResetModal({ player, token: null, busy: true, error: null });
     void resetPlayerAccess(player);
   }
@@ -384,7 +418,7 @@ function StorytellerPageInner() {
 
   async function handleRenameGame() {
     const trimmed = gameNameDraft.trim();
-    if (!trimmed || !game) return;
+    if (!trimmed || !game || !canCommand()) return;
     const ok = await run(() =>
       api(`/api/v1/games/${gameId}`, {
         method: "PATCH",
@@ -446,6 +480,7 @@ function StorytellerPageInner() {
   }, [control, recoveryKind, recoveryTargetId]);
 
   async function handleCreateCheckpoint() {
+    if (!canCommand()) return;
     const reason = checkpointReason.trim();
     setCheckpointNote(null);
     const res = await runWithResult<CheckpointResponseDto>(() =>
@@ -470,7 +505,7 @@ function StorytellerPageInner() {
 
   async function handleRecoveryOverride() {
     const reason = recoveryReason.trim();
-    if (!reason || !game) return;
+    if (!reason || !game || !canCommand() || controlError || !control || control.version < game.version) return;
     const target = recoveryTargetId.trim() || undefined;
     const payload =
       recoveryKind === "CORRECT_ALIVE"
@@ -548,7 +583,6 @@ function StorytellerPageInner() {
             <Button
               fullWidth
               onClick={() => {
-                setLoading(true);
                 void load();
               }}
             >
@@ -563,8 +597,7 @@ function StorytellerPageInner() {
               <div className="mb-4 flex flex-col gap-2">
                 {stale && (
                   <Notice variant="warning">
-                    Ta sprawa zmieniła się w innej karcie — widok został odświeżony. Ponów ostatnią
-                    akcję.
+                    Ta sprawa zmieniła się w innej karcie. Sprawdź bieżący stan przed ponowieniem akcji.
                   </Notice>
                 )}
                 {actionError && (
@@ -582,10 +615,18 @@ function StorytellerPageInner() {
               </div>
             )}
 
-            <StorytellerShell active={view} onNavigate={navigate} renaming={renamingGame} onStartRename={() => { setGameNameDraft(game.name); setRenamingGame(true); }} onCancelRename={() => { setRenamingGame(false); setGameNameDraft(""); }} onCommitRename={() => void handleRenameGame()} gameNameDraft={gameNameDraft} onGameNameDraftChange={setGameNameDraft} renameEnabled={renameEnabled} busy={busy} game={game}>
+            <StorytellerShell active={view} onNavigate={navigate} renaming={renamingGame} onStartRename={() => { setGameNameDraft(game.name); setRenamingGame(true); }} onCancelRename={() => { setRenamingGame(false); setGameNameDraft(""); }} onCommitRename={() => void handleRenameGame()} gameNameDraft={gameNameDraft} onGameNameDraftChange={setGameNameDraft} renameEnabled={renameEnabled} busy={commandsBusy} game={game}>
               {privacyCovered ? (
                 <Notice variant="private">Zasłonięto — odsłoń widok, aby kontynuować.</Notice>
               ) : <>
+              {!projection.ready && <Notice variant={fatalError ? "error" : "warning"}>
+                {fatalError ?? "Aktualizacja sprawy — polecenia czekają na bieżący stan."}
+                <Button variant="quiet" onClick={() => void load()}>Spróbuj ponownie</Button>
+              </Notice>}
+              {(controlError || (control && control.version < game.version)) && <Notice variant="warning">
+                Panel sterowania jest nieaktualny lub niedostępny.
+                <Button variant="quiet" onClick={() => void loadAux()}>Odśwież panel</Button>
+              </Notice>}
               {view === "control" && blocker && (
                 <ControlView
                   game={game}
@@ -593,7 +634,7 @@ function StorytellerPageInner() {
                   control={control}
                   realtime={realtime}
                   nameById={nameById}
-                  busy={busy}
+                  busy={commandsBusy}
                   gameEnded={gameEnded}
                   ready={ready}
                   need={need}
@@ -616,7 +657,7 @@ function StorytellerPageInner() {
               {view === "players" && (
                 <PlayersView
                   game={game}
-                  busy={busy}
+                  busy={commandsBusy}
                   renameEnabled={renameEnabled}
                   onAddPlayer={(name) => handleAddPlayer(name)}
                   onRenamePlayer={(playerId, name) => void handleRenamePlayer(playerId, name)}
@@ -629,7 +670,7 @@ function StorytellerPageInner() {
               {view === "grimoire" && (
                 <GrimoireView
                   game={game}
-                  busy={busy}
+                  busy={commandsBusy}
                   privacyCovered={privacyCovered}
                   onGenerateSetup={() => void handleGenerateSetup()}
                   onCommitSetup={() => void handleCommitSetup()}
@@ -638,7 +679,7 @@ function StorytellerPageInner() {
               {view === "scenario" && (
                 <ScenarioView
                   game={game}
-                  busy={busy}
+                  busy={commandsBusy}
                   revealClueId={revealClueId}
                   onRevealClueIdChange={setRevealClueId}
                   revealTargetPlayerId={revealTargetPlayerId}
@@ -657,6 +698,8 @@ function StorytellerPageInner() {
                   audit={audit}
                   auditError={auditError}
                   auditLoadingMore={auditLoadingMore}
+                  auditPaginationBlocked={auditHeadPending || acceptedAudit.current?.filter !== auditFilter(auditCategories)}
+                  onRetry={() => void loadAudit(auditCategoriesRef.current)}
                   selectedCategories={auditCategories}
                   onToggleCategory={(id) => {
                     const next = auditCategories.includes(id)
@@ -680,10 +723,7 @@ function StorytellerPageInner() {
                   }}
                   onLoadMore={() => {
                     if (!audit?.nextCursor) return;
-                    setAuditLoadingMore(true);
-                    void loadAudit(auditCategoriesRef.current, audit.nextCursor).finally(() =>
-                      setAuditLoadingMore(false),
-                    );
+                    void loadAudit(auditCategoriesRef.current, audit.nextCursor);
                   }}
                   formatTime={formatTime}
                 />
@@ -698,7 +738,7 @@ function StorytellerPageInner() {
                   checkpointReason={checkpointReason}
                   onCheckpointReasonChange={setCheckpointReason}
                   onCreateCheckpoint={() => void handleCreateCheckpoint()}
-                  checkpointBusy={busy}
+                  checkpointBusy={commandsBusy}
                   checkpointNote={checkpointNote}
                   recoveryKind={recoveryKind}
                   onRecoveryKindChange={setRecoveryKind}
@@ -709,7 +749,7 @@ function StorytellerPageInner() {
                   recoveryReason={recoveryReason}
                   onRecoveryReasonChange={setRecoveryReason}
                   onSubmitRecovery={() => void handleRecoveryOverride()}
-                  recoveryBusy={busy}
+                  recoveryBusy={commandsBusy || controlError || !control || control.version < game.version}
                   formatTime={formatTime}
                 />
               )}
@@ -719,7 +759,7 @@ function StorytellerPageInner() {
         )}
       </AppShellContent>
 
-      {!privacyCovered && claimModal && (
+      {game && !privacyCovered && claimModal && (
         <Dialog
           open
           onClose={() => setClaimModal(null)}
@@ -736,7 +776,7 @@ function StorytellerPageInner() {
         </Dialog>
       )}
 
-      {!privacyCovered && resetModal && (
+      {game && !privacyCovered && resetModal && (
         <Dialog
           open
           onClose={() => setResetModal(null)}
@@ -798,9 +838,10 @@ function CopyField({ value, label }: { value: string; label: string }) {
 }
 
 export default function StorytellerPage() {
+  const params = useParams<{ gameId: string }>();
   return (
     <Suspense fallback={<LoadingShell />}>
-      <StorytellerPageInner />
+      <StorytellerPageInner key={params.gameId} />
     </Suspense>
   );
 }

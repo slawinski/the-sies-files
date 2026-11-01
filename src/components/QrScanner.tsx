@@ -58,7 +58,7 @@ declare global {
   }
 }
 
-type ScannerStatus = "idle" | "requesting" | "scanning" | "success" | "error";
+type ScannerStatus = "idle" | "requesting" | "scanning" | "submitting" | "success" | "error";
 type ScannerError = "unsupported" | "camera";
 
 interface QrScannerProps {
@@ -99,21 +99,15 @@ export default function QrScanner({ onScan }: QrScannerProps) {
 
   /** Stop everything and hand the token to the parent exactly once. */
   const handleToken = useCallback(
-    (token: string) => {
+    async (token: string) => {
       if (firedRef.current) return;
       firedRef.current = true;
       stop();
       setNotice(null);
-      setStatus("success");
+      setStatus("submitting");
       try {
-        const result = onScanRef.current(token);
-        if (result instanceof Promise) {
-          void result.catch(() => {
-            // The parent surfaces the failure — hand the button back.
-            firedRef.current = false;
-            setStatus("idle");
-          });
-        }
+        await onScanRef.current(token);
+        setStatus("success");
       } catch {
         firedRef.current = false;
         setStatus("idle");
@@ -142,7 +136,7 @@ export default function QrScanner({ onScan }: QrScannerProps) {
         if (result.format !== "qr_code") continue;
         const token = parseQrPayload(result.rawValue);
         if (token) {
-          handleToken(token);
+          void handleToken(token);
           return;
         }
         flagUnrecognized();
@@ -195,7 +189,7 @@ export default function QrScanner({ onScan }: QrScannerProps) {
       const detail = (event as CustomEvent).detail;
       if (typeof detail !== "string") return;
       const token = parseQrPayload(detail);
-      if (token) handleToken(token);
+      if (token) void handleToken(token);
     };
     window.addEventListener(QR_SIMULATE_EVENT, handler);
     return () => window.removeEventListener(QR_SIMULATE_EVENT, handler);
@@ -326,6 +320,8 @@ export default function QrScanner({ onScan }: QrScannerProps) {
           {t("scanner.success")}
         </p>
       )}
+
+      {status === "submitting" && <p role="status" className="text-meta text-ink-muted">{t("scanner.scanning")}</p>}
 
       {status === "error" && (
         <div className="flex flex-col gap-2">

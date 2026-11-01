@@ -36,6 +36,7 @@ export default function PlayerCaseView({
   onVote,
   onAcknowledgeRole,
   onNavigate,
+  freshnessNotice,
 }: {
   game: PlayerGameProjection;
   selectedIds: string[];
@@ -49,6 +50,7 @@ export default function PlayerCaseView({
   onVote: (nominationId: string, intent: boolean) => void;
   onAcknowledgeRole: () => void;
   onNavigate: (view: PlayerView) => void;
+  freshnessNotice?: React.ReactNode;
 }) {
   const mode = selectPlayerPresentation(game);
   const nameById = new Map(game.players.map((p) => [p.id, p.displayName]));
@@ -67,6 +69,7 @@ export default function PlayerCaseView({
         nameById={nameById}
         busy={busy}
         onAcknowledge={onAcknowledgeRole}
+        freshnessNotice={freshnessNotice}
       />
     );
   }
@@ -120,6 +123,7 @@ export default function PlayerCaseView({
       );
       primary = (
         <NominationStage
+          key={`${game.gameId}:${game.version}`}
           candidateName={
             game.investigation?.currentExecutionCandidatePlayerId
               ? (nameById.get(game.investigation.currentExecutionCandidatePlayerId) ?? null)
@@ -156,7 +160,7 @@ export default function PlayerCaseView({
     <div className="flex flex-col gap-3">
       {connectionBlocked && (
         <Notice variant="warning" assertive>
-          Brak połączenia — dane mogą być nieaktualne.
+          Trwa aktualizacja — poczekaj na bieżący stan przed zatwierdzeniem.
         </Notice>
       )}
       {primary}

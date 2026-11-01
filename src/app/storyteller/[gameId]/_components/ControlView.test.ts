@@ -15,11 +15,11 @@ function game(overrides: Partial<StorytellerGameProjection> = {}): StorytellerGa
   };
 }
 
-function render(projection: StorytellerGameProjection, privacyCovered = false) {
+function render(projection: StorytellerGameProjection, privacyCovered = false, busy = false) {
   const noop = () => {};
   const props: ComponentProps<typeof ControlView> = {
     game: projection, blocker: selectPrimaryStorytellerBlocker(projection),
-    control: null, realtime: "LIVE", nameById: new Map(), busy: false,
+    control: null, realtime: "SYNCHRONIZING", nameById: new Map(), busy,
     gameEnded: projection.status === "ENDED", ready: true, need: 0, privacyCovered,
     onStartOperational: noop, onCompleteOperational: noop, onResolveAction: noop,
     onOpenNominations: noop, onCloseNominations: noop, onStartVoting: noop,
@@ -53,6 +53,12 @@ describe("Control projector privacy", () => {
 });
 
 describe("Control investigation closure", () => {
+  it("labels catch-up and disables commands without removing navigation", () => {
+    const html = render(game(), false, true);
+    expect(html).toContain("AKTUALIZACJA…");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Zamknij śledztwo<\/button>/);
+    expect(html).toContain("Otwórz scenariusz");
+  });
   for (const nominationState of [null, "OPEN", "CLOSED"] as const) {
     it(`offers no-execution closure with nomination state ${nominationState}`, () => {
       const projection = game({ investigation: nominationState === null ? null : {
