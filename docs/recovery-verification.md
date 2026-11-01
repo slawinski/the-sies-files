@@ -159,6 +159,74 @@ capsules/reports are retained; inherited directories were not deleted. The
 inherited PG14 service and all its data were not changed (the initial rejected
 connection mistake is disclosed above).
 
+## Review finding #1: final specimen check
+
+The review of HEAD `3eb9e7eef9a249afaed751b233ce009bb8dde56d` identified
+a conditional late-drift false pass, not measured production incidence. The fix
+retains the original manifest/build identity and rechecks the actual working
+capsule after worker/app shutdown, before accepting/writing the receipt. Existing
+source exclusions and build-artifact/lock/schema/migration contracts are unchanged.
+An additional sanitized `fingerprint` result preserves an earlier primary failure.
+
+Actual-source virtual regressions execute the entire current recovery and baseline
+modules with virtual OS adapters; capture, source verification and build hashing
+are real code, not mocked successful comparisons. No real DB/process/port or
+other capsule is mutated. `recovery-fingerprint-red-2/unit.json` records nine
+late-drift cases falsely passing before the fix (compiled artifact in both modes,
+standalone source/test, recorded lock/schema/migration, missing/unreadable artifact).
+`recovery-fingerprint-red-2/dump.json` separately confirms an earlier dump error
+was preserved but the additional fingerprint failure was absent before the fix.
+The initial `recovery-fingerprint-red` run failed on the VM's top-level-await
+wrapper, not the defect. The first green attempt exposed version probes being
+counted as drops in the test adapter; that accounting bug was corrected, without
+weakening cleanup assertions. `recovery-fingerprint-green-2/unit.json` then passed
+all 13 selected new cases, including normal passes and captured-source versus
+checkout independence. Nine old tests were deliberately unselected in this
+virtual-only run, not removed; full-suite receipts below are authoritative.
+
+Post-fix production/standalone receipts are recorded separately below; the earlier
+243/38 receipts above describe only their original pre-fix specimens. Development
+behavior is unchanged; its prior 243/38 run is not relabeled as post-fix evidence.
+
+### Post-fix measured receipts
+
+Both runs measured source
+`59f794b3d93b0d7a217270dcdb2a9e8516dc94bc1f70fb161bd0cb1ae760cb13`
+on reviewed HEAD plus the uncommitted finding-1 fix. This receipt subsection was
+appended afterward; its documentation bytes are not attributed to that digest.
+
+| Run | Actual outcome | Build / artifact SHA-256 |
+|---|---|---|
+| `recovery-fingerprint-production` | **256/256** unit tests, **38/38** ordinary browser cases, **1/1** separate physical recovery case, **16/16** canonical stages; no skips/failures/retries, original/capsule source unchanged, all claims/final fingerprint/cleanup passed | `7z1uKJYWAa7mHxxvp-Mtb` / `a11b2ea4e93f8e955a20fcaf93cd652ac5e90003855944f52ae12b755983de06` |
+| `recovery-fingerprint-standalone` | Fresh locked install/build; **1/1** physical recovery case, all six claims, final fingerprint and cleanup passed | `xOqHqt6OcZtk3ynjCkr14` / `b095649fe36425b57e7ce281932d975cf642eca35078e3e88badd7106b0d17ff` |
+
+The production `run.json`, `unit.json`, `browser.json` and
+`recovery/{recovery,recovery-discovery,recovery-native}.json`, plus the standalone
+three recovery JSON files, retain their native inventories. The audit at
+`recovery-fingerprint-green-2/evidence-audit.json` compared every prior **243**
+unit identity and **38** browser identities: all preserved, exactly **13** new unit
+cases, and one separately inventoried recovery case. It also rehashed both retained
+capsules and artifacts after the runs; both matched their original records.
+The focused entire recovery-tooling file passed **22/22** from the dotenv-free
+production capsule (`recovery-fingerprint-green-2/tooling-unit.json`). Targeted
+ESLint with zero warnings, fresh nonincremental root types and `git diff --check`
+also passed; the canonical capsule independently passed full lint/types/unit gates.
+
+Production source/target PIDs were **23092/23150**, standalone **25423/25452**;
+each report records distinct owned databases. Node **24.8.0**, Chromium
+**151.0.7922.34**, PostgreSQL server/tools **16.15**. Lock/schema/migration hashes
+remain the same as the earlier receipts. These runs used a new owned private PG16
+cluster `sies-fingerprint-20261101-pg16` on **56439**, with explicit URLs and
+dotenv-free capsules; the original PG14 and retained older clusters were untouched.
+
+The resource audit observed port **3100 free**, no drill databases, no private
+archive/socket directories, and released leases. Only the explicitly created
+`fingerprint_canonical_test` verification database remained before final cluster
+cleanup. The final cleanup receipt and documentation-only source delta are retained
+alongside the audit. No physical concurrent artifact mutation was attempted: the
+late-drift negatives are actual-source virtual tests, not measured live incidence.
+No hosted CI or second-human operator is claimed; development was not rerun.
+
 ## Requirement coverage and limits
 
 - **R1–R3 / AE1:** final physical native case, distinct target/PID and identical

@@ -47,6 +47,9 @@ The production baseline hands off only its port lease after awaiting its ordinar
 server's exit, then passes its recorded source/build to recovery. Recovery checks
 source, lockfile, schema, migrations, BUILD_ID and production artifact hashes.
 It refuses a mismatch; it never rebuilds a substituted canonical specimen.
+After worker completion and owned app shutdown, both modes recheck the captured
+working source (including tests) and the original build identity before accepting
+the receipt. Standalone checks its captured capsule, not subsequent checkout edits.
 The `--build-record` option is for this source-bound capsule path, not a shortcut
 for serving an arbitrary preexisting `.next` directory.
 
@@ -70,6 +73,11 @@ contains case IDs/statuses plus sanitized assertion locations; discovery must
 match every native outcome. Missing/truncated reports and skipped/interrupted
 cases fail. The parent reports UTC stages, source/build identities, actual
 Node/Chromium/PG server and tool versions, distinct PIDs/databases, and cleanup.
+For a built specimen, `fingerprint.complete` records the final source/build check.
+A changed, missing or unreadable fingerprint fails overall completion. A sanitized
+`fingerprint.failure` records that failure even when `failure` / `failureStage`
+already identify an earlier cause; owned cleanup still runs. No expected identity
+is regenerated to accept drift.
 CI uploads only the three recovery JSON files, not capsules, archives, sessions
 or raw database exports. Recovery traces/screenshots/video are disabled.
 

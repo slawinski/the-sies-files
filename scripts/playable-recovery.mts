@@ -111,6 +111,9 @@ export async function proveRecovery(options: Options) {
   let ipc: net.Server | undefined;
   let privateDir: string | undefined;
   let work = process.cwd();
+  let manifest: ReturnType<typeof capture> | undefined;
+  let identity: ReturnType<typeof buildIdentity> | undefined;
+  let evidenceComplete = false;
   let stage = 'preflight';
   const report: Record<string, unknown> = { schema: 1, runId: path.basename(out), started: new Date().toISOString(), node: process.version, versions,
     databases: { source: sourceTarget.public, target: targetTarget.public },
@@ -132,18 +135,18 @@ export async function proveRecovery(options: Options) {
     if (options.buildRecord) {
       const record = JSON.parse(fs.readFileSync(options.buildRecord, 'utf8'));
       report.baselineRunId = typeof record.runId === 'string' ? record.runId.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 128) : null;
-      const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(options.buildRecord), 'capsule/manifest.json'), 'utf8'));
+      manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(options.buildRecord), 'capsule/manifest.json'), 'utf8')) as ReturnType<typeof capture>;
       if (verifySource(manifest, work).length || !record.build || record.build.sourceId !== manifest.sourceId) throw new Error('Source/build fingerprint mismatch');
       sourceId = manifest.sourceId;
       const actual = buildIdentity(work, sourceId);
       if (Object.entries(record.build).some(([key, value]) => actual[key as keyof typeof actual] !== value) || !record.build.artifactSha256) throw new Error('Recorded build mismatch');
     } else {
-      const manifest = capture(work, path.join(out, 'capsule'));
+      manifest = capture(work, path.join(out, 'capsule'));
       sourceId = manifest.sourceId; work = path.join(out, 'capsule/source');
       command('npm', ['ci', '--no-audit', '--no-fund'], base.env, work);
       command('npm', ['run', 'build'], { ...base.env, NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1' }, work);
     }
-    const identity = buildIdentity(work, sourceId);
+    identity = buildIdentity(work, sourceId);
     report.build = identity;
     enter('create-source'); source.create(work);
     command('npx', ['prisma', 'migrate', 'deploy'], sourceTarget.env, work);
@@ -249,7 +252,7 @@ export async function proveRecovery(options: Options) {
     fs.writeFileSync(path.join(out, 'recovery-native.json'), JSON.stringify({ cases }, null, 2), { mode: 0o600 });
     if (!discovered.length || JSON.stringify(discovered.map(c => c.id).sort()) !== JSON.stringify(cases.map(c => c.id).sort()) || cases.some(c => !c.results.length || c.results.some(r => r.status !== 'passed'))) throw new Error('Incomplete or failed native recovery inventory');
     if (exit !== 0 || interrupted || lifecycle !== 'verified' || !completeClaims(report.claims)) throw new Error('Recovery worker did not complete required evidence');
-    report.complete = true;
+    evidenceComplete = true;
   } catch (error) {
     report.complete = false; report.failureStage ??= stage;
     // Only our fixed stage errors escape. Never persist an untrusted exception.
@@ -265,9 +268,27 @@ export async function proveRecovery(options: Options) {
       ['source', async () => source?.cleanup(work)],
       ['private-archive', async () => { if (privateDir) fs.rmSync(privateDir, { recursive: true, force: true }); }],
     ] as const) { try { await cleanup(); } catch { failures.push(name); } }
+    // Check the original specimen only after worker/app shutdown. A successful
+    // continuation cannot excuse late source or compiled-artifact drift, and a
+    // failed fingerprint must not prevent any owned-resource cleanup above.
+    let fingerprintComplete = false;
+    if (manifest && identity) {
+      stages.push({ name: 'fingerprint', at: new Date().toISOString() });
+      try {
+        if (verifySource(manifest, work).length) throw new Error('Source/build fingerprint mismatch');
+        if (JSON.stringify(buildIdentity(work, identity.sourceId)) !== JSON.stringify(identity)) throw new Error('Build identity changed');
+        fingerprintComplete = true;
+        report.fingerprint = { complete: true };
+      } catch (error) {
+        const failure = safeFailure(error);
+        report.fingerprint = { complete: false, failure };
+        report.failureStage ??= 'fingerprint';
+        report.failure ??= failure;
+      }
+    }
     report.cleanup = { complete: !failures.length, failed: failures };
     report.cancelled = interrupted;
-    report.complete = report.complete === true && !failures.length;
+    report.complete = evidenceComplete && fingerprintComplete && !failures.length;
     report.finished = new Date().toISOString();
     if (fs.existsSync(out)) fs.writeFileSync(path.join(out, 'recovery.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
   }

@@ -6,6 +6,55 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { virtualRecovery } from './helpers/recovery-virtual';
+
+it.each(['recorded', 'standalone'] as const)('proves unchanged final identity in %s mode', async mode => {
+  const result = await virtualRecovery(mode, 'none');
+  expect(result.passed).toBe(true);
+  expect(result.report.fingerprint).toEqual({ complete: true });
+  expect(result.report.cleanup).toEqual({ complete: true, failed: [] });
+  expect(result.liveChildren).toBe(0);
+  expect(result.privateFiles).toEqual([]);
+});
+
+it.each([
+  ['recorded', 'artifact'], ['standalone', 'artifact'], ['standalone', 'source'], ['standalone', 'test'],
+  ['recorded', 'lock'], ['recorded', 'schema'], ['recorded', 'migration'],
+  ['standalone', 'missing-artifact'], ['standalone', 'unreadable-artifact'],
+] as const)('rejects late %s %s drift after worker completion and app shutdown', async (mode, mutation) => {
+  const result = await virtualRecovery(mode, mutation);
+  expect(result.events.indexOf('late-mutation')).toBeGreaterThan(result.events.indexOf('worker-complete'));
+  expect(result.passed).toBe(false);
+  expect(result.report.complete).toBe(false);
+  expect(result.report.failureStage).toBe('fingerprint');
+  expect(result.report.fingerprint?.complete).toBe(false);
+  expect(result.serialized).not.toContain('private-secret-row');
+  expect(result.report.cleanup).toEqual({ complete: true, failed: [] });
+  expect(result.events.filter(e => e.startsWith('dropdb:'))).toHaveLength(2);
+  expect(result.events.filter(e => e === 'release-lease')).toHaveLength(2);
+  expect(result.liveChildren).toBe(0);
+  expect(result.privateFiles).toEqual([]);
+});
+
+it('checks the standalone captured working source, not later checkout edits', async () => {
+  const result = await virtualRecovery('standalone', 'checkout');
+  expect(result.passed).toBe(true);
+  expect(result.report.fingerprint).toEqual({ complete: true });
+});
+
+it('preserves an earlier dump failure without completion while recording fingerprint failure and cleaning', async () => {
+  const result = await virtualRecovery('standalone', 'unreadable-artifact', true);
+  expect(result.passed).toBe(false);
+  expect(result.report.failureStage).toBe('dump');
+  expect(result.report.failure).toBe('pg_dump failed (exit 1)');
+  expect(result.report.fingerprint).toEqual({ complete: false, failure: 'Recovery stage failed; private details withheld' });
+  expect(result.serialized).not.toContain('private-secret-row');
+  expect(result.report.cleanup).toEqual({ complete: true, failed: [] });
+  expect(result.events.filter(e => e.startsWith('dropdb:'))).toHaveLength(1);
+  expect(result.events.filter(e => e === 'release-lease')).toHaveLength(2);
+  expect(result.liveChildren).toBe(0);
+  expect(result.privateFiles).toEqual([]);
+});
 
 it("refuses legacy backup arguments rather than treating them as destructive authorization", () => {
   const result = spawnSync("bash", ["scripts/backup-restore.sh", "existing_database", "another_database"], { encoding: "utf8", env: { PATH: process.env.PATH, NODE_ENV: "test" } });
