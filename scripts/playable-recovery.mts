@@ -70,11 +70,23 @@ async function terminate(child: ChildProcess) {
 }
 
 export function buildIdentity(work: string, sourceId: string) {
+  const artifacts: [string, string][] = [];
+  const visit = (dir: string) => {
+    for (const name of fs.readdirSync(path.join(work, '.next', dir)).sort()) {
+      if (!dir && ['cache', 'diagnostics', 'trace', 'trace-build', 'dev', 'lock'].includes(name)) continue;
+      const relative = path.join(dir, name);
+      const file = path.join(work, '.next', relative);
+      if (fs.statSync(file).isDirectory()) visit(relative);
+      else artifacts.push([relative, hash(fs.readFileSync(file))]);
+    }
+  };
+  visit('');
   const migrations = fs.readdirSync(path.join(work, 'prisma/migrations')).sort()
     .filter(n => fs.existsSync(path.join(work, 'prisma/migrations', n, 'migration.sql')))
     .map(n => [n, hash(fs.readFileSync(path.join(work, 'prisma/migrations', n, 'migration.sql')))]);
   return { sourceId, id: fs.readFileSync(path.join(work, '.next/BUILD_ID'), 'utf8').trim(),
     lockSha256: hash(fs.readFileSync(path.join(work, 'package-lock.json'))),
+    artifactSha256: hash(JSON.stringify(artifacts)),
     schemaSha256: hash(fs.readFileSync(path.join(work, 'prisma/schema.prisma'))), migrationsSha256: hash(JSON.stringify(migrations)) };
 }
 
@@ -95,10 +107,11 @@ export async function proveRecovery(options: Options) {
   let work = process.cwd();
   let stage = 'preflight';
   const report: Record<string, unknown> = { schema: 1, runId: path.basename(out), started: new Date().toISOString(), node: process.version, versions,
+    databases: { source: sourceTarget.public, target: targetTarget.public },
     claims: Object.fromEntries(REQUIRED_CLAIMS.map(k => [k, false])), stages: [], cleanup: 'pending', complete: false };
   const stages = report.stages as { name: string; at: string }[];
-  const enter = (name: string) => { stage = name; stages.push({ name, at: new Date().toISOString() }); };
   let interrupted = false;
+  const enter = (name: string) => { if (interrupted) throw new Error('Recovery cancelled'); stage = name; stages.push({ name, at: new Date().toISOString() }); };
   const cancel = () => { interrupted = true; if (worker) void terminate(worker); };
   process.on('SIGINT', cancel); process.on('SIGTERM', cancel);
   try {
@@ -115,7 +128,8 @@ export async function proveRecovery(options: Options) {
       const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(options.buildRecord), 'capsule/manifest.json'), 'utf8'));
       if (verifySource(manifest, work).length || !record.build || record.build.sourceId !== manifest.sourceId) throw new Error('Source/build fingerprint mismatch');
       sourceId = manifest.sourceId;
-      if (record.build.id !== buildIdentity(work, sourceId).id || record.build.lockSha256 !== buildIdentity(work, sourceId).lockSha256) throw new Error('Recorded build mismatch');
+      const actual = buildIdentity(work, sourceId);
+      if (Object.entries(record.build).some(([key, value]) => actual[key as keyof typeof actual] !== value) || !record.build.artifactSha256) throw new Error('Recorded build mismatch');
     } else {
       const manifest = capture(work, path.join(out, 'capsule'));
       sourceId = manifest.sourceId; work = path.join(out, 'capsule/source');
@@ -163,7 +177,9 @@ export async function proveRecovery(options: Options) {
             const msg = JSON.parse(data);
             if (msg.token !== token || interrupted) throw new Error('IPC authorization refused');
             if (msg.action === 'start-source' && lifecycle === 'created') {
-              enter('serve-source'); const pid = await start(sourceTarget); report.sourcePid = pid; lifecycle = 'source'; return { pid };
+              enter('serve-source'); const pid = await start(sourceTarget); report.sourcePid = pid; lifecycle = 'source';
+              if (options.negativeControl === 'worker-exit') setTimeout(() => { if (worker) void terminate(worker); }, 10);
+              return { pid };
             }
             if (msg.action === 'restore-target' && lifecycle === 'source') {
               enter('stop-source'); await terminate(app!); app = undefined; await assertPortFree(3100);
@@ -204,17 +220,21 @@ export async function proveRecovery(options: Options) {
     command('npx', ['playwright', 'test', '--config=playwright.recovery.config.ts', '--list', '--reporter=json'], { ...env, PLAYWRIGHT_JSON_OUTPUT_FILE: path.join(out, 'recovery-discovery.json') }, work);
     worker = spawn('npx', ['playwright', 'test', '--config=playwright.recovery.config.ts', '--reporter=json'], { cwd: work, env, detached: true, stdio: 'ignore' });
     const timer = setTimeout(() => { interrupted = true; void terminate(worker!); }, 240_000);
-    const fault = options.negativeControl === 'worker-exit' ? setTimeout(() => void terminate(worker!), 5000) : undefined;
     const exit = await new Promise<number | null>(resolve => { worker!.once('error', () => resolve(null)); worker!.once('close', resolve); });
-    clearTimeout(timer); clearTimeout(fault);
+    clearTimeout(timer);
     // Only a credential-free inventory is retained. Native error/attachments
     // may contain private DTOs, so raw native output stays in the private dir.
     const discovery = JSON.parse(fs.readFileSync(path.join(out, 'recovery-discovery.json'), 'utf8'));
     const native = JSON.parse(fs.readFileSync(path.join(privateDir, 'native.json'), 'utf8'));
     const inventory = (s: { suites?: unknown[]; specs?: unknown[] }): unknown[] => [ ...(s.specs ?? []), ...(s.suites ?? []).flatMap(v => inventory(v as typeof s)) ];
     const discovered = inventory(discovery) as { id: string }[];
-    const outcomes = inventory(native) as { id: string; tests: { results: { status: string }[] }[] }[];
-    const cases = outcomes.map(c => ({ id: c.id, results: c.tests.flatMap(t => t.results.map(r => ({ status: r.status }))) }));
+    const outcomes = inventory(native) as { id: string; tests: { results: { status: string; errors?: { message?: string; stack?: string }[] }[] }[] }[];
+    const cases = outcomes.map(c => ({ id: c.id, results: c.tests.flatMap(t => t.results.map(r => ({ status: r.status,
+      failures: (r.errors ?? []).map(e => ({
+        reason: /Recovery comparison failed: [a-zA-Z0-9 _-]+/.exec(e.message ?? '')?.[0] ?? 'Native assertion failed; private values withheld',
+        frames: ((e.stack ?? '') + (e.message ?? '')).match(/(?:e2e-11-playable-recovery\.spec|recovery-fixtures)\.ts:\d+:\d+/g) ?? [],
+      })),
+    }))) }));
     fs.writeFileSync(path.join(out, 'recovery-native.json'), JSON.stringify({ cases }, null, 2), { mode: 0o600 });
     if (!discovered.length || JSON.stringify(discovered.map(c => c.id).sort()) !== JSON.stringify(cases.map(c => c.id).sort()) || cases.some(c => !c.results.length || c.results.some(r => r.status !== 'passed'))) throw new Error('Incomplete or failed native recovery inventory');
     if (exit !== 0 || interrupted || lifecycle !== 'verified' || !completeClaims(report.claims)) throw new Error('Recovery worker did not complete required evidence');

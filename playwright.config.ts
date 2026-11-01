@@ -5,6 +5,7 @@ const target = resolveTarget();
 const production = process.env.BASELINE_PROFILE === 'production';
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: 'e2e-11-playable-recovery.spec.ts',
   fullyParallel: false,
   workers: 1,
   retries: 0,
