@@ -5,8 +5,21 @@
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import type { Viewer } from "@/lib/auth/http";
 
 type Db = Prisma.TransactionClient | typeof prisma;
+
+/** Revalidate the exact admitted row; later request cookies cannot replace it. */
+export async function recheckViewerSession(viewer: Viewer, gameId: string, now = new Date()) {
+  return prisma.browserSession.findFirst({
+    where: { id: viewer.sessionId, revokedAt: null, expiresAt: { gt: now },
+      ...(viewer.kind === "storyteller"
+        ? { storytellerGameId: gameId, playerId: null }
+        : { playerId: viewer.playerId, storytellerGameId: null, player: { gameId } }),
+    },
+    select: { expiresAt: true },
+  });
+}
 
 export interface CreateSessionArgs {
   sessionTokenHash: string;

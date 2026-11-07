@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { DomainError, httpStatusFor } from "@/lib/errors";
-import { resolveViewer } from "@/lib/auth/http";
+import { resolveViewer, type Viewer } from "@/lib/auth/http";
+import { recheckViewerSession } from "@/modules/auth/session";
 import { subscribe } from "@/modules/realtime/broker";
 
 export const runtime = "nodejs";
@@ -31,13 +32,15 @@ export async function GET(
 ) {
   const { gameId } = await params;
 
+  let viewer: Viewer;
+  let game;
   try {
-    await resolveViewer(gameId); // throws 401/404 unless a member
+    viewer = await resolveViewer(gameId); // throws 401/404 unless a member
+    game = await prisma.gameSession.findUnique({ where: { id: gameId } });
   } catch (err) {
     return streamError(err);
   }
 
-  const game = await prisma.gameSession.findUnique({ where: { id: gameId } });
   if (!game) {
     return streamError(new DomainError("GAME_NOT_FOUND", "Game not found"));
   }
@@ -45,39 +48,80 @@ export async function GET(
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | undefined;
   let closed = false;
+  let cleanup = () => {};
 
   const stream = new ReadableStream({
     start(controller) {
-      const send = (type: string, version: number, sequence: number) => {
+      let idle: ReturnType<typeof setTimeout> | undefined;
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      let expiry: ReturnType<typeof setTimeout> | undefined;
+      let expiresAt = Infinity;
+      let checking = false;
+      let hello = true;
+      let pending: { type: string; version: number; sequence: number } | null = {
+        type: "hello", version: game.version, sequence: game.eventSequence,
+      };
+      const close = () => {
         if (closed) return;
-        const data = JSON.stringify({ gameId, type, version, sequence });
+        closed = true;
+        pending = null;
+        clearTimeout(idle); clearTimeout(deadline); clearTimeout(expiry);
+        unsubscribe?.();
+        req.signal.removeEventListener("abort", close);
+        try { controller.close(); } catch { /* reader already closed */ }
+      };
+      cleanup = close;
+      const send = (type: string, data: object, sequence?: number) => {
+        if (closed) return;
         try {
           controller.enqueue(
-            encoder.encode(`event: ${type}\ndata: ${data}\nid: ${sequence}\n\n`),
+            encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n${sequence === undefined ? "" : `id: ${sequence}\n`}\n`),
           );
-        } catch {
-          closed = true;
-        }
+        } catch { close(); }
       };
-
-      send("hello", game.version, game.eventSequence);
-      unsubscribe = subscribe(gameId, (ev) => {
-        send(ev.type, ev.version, ev.sequence);
+      const lost = () => { send("access-lost", {}); close(); };
+      const check = () => {
+        if (closed || checking) return;
+        if (Date.now() >= expiresAt) { lost(); return; }
+        checking = true;
+        clearTimeout(idle);
+        const started = Date.now();
+        const due = started + 5_000;
+        // A query may not be cancellable. Its late completion has no authority.
+        deadline = setTimeout(close, 5_000);
+        void recheckViewerSession(viewer, gameId).then(session => {
+          if (closed) return;
+          if (Date.now() >= due) { close(); return; }
+          if (!session) { lost(); return; }
+          expiresAt = session.expiresAt.getTime();
+          if (Date.now() >= expiresAt) { lost(); return; }
+          clearTimeout(expiry);
+          expiry = setTimeout(() => { if (Date.now() >= expiresAt) lost(); else check(); }, Math.min(expiresAt - Date.now(), 2_147_483_647));
+          const next = pending;
+          pending = null;
+          if (next) {
+            const type = hello ? "hello" : next.type;
+            hello = false;
+            send(type, { gameId, type, version: next.version, sequence: next.sequence }, next.sequence);
+          }
+          clearTimeout(deadline);
+          checking = false;
+          // Count from attempt start, not completion: a slow prior read must
+          // not add another five seconds to the nominal 10s + 5s bound.
+          if (!closed) idle = setTimeout(check, Math.max(0, started + 10_000 - Date.now()));
+        }, () => close()); // uncertainty is not a definite access-loss assertion
+      };
+      req.signal.addEventListener("abort", close);
+      if (req.signal.aborted) { close(); return; }
+      unsubscribe = subscribe(gameId, ev => {
+        if (closed) return;
+        if (!pending || ev.sequence >= pending.sequence) pending = ev;
+        check();
       });
-
-      req.signal.addEventListener("abort", () => {
-        closed = true;
-        unsubscribe?.();
-        try {
-          controller.close();
-        } catch {
-          /* already closed */
-        }
-      });
+      check();
     },
     cancel() {
-      closed = true;
-      unsubscribe?.();
+      cleanup();
     },
   });
 
