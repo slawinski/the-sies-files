@@ -5,7 +5,7 @@ const target = resolveTarget();
 const production = process.env.BASELINE_PROFILE === 'production';
 export default defineConfig({
   testDir: './tests/e2e',
-  testIgnore: 'e2e-11-playable-recovery.spec.ts',
+  testIgnore: ['e2e-11-playable-recovery.spec.ts', 'e2e-12-access-boundaries.spec.ts'],
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -19,7 +19,7 @@ export default defineConfig({
     command: process.env.BASELINE_DB_LEASE
       ? `npx tsx scripts/test-database.mts serve ${production ? 'production' : 'development'}`
       : production ? 'npm run start -- --port 3100' : 'npm run dev -- --port 3100',
-    env: { ...target.env, NODE_ENV: production ? 'production' : 'development', RATE_LIMIT_DISABLED: '1' } as Record<string, string>,
+    env: { ...target.env, NODE_ENV: production ? 'production' : 'development', RATE_LIMIT_DISABLED: '1', APP_ORIGIN: 'http://localhost:3100' } as Record<string, string>,
     url: 'http://localhost:3100',
     reuseExistingServer: false,
     timeout: 120_000,

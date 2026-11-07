@@ -156,7 +156,7 @@ export async function proveRecovery(options: Options) {
       await assertPortFree(3100);
       if (JSON.stringify(buildIdentity(work, sourceId)) !== JSON.stringify(identity)) throw new Error('Build identity changed');
       app = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--port', options.negativeControl === 'launch-failure' ? 'invalid' : '3100'], {
-        cwd: work, env: { ...db.env, NODE_ENV: 'production', RATE_LIMIT_DISABLED: '1', NEXT_TELEMETRY_DISABLED: '1' }, detached: true, stdio: 'ignore',
+        cwd: work, env: { ...db.env, NODE_ENV: 'production', RATE_LIMIT_DISABLED: '1', APP_ORIGIN: 'http://localhost:3100', NEXT_TELEMETRY_DISABLED: '1' }, detached: true, stdio: 'ignore',
       });
       app.on('error', () => { /* Readiness observes failed spawn without logging env. */ });
       const pid = app.pid;

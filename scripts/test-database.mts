@@ -36,7 +36,14 @@ export function acquireLease(target: Target, port?: number) {
       fs.writeFileSync(fd, JSON.stringify({ token, pid: process.pid })); fs.closeSync(fd); owned.push(file);
     }
   } catch { for (const file of owned) fs.unlinkSync(file); throw new Error('Disposable resource already owned; do not reset or kill its owner'); }
-  return { token, releasePort(proof: string) {
+  return { token, acquirePort(proof: string) {
+    const file = port && lockPath(`port:${port}`);
+    if (proof !== token || !file || owned.includes(file)) throw new Error('Port ownership invalid');
+    assertLease(target, token);
+    const fd = fs.openSync(file, 'wx', 0o600);
+    try { fs.writeFileSync(fd, JSON.stringify({ token, pid: process.pid })); owned.push(file); }
+    finally { fs.closeSync(fd); }
+  }, releasePort(proof: string) {
     const file = port && lockPath(`port:${port}`);
     if (proof !== token || !file || !owned.includes(file) || JSON.parse(fs.readFileSync(file, 'utf8')).token !== token) throw new Error('Port ownership changed');
     fs.unlinkSync(file);
@@ -75,11 +82,16 @@ export async function stopOwnedServer(target: Target, token?: string) {
     try { process.kill(-pid, 'SIGKILL'); } catch { /* Owned group exited. */ }
   }
 }
-async function serve(target: Target, token: string, profile: string) {
+export function serverEnvironment(target: Target, profile: string, purpose: 'ordinary' | 'security' = 'ordinary'): NodeJS.ProcessEnv {
+  if (!['development', 'production'].includes(profile) || !['ordinary', 'security'].includes(purpose)) throw new Error('Invalid owned server profile or purpose');
+  return { ...target.env, NODE_ENV: profile === 'production' ? 'production' : 'development',
+    APP_ORIGIN: 'http://localhost:3100', RATE_LIMIT_DISABLED: purpose === 'security' ? '0' : '1' };
+}
+async function serve(target: Target, token: string, profile: string, purpose: 'ordinary' | 'security') {
   const owner = serverOwner(target, token);
   if (owner.serverPid) throw new Error('Owned server already recorded');
   const child = spawn('npm', ['run', profile === 'production' ? 'start' : 'dev', '--', '--port', '3100'], {
-    env: { ...target.env, NODE_ENV: profile === 'production' ? 'production' : 'development', RATE_LIMIT_DISABLED: '1' },
+    env: serverEnvironment(target, profile, purpose),
     detached: true, stdio: 'inherit',
   });
   if (!child.pid) throw new Error('Owned server could not start');
@@ -111,7 +123,9 @@ if (process.argv[1] && path.basename(process.argv[1]) === 'test-database.mts') {
   const target = resolveTarget();
   if (process.argv[2] === 'serve') {
     if (!process.env.BASELINE_DB_LEASE || !['development', 'production'].includes(process.argv[3])) throw new Error('Owned server requires a live baseline lease and profile');
-    void serve(target, process.env.BASELINE_DB_LEASE, process.argv[3]).catch(error => {
+    const purpose = process.argv[4] ?? 'ordinary';
+    if (purpose !== 'ordinary' && purpose !== 'security') throw new Error('Invalid verification purpose');
+    void serve(target, process.env.BASELINE_DB_LEASE, process.argv[3], purpose).catch(error => {
       console.error((error as Error).message); process.exitCode = 1;
     });
   } else {

@@ -10,6 +10,12 @@ the existing database.
 
 ## Prerequisites and invocation
 
+Owned recovery servers explicitly use `APP_ORIGIN=http://localhost:3100`.
+The canonical production baseline still requires this physical drill before
+the separate limiter-enabled E2E-12 profile reacquires port 3100. Recovery's
+limiter bypass, two-database ownership, exact-build checks and native E2E-11
+inventory are unchanged; the new security profile does not replace this proof.
+
 - Node 24, locked `npm ci`, existing Playwright Chromium (`npx playwright install
   chromium`), and PostgreSQL 16 `psql`, `createdb`, `dropdb`, `pg_dump`, `pg_restore`
   in PATH. Wrong server/client majors fail before allocation.

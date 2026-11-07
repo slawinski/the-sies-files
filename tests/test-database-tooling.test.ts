@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { resolveTarget, acquireLease, assertLease } from '../scripts/test-database.mjs';
+import { resolveTarget, acquireLease, assertLease, serverEnvironment } from '../scripts/test-database.mjs';
 
 test('explicit target is identical for Prisma and libpq with decoded credentials', () => {
   const t = resolveTarget({ DATABASE_URL: 'postgresql://u%40ser:p%40ss%27%24@127.0.0.1:55439/baseline_test', PGSERVICEFILE: '/not-read', PGSERVICE: 'wrong' });
@@ -50,5 +50,14 @@ test('token-checked port handoff retains exclusive database ownership', () => {
     expect(() => assertLease(a, lease.token)).not.toThrow();
     expect(() => acquireLease(a)).toThrow('already owned');
     acquireLease(b, port).release();
+    lease.acquirePort(lease.token);
+    expect(() => acquireLease(b, port)).toThrow('already owned');
+    expect(() => assertLease(a, lease.token)).not.toThrow();
   } finally { lease.release(); }
+});
+
+test.each(['production', 'development'])('security purpose overrides inherited limiter bypass in actual %s child environment', profile => {
+  const target = resolveTarget({ DATABASE_URL: 'postgresql://u@localhost/launch_test', RATE_LIMIT_DISABLED: '1', APP_ORIGIN: 'https://wrong.example' });
+  expect(serverEnvironment(target, profile, 'security')).toMatchObject({ RATE_LIMIT_DISABLED: '0', APP_ORIGIN: 'http://localhost:3100', NODE_ENV: profile });
+  expect(serverEnvironment(target, profile, 'ordinary').RATE_LIMIT_DISABLED).toBe('1');
 });

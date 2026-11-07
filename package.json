@@ -12,6 +12,7 @@
     "test:watch": "vitest --no-file-parallelism",
     "test:coverage": "vitest run --coverage --no-file-parallelism",
     "test:e2e": "playwright test",
+    "test:security": "playwright test --config=playwright.security.config.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:reset": "bash scripts/reset-e2e-db.sh",
     "baseline": "tsx scripts/regression-baseline.mts",

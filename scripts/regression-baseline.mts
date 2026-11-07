@@ -96,7 +96,7 @@ export async function assertPortFree(port: number) {
     });
   }
 }
-type Stage = { name: string; command: string; args: string[]; requires?: string[]; timeout?: number; env?: NodeJS.ProcessEnv };
+type Stage = { name: string; command: string; args: string[]; requires?: string[]; timeout?: number; env?: NodeJS.ProcessEnv; private?: boolean };
 type StageResult = { name: string; status: 'passed' | 'failed' | 'blocked'; exit: number | null; signal?: string | null; reason?: string; command?: string; args?: string[]; started?: string; durationMs?: number };
 export async function runStages(stages: Stage[], cwd: string, env: NodeJS.ProcessEnv, out: string, onResult?: (result: StageResult) => void | Promise<void>) {
   fs.mkdirSync(out, { recursive: true });
@@ -109,7 +109,9 @@ export async function runStages(stages: Stage[], cwd: string, env: NodeJS.Proces
       const missing = stage.requires?.filter(name => !results.some(r => r.name === name && r.status === 'passed')) ?? [];
       if (interrupted || missing.length) results.push({ name: stage.name, status: 'blocked', exit: null, reason: interrupted ? 'interrupted' : `prerequisite: ${missing.join(', ')}` });
       else {
-        const started = Date.now(); const fd = fs.openSync(path.join(out, stage.name + '.log'), 'w', 0o600);
+        const logRoot = stage.private ? path.join(out, 'security-private') : out;
+        fs.mkdirSync(logRoot, { recursive: true, mode: 0o700 });
+        const started = Date.now(); const fd = fs.openSync(path.join(logRoot, stage.name + '.log'), 'w', 0o600);
         const child = spawn(stage.command, stage.args, { cwd, env: { ...env, ...stage.env }, detached: true, stdio: ['ignore', fd, fd] });
         let escalation: NodeJS.Timeout | undefined;
         let timedOut = false;
@@ -179,6 +181,18 @@ export function readRecoveryInventory(out: string) {
   if (!discovered.length || !Array.isArray(native.cases) || JSON.stringify(discovered) !== JSON.stringify(native.cases.map(c => c.id).sort()) || native.cases.some(c => !c.results.length)) throw new Error('Incomplete recovery discovery/outcome inventory');
   return { discovered, cases: native.cases };
 }
+export function readSecurityInventory(out: string) {
+  const read = (name: string) => {
+    try { return browserInventory(JSON.parse(fs.readFileSync(path.join(out, 'security-private', name), 'utf8'))); }
+    catch { throw new Error('Missing or truncated security inventory'); }
+  };
+  const discovered = read('discovery.json');
+  const outcomes = read('native.json');
+  if (!discovered.length || JSON.stringify(discovered.map(t => t.id).sort()) !== JSON.stringify(outcomes.map(t => t.id).sort()) || outcomes.some(t => !t.results.length)) throw new Error('Incomplete security discovery/outcome inventory');
+  // Deliberate allowlist: no error messages, attachments, bodies or stdout.
+  const cases = outcomes.map(t => ({ id: t.id, file: t.file, title: t.title, project: t.project, statuses: t.results.map(r => r.status) }));
+  return { status: cases.every(t => t.statuses.every(s => s === 'passed')) ? 'passed' : 'failed', cases };
+}
 export async function measure(root: string, out: string, profile: 'development' | 'production', reference?: string) {
   root = fs.realpathSync(root); out = path.resolve(out);
   if (fs.existsSync(out)) throw new Error('Use a new run directory; earlier evidence is immutable');
@@ -190,6 +204,7 @@ export async function measure(root: string, out: string, profile: 'development' 
     timezone: 'UTC', locale: 'en_US.UTF-8', target: target.public, retries: 0, workers: 1 };
   const write = () => fs.writeFileSync(path.join(out, 'run.json'), JSON.stringify(metadata, null, 2));
   write();
+  fs.writeFileSync(path.join(out, 'security-summary.json'), JSON.stringify({ status: 'blocked', reason: 'Security stage has not completed' }));
   try {
     await assertPortFree(3100);
     const manifest = capture(root, path.join(out, 'capsule'));
@@ -208,6 +223,7 @@ export async function measure(root: string, out: string, profile: 'development' 
       if (appChanges.length || dependenciesChanged) throw new Error('Application/dependency delta exceeds baseline scope');
     }
     const env = { ...target.env, BASELINE_DB_LEASE: lease.token, BASELINE_PROFILE: profile,
+      APP_ORIGIN: 'http://localhost:3100', STORYTELLER_RECOVERY_SECRET: crypto.randomUUID(),
       TZ: 'UTC', LANG: 'en_US.UTF-8', NEXT_TELEMETRY_DISABLED: '1', CI: '1',
       PLAYWRIGHT_JSON_OUTPUT_FILE: path.join(out, 'browser.json'),
       PLAYWRIGHT_HTML_OUTPUT_DIR: path.join(out, 'html') };
@@ -218,7 +234,7 @@ export async function measure(root: string, out: string, profile: 'development' 
       stage('npm-version', 'npm', ['--version']),
       stage('browser-version', process.execPath, ['-e', "(async () => { const b = await require('@playwright/test').chromium.launch(); console.log(b.version()); await b.close(); })().catch(e => { console.error(e.message); process.exitCode = 1; })"]),
       stage('lint', 'npm', ['run', 'lint']),
-      stage('types', 'npm', ['run', 'typecheck']),
+      stage('types', 'npm', ['run', 'typecheck', '--', '--incremental', 'false']),
       stage('generate', 'npm', ['run', 'db:generate']),
       stage('reset-unit', 'npx', ['tsx', 'scripts/test-database.mts', 'reset'], ['generate']),
       stage('postgres-version', 'psql', ['-Atc', 'SELECT version()'], ['reset-unit']),
@@ -230,6 +246,11 @@ export async function measure(root: string, out: string, profile: 'development' 
       stage('browser-discovery', 'npx', ['playwright', 'test', '--list', '--reporter=json']),
       stage('browser', 'npm', ['run', 'test:e2e', '--', '--reporter=list,json', '--output=' + path.join(out, 'browser-artifacts')], ['reset-browser', ...(profile === 'production' ? ['build'] : [])]),
       ...(profile === 'production' ? [stage('recovery', 'npm', ['run', 'recovery:prove', '--', '--output', path.join(out, 'recovery'), '--build-record', path.join(out, 'run.json')], ['build', 'generate'])] : []),
+      stage('reset-security', 'npx', ['tsx', 'scripts/test-database.mts', 'reset'], ['generate']),
+      { ...stage('security-discovery', 'npm', ['run', 'test:security', '--', '--list', '--reporter=json']), private: true,
+        env: { ...env, PLAYWRIGHT_JSON_OUTPUT_FILE: path.join(out, 'security-private/discovery.json') } },
+      { ...stage('security', 'npm', ['run', 'test:security', '--', '--reporter=list,json', '--output=' + path.join(out, 'security-private/artifacts')], ['reset-security', ...(profile === 'production' ? ['build'] : [])]), private: true,
+        env: { ...env, RATE_LIMIT_DISABLED: '0', PLAYWRIGHT_JSON_OUTPUT_FILE: path.join(out, 'security-private/native.json') } },
     ];
     // Discovery writes to a different native reporter file; it must not overwrite outcomes.
     stages.find(s => s.name === 'browser-discovery')!.env = { ...env, PLAYWRIGHT_JSON_OUTPUT_FILE: path.join(out, 'browser-discovery.json') };
@@ -245,9 +266,21 @@ export async function measure(root: string, out: string, profile: 'development' 
         lease.releasePort(lease.token);
         metadata.serverPortReleased = true;
       }
+      if (result.name === 'recovery' || (profile === 'development' && result.name === 'browser')) {
+        lease.acquirePort(lease.token);
+        await assertPortFree(3100);
+        metadata.securityPortReacquired = true;
+      }
+      if (result.name === 'security') {
+        await stopOwnedServer(target, lease.token);
+        await assertPortFree(3100);
+      }
       write();
     });
     metadata.stages = results;
+    try { metadata.security = readSecurityInventory(out); }
+    catch { metadata.security = { status: 'failed', reason: 'Security inventory missing or incomplete' }; }
+    fs.writeFileSync(path.join(out, 'security-summary.json'), JSON.stringify(metadata.security, null, 2));
     if (profile === 'development') metadata.recovery = { status: 'not-applicable', reason: 'Physical recovery requires the production build; development output is deliberately rebuilt by the dev server' };
     else {
       const recoveryStage = results.find(s => s.name === 'recovery');
@@ -272,7 +305,7 @@ export async function measure(root: string, out: string, profile: 'development' 
     metadata.originalSourceUnchanged = capture(root).sourceId === manifest.sourceId;
     await stopOwnedServer(target, lease.token);
     await assertPortFree(3100); metadata.serverPortReleased = true;
-    metadata.complete = results.every(s => s.status === 'passed') && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed'));
+    metadata.complete = results.every(s => s.status === 'passed') && (metadata.security as { status: string }).status === 'passed' && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed'));
     write();
     return metadata.complete === true;
   } catch (error) { metadata.complete = false; metadata.blocker = (error as Error).message; write(); return false; }

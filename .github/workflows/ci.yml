@@ -65,6 +65,7 @@ jobs:
             baseline-results/ci-production/*discovery.json
             baseline-results/ci-production/unit.json
             baseline-results/ci-production/browser.json
+            baseline-results/ci-production/security-summary.json
             baseline-results/ci-production/recovery/recovery.json
             baseline-results/ci-production/recovery/recovery-native.json
             baseline-results/ci-production/recovery/recovery-discovery.json
