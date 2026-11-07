@@ -101,14 +101,18 @@ export function assertSameOrigin(req: Request): void {
   if (req.headers.get("sec-fetch-site") === "cross-site") {
     throw new DomainError("FORBIDDEN", "Cross-site request rejected");
   }
-  const origin = req.headers.get("origin");
-  if (!origin) return; // non-browser client — allow
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   try {
-    if (host && new URL(origin).host !== host) {
-      throw new DomainError("FORBIDDEN", "Cross-site request rejected");
-    }
+    const configured = process.env.APP_ORIGIN ?? "http://localhost:3000";
+    const isOrigin = (value: string) => {
+      const url = new URL(value);
+      return ["http:", "https:"].includes(url.protocol) && url.origin === value && !url.username && !url.password;
+    };
+    if (!isOrigin(configured)) throw new Error("Invalid configuration");
+    const origin = req.headers.get("origin");
+    // Existing non-browser API compatibility, not an authentication mechanism.
+    if (origin === null) return;
+    if (!isOrigin(origin) || origin !== configured) throw new Error("Disallowed origin");
   } catch {
-    throw new DomainError("FORBIDDEN", "Invalid Origin header");
+    throw new DomainError("FORBIDDEN", "Cross-site request rejected");
   }
 }

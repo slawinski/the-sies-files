@@ -26,9 +26,10 @@ export function isRateLimitingDisabled(): boolean {
 }
 
 export function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  // No authenticated ingress identity exists locally. All anonymous callers
+  // share the existing fallback; client-supplied addresses are not identities.
+  void req;
+  return "unknown";
 }
 
 export async function rateLimit(key: string, limit: number, windowMs: number): Promise<void> {
