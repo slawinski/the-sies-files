@@ -9,6 +9,7 @@ import {
 } from "@/modules/game-session/game-session.service";
 import { prisma } from "@/lib/db";
 import { hashToken } from "@/lib/auth/tokens";
+import { resetPlayerAccess } from "@/modules/recovery/recovery.service";
 
 beforeEach(resetDb);
 
@@ -24,6 +25,28 @@ async function setupPlayer() {
 }
 
 describe("claim token issuance + consumption", () => {
+  it("reset rejects both old-token replay forms while the fresh token works", async () => {
+    const { gameId, playerId, version } = await setupPlayer();
+    const old = newClaimToken();
+    await issueClaimToken({ gameId, playerId, commandId: randomUUID(), expectedVersion: version, tokenHash: old.tokenHash, expiresAt: old.expiresAt });
+    const commandId = randomUUID();
+    const claimed = await claimPlayer({ token: old.token, commandId });
+    const reset = await resetPlayerAccess({ gameId, playerId, commandId: randomUUID(), expectedVersion: claimed.version });
+    for (const replayId of [commandId, randomUUID()]) {
+      await expect(claimPlayer({ token: old.token, commandId: replayId })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    }
+    expect((await claimPlayer({ token: reset.claimToken, commandId: randomUUID() })).playerId).toBe(playerId);
+  });
+  it("expired issued tokens fail without consuming or creating a session", async () => {
+    const { gameId, playerId, version } = await setupPlayer();
+    const { token, tokenHash, expiresAt } = newClaimToken();
+    await issueClaimToken({ gameId, playerId, commandId: randomUUID(), expectedVersion: version, tokenHash, expiresAt });
+    await prisma.playerClaim.update({ where: { playerId }, data: { expiresAt: new Date(Date.now() - 1) } });
+    const sessions = await prisma.browserSession.count();
+    await expect(claimPlayer({ token, commandId: randomUUID() })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(await prisma.browserSession.count()).toBe(sessions);
+    expect((await prisma.playerClaim.findUniqueOrThrow({ where: { playerId } })).claimedAt).toBeNull();
+  });
   it("stores only a hash — raw token never persisted (events or receipts)", async () => {
     const { gameId, playerId, version } = await setupPlayer();
     const { token, tokenHash, expiresAt } = newClaimToken();
