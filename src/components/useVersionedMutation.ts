@@ -6,6 +6,7 @@ import { executeCommand } from "@/lib/command-refresh";
 
 export function useVersionedMutation(apply: () => Promise<unknown>, options: {
   scope: string | null; ready: () => boolean; current: () => boolean; acknowledge: (value: unknown) => void;
+  captureAccess: () => number; ownsAccess: (ticket: number) => boolean; denyAccess: (error: unknown) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -25,13 +26,17 @@ export function useVersionedMutation(apply: () => Promise<unknown>, options: {
 
   const runWithResult = useCallback(async <T,>(action: () => Promise<T>): Promise<{ ok: boolean; value: T | null }> => {
     const generation = lifetime.current;
+    const access = current.current.captureAccess();
     const ownsLifetime = () => generation.active && generation === lifetime.current;
-    const valid = () => ownsLifetime() && current.current.current();
+    const valid = () => ownsLifetime() && current.current.ownsAccess(access) && current.current.current();
     if (!valid() || !current.current.ready() || running.current) return { ok: false, value: null };
     running.current = true;
     setBusy(true); setActionError(null); setStale(false);
     try {
-      const result = await executeCommand(action,
+      const result = await executeCommand(() => action().catch(error => {
+        if (valid()) current.current.denyAccess(error);
+        throw error;
+      }),
         () => valid() ? apply() : Promise.resolve(),
         value => { if (valid()) current.current.acknowledge(value); });
       if (!valid()) return { ok: false, value: null };

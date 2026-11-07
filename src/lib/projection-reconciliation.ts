@@ -97,6 +97,17 @@ export class ReconciliationCoordinator<T extends ProjectionMetadata> {
     else this.requireBoundary();
   }
 
+  rejectAccess(error: unknown) {
+    if (this.disposed) return;
+    this.gate.begin();
+    this.controller?.abort();
+    this.cancel?.();
+    ++this.boundary;
+    this.pending = true;
+    this.update({ ready: false, error });
+    if (!this.active) this.schedule(RETRY_MS);
+  }
+
   refresh(): Promise<RefreshOutcome<T>> {
     if (this.disposed) return Promise.resolve({ status: "superseded" });
     if (this.active) { this.pending = true; return this.active; }

@@ -70,7 +70,14 @@ function LoadingShell() {
 
 const auditFilter = (categories: AuditCategoryDto[]) => [...new Set(categories)].sort().join(",");
 
-function StorytellerPageInner() {
+type StorytellerProjectionOwner = ReturnType<typeof useProjectionReconciliation<StorytellerGameProjection>>;
+function StorytellerAccessBoundary() {
+  const { gameId } = useParams<{ gameId: string }>();
+  const projection = useProjectionReconciliation(gameId, signal => api<StorytellerGameProjection>(`/api/v1/games/${gameId}/storyteller`, { signal }));
+  return <StorytellerPageInner key={projection.accessGeneration} projection={projection} />;
+}
+
+function StorytellerPageInner({ projection }: { projection: StorytellerProjectionOwner }) {
   const params = useParams<{ gameId: string }>();
   const gameId = params.gameId;
   const router = useRouter();
@@ -78,7 +85,6 @@ function StorytellerPageInner() {
   const rawView = searchParams.get("view");
   const view: StorytellerView = isStorytellerView(rawView) ? rawView : "control";
 
-  const projection = useProjectionReconciliation(gameId, signal => api<StorytellerGameProjection>(`/api/v1/games/${gameId}/storyteller`, { signal }));
   const { refresh, target } = projection;
   const game = projection.data;
   const failure = projection.error as ApiClientError | null;
@@ -138,29 +144,33 @@ function StorytellerPageInner() {
   } | null>(null);
 
   const loadAux = useCallback(async () => {
+    const access = projection.captureAccess();
+    if (!projection.ownsAccess(access)) return;
     const gate = controlGate.current;
     const ticket = gate.begin();
     try {
       const controlRes = await api<StorytellerControlDto>(
         `/api/v1/games/${gameId}/storyteller/control`,
       );
-      if (!gate.accept(ticket, controlRes)) return;
+      if (!projection.ownsAccess(access) || !gate.accept(ticket, controlRes)) return;
       setControl(controlRes);
       setControlError(false);
       target(controlRes.version);
-    } catch {
-      if (gate.current(ticket)) setControlError(true);
+    } catch (error) {
+      if (projection.ownsAccess(access) && gate.current(ticket)) { projection.denyAccess(error); setControlError(true); }
     }
-  }, [gameId, target]);
+  }, [gameId, target, projection.captureAccess, projection.ownsAccess, projection.denyAccess]);
 
   const loadAudit = useCallback(
     async (categories: AuditCategoryDto[], cursor?: number) => {
+      const access = projection.captureAccess();
+      if (!projection.ownsAccess(access)) return;
       const filter = auditFilter(categories);
       const accepted = acceptedAudit.current;
       if (cursor !== undefined && (pendingAuditHead.current !== null || !accepted ||
           accepted.filter !== filter || accepted.snapshot.nextCursor !== cursor)) return;
       const intent = ++auditIntent.current;
-      const current = () => alive.current && intent === auditIntent.current &&
+      const current = () => projection.ownsAccess(access) && alive.current && intent === auditIntent.current &&
         (cursor === undefined || (pendingAuditHead.current === null && acceptedAudit.current?.head === accepted?.head &&
           acceptedAudit.current?.filter === filter && acceptedAudit.current?.snapshot.nextCursor === cursor));
       if (cursor === undefined) {
@@ -183,10 +193,10 @@ function StorytellerPageInner() {
         } : res;
         acceptedAudit.current = { filter, head: cursor === undefined ? intent : accepted!.head, snapshot };
         setAudit(snapshot);
-      } catch {
-        if (current()) setAuditError(true);
+      } catch (error) {
+        if (current()) { projection.denyAccess(error); setAuditError(true); }
       } finally {
-        if (alive.current && intent === auditIntent.current) {
+        if (projection.ownsAccess(access) && alive.current && intent === auditIntent.current) {
           setAuditLoadingMore(false);
           if (pendingAuditHead.current === intent) {
             pendingAuditHead.current = null;
@@ -195,7 +205,7 @@ function StorytellerPageInner() {
         }
       }
     },
-    [gameId],
+    [gameId, projection.captureAccess, projection.ownsAccess, projection.denyAccess],
   );
 
   const load = useCallback(async () => {
@@ -230,7 +240,8 @@ function StorytellerPageInner() {
   // succeeds — a version conflict is worth an explicit acknowledgement.
   const { busy, actionError, stale, setActionError, run, runWithResult } =
     useVersionedMutation(load, { scope: gameId, ready: () => game !== null && projection.canCommand(game),
-      current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge });
+      current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge,
+      captureAccess: projection.captureAccess, ownsAccess: projection.ownsAccess, denyAccess: projection.denyAccess });
   const canCommand = () => game !== null && projection.canCommand(game) && !busy;
   const commandsBusy = busy || !projection.ready;
 
@@ -285,6 +296,7 @@ function StorytellerPageInner() {
 
   async function issueClaim(player: StorytellerPlayerDto) {
     if (!game || !canCommand()) return;
+    const access = projection.captureAccess();
     const result = await runWithResult(() => api<ClaimTokenResponse>(
         `/api/v1/games/${gameId}/players/${player.id}/claim-token`,
         {
@@ -295,7 +307,7 @@ function StorytellerPageInner() {
           }),
         },
       ));
-    if (!alive.current) return;
+    if (!alive.current || !projection.ownsAccess(access)) return;
     if (result.ok && result.value) {
       const res = result.value;
       setClaimModal({
@@ -322,6 +334,7 @@ function StorytellerPageInner() {
 
   async function resetPlayerAccess(player: StorytellerPlayerDto) {
     if (!game || !canCommand()) return;
+    const access = projection.captureAccess();
     const result = await runWithResult(() => api<AccessResetResponseDto>(
         `/api/v1/games/${gameId}/players/${player.id}/access/reset`,
         {
@@ -332,7 +345,7 @@ function StorytellerPageInner() {
           }),
         },
       ));
-    if (!alive.current) return;
+    if (!alive.current || !projection.ownsAccess(access)) return;
     if (result.ok && result.value) {
       const res = result.value;
       setResetModal({ player, token: res.claimToken, busy: false, error: null });
@@ -841,7 +854,7 @@ export default function StorytellerPage() {
   const params = useParams<{ gameId: string }>();
   return (
     <Suspense fallback={<LoadingShell />}>
-      <StorytellerPageInner key={params.gameId} />
+      <StorytellerAccessBoundary key={params.gameId} />
     </Suspense>
   );
 }
