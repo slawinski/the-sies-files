@@ -49,10 +49,12 @@ export async function rateLimit(key: string, limit: number, windowMs: number): P
     throw new RateLimitError(retryAfterSeconds);
   }
 
-  // Opportunistic pruning of old windows (best-effort, ~1% of requests).
+  // Cleanup spans operations: the longest supported window is game creation's
+  // hour. A five-minute token check must not erase an active 15-minute claim
+  // or hourly creation bucket. Retention changes, never the active allowances.
   if (Math.floor(Math.random() * 100) === 0) {
     await prisma.rateLimitBucket
-      .deleteMany({ where: { windowStart: { lt: new Date(now - 2 * windowMs) } } })
+      .deleteMany({ where: { windowStart: { lt: new Date(now - 2 * Math.max(windowMs, 60 * 60 * 1000)) } } })
       .catch(() => undefined);
   }
 }

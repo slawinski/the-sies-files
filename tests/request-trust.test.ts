@@ -34,3 +34,13 @@ it("concurrent requests cannot exceed the fixed window and rollover restores all
   now.mockReturnValue(1_801_000);
   await expect(rateLimit('concurrency-control', 3, 1000)).resolves.toBeUndefined();
 });
+
+it.each([{ operation: 'claims', elapsedMinutes: 14, windowMinutes: 15, limit: 30 },
+  { operation: 'creation', elapsedMinutes: 59, windowMinutes: 60, limit: 10 }])("short token-window pruning cannot erase the active $operation budget", async ({ elapsedMinutes, windowMinutes, limit }) => {
+  vi.spyOn(Date, 'now').mockReturnValue(elapsedMinutes * 60_000);
+  const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  for (let i = 0; i < limit; i++) await rateLimit('long-operation-budget', limit, windowMinutes * 60_000);
+  random.mockReturnValue(0); // deterministically execute the real pruning branch
+  await rateLimit('short-token-budget', 5, 5 * 60_000);
+  await expect(rateLimit('long-operation-budget', limit, windowMinutes * 60_000)).rejects.toMatchObject({ retryAfterSeconds: 60 });
+});
