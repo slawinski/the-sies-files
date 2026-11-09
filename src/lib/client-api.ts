@@ -408,6 +408,17 @@ export interface CheckpointResponseDto {
   valid: boolean;
 }
 
+export type CommandStatusDto = { status: "UNKNOWN" } | {
+  status: "APPLIED";
+  commandId: string;
+  operation: import("./command-contracts").CommandOperation;
+  /** 0 denotes the explicit bounded historical event adapter, not default identity. */
+  resultVersion: 0 | 1;
+  resultingGameVersion: number;
+  result: unknown;
+  credentialAvailable?: false;
+};
+
 export interface AccessResetResponseDto {
   version: number;
   claimToken: string;

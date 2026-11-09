@@ -38,8 +38,8 @@ describe("durable command contracts", () => {
 
   it("audits all 36 production producers for explicit catalog operation, actor and intent", () => {
     const found: string[] = [];
-    for (const module of ["game-session", "setup", "operational", "investigation", "scenario", "recovery"]) {
-      const file = path.join(process.cwd(), `src/modules/${module}/${module}.service.ts`);
+    for (const moduleName of ["game-session", "setup", "operational", "investigation", "scenario", "recovery"]) {
+      const file = path.join(process.cwd(), `src/modules/${moduleName}/${moduleName}.service.ts`);
       const source = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
       const visit = (node: ts.Node) => {
         if (ts.isCallExpression(node) && node.expression.getText(source) === "runCommand") {

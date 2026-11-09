@@ -95,8 +95,55 @@ export function receiptInvalid(): never {
   throw new DomainError("COMMAND_RECEIPT_INVALID", "Committed command outcome is unreadable");
 }
 
+export function metadataFree(receipt: ReceiptRecord): boolean {
+  return receipt.operation === null && receipt.actor === null && receipt.requestHash === null && receipt.resultVersion === null;
+}
+
+export interface LegacyCommandEvent {
+  actor: string | null; gameVersion: number; eventType: string; payload: unknown;
+}
+const primaryTypes = ["PLAYER_ADDED", "CHECKPOINT_CREATED", "QR_SCANNED"];
+const legacyPlayerAdded = z.strictObject({ playerId: id, displayName: id, virtualSeat: z.number().int().nonnegative() });
+const legacyCheckpoint = z.strictObject({ checkpointId: id, reason: z.string().nullable() });
+const legacyScan = z.strictObject({ qrTokenId: id, playerId: id });
+
+/** Eligibility deliberately inspects ownership before any result/payload decoder. */
+export function legacyPlayerOwns(events: LegacyCommandEvent[], playerId: string): boolean {
+  const actor = `player:${playerId}`;
+  const primary = events.filter(e => primaryTypes.includes(e.eventType));
+  if (!events.length || events.some(e => e.actor !== actor) || primary.length !== 1 || primary[0].eventType !== "QR_SCANNED") return false;
+  const payload = primary[0].payload;
+  return !!payload && typeof payload === "object" && "playerId" in payload && payload.playerId === playerId;
+}
+
 /** The common current-format reader, used only after viewer/duplicate eligibility. */
-export function readCommandReceipt(receipt: ReceiptRecord) {
+export function readCommandReceipt(receipt: ReceiptRecord, legacyEvents?: LegacyCommandEvent[]) {
+  if (receipt.status !== "APPLIED" || !Number.isSafeInteger(receipt.resultingVersion) || receipt.resultingVersion < 1) receiptInvalid();
+  if (metadataFree(receipt) && legacyEvents) {
+    const actor = legacyEvents[0]?.actor;
+    if (!actor || legacyEvents.some(e => e.actor !== actor || e.gameVersion !== receipt.resultingVersion)) receiptInvalid();
+    const primary = legacyEvents.filter(e => primaryTypes.includes(e.eventType));
+    if (primary.length !== 1) receiptInvalid();
+    const event = primary[0];
+    let operation: "addPlayer" | "createCheckpoint" | "scanQr";
+    if (event.eventType === "PLAYER_ADDED") {
+      const payload = legacyPlayerAdded.safeParse(event.payload);
+      const result = commandContracts.addPlayer.safeParse(receipt.resultJson);
+      if (actor !== "storyteller" || !payload.success || !result.success || payload.data.playerId !== result.data.playerId) receiptInvalid();
+      operation = "addPlayer";
+    } else if (event.eventType === "CHECKPOINT_CREATED") {
+      const payload = legacyCheckpoint.safeParse(event.payload);
+      const result = commandContracts.createCheckpoint.safeParse(receipt.resultJson);
+      if (actor !== "storyteller" || !payload.success || !result.success || payload.data.checkpointId !== result.data.checkpointId) receiptInvalid();
+      operation = "createCheckpoint";
+    } else {
+      const payload = legacyScan.safeParse(event.payload);
+      if (!payload.success || actor !== `player:${payload.data.playerId}`) receiptInvalid();
+      operation = "scanQr";
+    }
+    return { operation, resultVersion: 0 as const, resultingGameVersion: receipt.resultingVersion,
+      result: parseCommandResult(operation, receipt.resultJson) };
+  }
   if (!receipt.operation || !isCommandOperation(receipt.operation) || receipt.resultVersion !== 1 ||
       !receipt.actor || !/^(storyteller|player:.+)$/.test(receipt.actor) ||
       !receipt.requestHash || !/^[a-f0-9]{64}$/.test(receipt.requestHash) ||

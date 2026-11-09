@@ -94,8 +94,9 @@ describe("Slice 6 — control plane + recovery", () => {
     const { gameId, version } = await setup();
     const commandId = randomUUID();
     await createCheckpoint({ gameId, commandId, expectedVersion: version, reason: "t" });
-    const status = await getCommandStatus(gameId, commandId);
+    const status = await getCommandStatus(gameId, commandId, { kind: "storyteller" });
     expect(status.status).toBe("APPLIED");
+    if (status.status !== "APPLIED") throw new Error("Expected applied status");
     expect(status.resultingGameVersion).toBe(version + 1);
   });
 });

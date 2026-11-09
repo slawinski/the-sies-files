@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { runCommand } from "@/lib/command";
+import { legacyPlayerOwns, metadataFree, readCommandReceipt } from "@/lib/command-contracts";
 import { DomainError } from "@/lib/errors";
 import { systemClock } from "@/lib/clock";
 import { generateToken, hashToken } from "@/lib/auth/tokens";
@@ -120,16 +121,30 @@ export async function validateCheckpoint(gameId: string, checkpointId: string) {
 
 // ---------- Command status ----------
 
-export async function getCommandStatus(gameId: string, commandId: string) {
-  const receipt = await prisma.commandReceipt.findUnique({
-    where: { gameId_commandId: { gameId, commandId } },
+export type CommandStatusViewer = { kind: "storyteller" } | { kind: "player"; playerId: string };
+const playerOperations = new Set(["scanQr", "nominate", "voteIntent", "acknowledgeRole", "submitAction", "slayer"]);
+
+export async function getCommandStatus(gameId: string, commandId: string, viewer: CommandStatusViewer) {
+  const receipt = await prisma.commandReceipt.findFirst({
+    where: { gameId, commandId, ...(viewer.kind === "player" ? { OR: [
+      { actor: `player:${viewer.playerId}` },
+      { actor: null, operation: null, resultVersion: null, requestHash: null },
+    ] } : {}) },
   });
   if (!receipt) return { status: "UNKNOWN" as const };
+  let legacyEvents;
+  if (metadataFree(receipt)) {
+    legacyEvents = await prisma.domainEvent.findMany({ where: { gameId, commandId } });
+    if (viewer.kind === "player" && !legacyPlayerOwns(legacyEvents, viewer.playerId)) return { status: "UNKNOWN" as const };
+  } else if (viewer.kind === "player" && (!receipt.operation || !playerOperations.has(receipt.operation))) {
+    return { status: "UNKNOWN" as const };
+  }
+  const decoded = readCommandReceipt(receipt, legacyEvents);
   return {
-    status: receipt.status,
+    status: "APPLIED" as const,
     commandId,
-    resultingGameVersion: receipt.resultingVersion,
-    result: receipt.resultJson,
+    ...decoded,
+    ...(["issueClaimToken", "resetPlayerAccess"].includes(decoded.operation) ? { credentialAvailable: false as const } : {}),
   };
 }
 

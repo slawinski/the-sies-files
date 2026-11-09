@@ -12,5 +12,6 @@ export const memberReads = (gameId: string) => [
   `/api/v1/games/${gameId}/storyteller/audit`, `/api/v1/games/${gameId}/map/layers/post-world`,
   `/api/v1/games/${gameId}/storyteller/consistency`,
   `/api/v1/games/${gameId}/commands/00000000-0000-4000-8000-000000000001`,
+  `/api/v1/games/${gameId}/me/commands/00000000-0000-4000-8000-000000000001`,
   `/api/v1/games/${gameId}/events/stream`,
 ];
