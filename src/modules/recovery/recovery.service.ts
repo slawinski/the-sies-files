@@ -205,6 +205,11 @@ export async function runConsistencyChecks(gameId: string): Promise<ConsistencyI
 
 // ---------- Player access reset ----------
 
+export type AccessResetResult = { version: number } & (
+  | { duplicate: false; credentialAvailable: true; claimToken: string }
+  | { duplicate: true; credentialAvailable: false; claimToken?: never }
+);
+
 export async function resetPlayerAccess({
   gameId,
   playerId,
@@ -215,12 +220,12 @@ export async function resetPlayerAccess({
   playerId: string;
   commandId: string;
   expectedVersion: number;
-}): Promise<{ version: number; claimToken: string }> {
+}): Promise<AccessResetResult> {
   const rawToken = generateToken(cryptoSecureRng);
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(systemClock.now().getTime() + 60 * 60 * 24 * 7 * 1000);
 
-  const { version, sequence } = await runCommand({
+  const { version, sequence, duplicate } = await runCommand({
     gameId,
     commandId,
     expectedVersion,
@@ -241,7 +246,9 @@ export async function resetPlayerAccess({
     },
   });
   publishInvalidation(gameId, version, sequence);
-  return { version, claimToken: rawToken };
+  return duplicate
+    ? { version, duplicate: true, credentialAvailable: false }
+    : { version, duplicate: false, credentialAvailable: true, claimToken: rawToken };
 }
 
 // ---------- Bounded recovery overrides ----------

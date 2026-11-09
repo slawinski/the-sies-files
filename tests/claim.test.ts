@@ -32,6 +32,8 @@ describe("claim token issuance + consumption", () => {
     const commandId = randomUUID();
     const claimed = await claimPlayer({ token: old.token, commandId });
     const reset = await resetPlayerAccess({ gameId, playerId, commandId: randomUUID(), expectedVersion: claimed.version });
+    expect(reset.credentialAvailable).toBe(true);
+    if (!reset.credentialAvailable) throw new Error("Fresh reset must issue a token");
     for (const replayId of [commandId, randomUUID()]) {
       await expect(claimPlayer({ token: old.token, commandId: replayId })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     }

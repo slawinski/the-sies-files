@@ -146,11 +146,15 @@ test('E2E-12 enabled limits: sixteen joins, role reveal, reset/reclaim, recovery
       expect(ack.status()).toBe(200);
       version = (await ack.json()).version;
     }
-    const reset = await st.post(`/api/v1/games/${game.gameId}/players/${game.playerIds[0]}/access/reset`, { data: { commandId: randomUUID(), expectedVersion: version } });
+    const resetId = randomUUID();
+    const reset = await st.post(`/api/v1/games/${game.gameId}/players/${game.playerIds[0]}/access/reset`, { data: { commandId: resetId, expectedVersion: version } });
     expect(reset.status()).toBe(200);
     const resetBody = await reset.json();
     expect((await players[0].get('/api/v1/me')).status()).toBe(401);
     expect((await players[0].post('/api/v1/player-claims/claim', { data: { token: resetBody.claimToken, commandId: randomUUID() } })).status()).toBe(200);
+    const duplicate = await st.post(`/api/v1/games/${game.gameId}/players/${game.playerIds[0]}/access/reset`, { data: { commandId: resetId, expectedVersion: version } });
+    expect(await duplicate.json()).toEqual({ version: resetBody.version, duplicate: true, credentialAvailable: false });
+    expect((await players[0].get('/api/v1/me')).status()).toBe(200);
     const recovered = await st.post('/api/v1/storyteller/recover', { data: { gameId: game.gameId, recoverySecret: process.env.STORYTELLER_RECOVERY_SECRET } });
     expect(recovered.status()).toBe(200);
     expect((await st.post('/api/v1/session/logout')).status()).toBe(200);

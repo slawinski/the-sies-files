@@ -14,8 +14,7 @@ export async function POST(
     await resolveStoryteller(gameId);
     assertSameOrigin(req);
     const { commandId, expectedVersion } = await parseBody(req, schema);
-    const { version, claimToken } = await resetPlayerAccess({ gameId, playerId, commandId, expectedVersion });
-    return jsonOk({ version, claimToken });
+    return jsonOk(await resetPlayerAccess({ gameId, playerId, commandId, expectedVersion }));
   } catch (err) {
     return jsonError(err);
   }

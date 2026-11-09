@@ -419,10 +419,10 @@ export type CommandStatusDto = { status: "UNKNOWN" } | {
   credentialAvailable?: false;
 };
 
-export interface AccessResetResponseDto {
-  version: number;
-  claimToken: string;
-}
+export type AccessResetResponseDto = { version: number } & (
+  | { duplicate: false; credentialAvailable: true; claimToken: string }
+  | { duplicate: true; credentialAvailable: false; claimToken?: never }
+);
 
 export interface StorytellerGameProjection {
   gameId: string;
