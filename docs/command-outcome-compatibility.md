@@ -72,3 +72,70 @@ The production baseline requires compatibility, original ordinary/security
 checks, and the existing create-only physical recovery proof. Its reports keep
 source/build attribution and failed evidence. No retention or content-rights
 policy is introduced by this work.
+
+## Initial-denial cleanup verification (2026-11-09)
+
+`PlayerAccessBoundary` now clears the pending identity on authoritative denial
+using the existing access-denial predicate, without requiring hydrated game or
+player IDs. The unbound inner component mounts, but its null-scope hydration
+effect returns before registering cleanup. Boundary cleanup covers that gap;
+the existing generation/scope cleanup and status-request guards remain intact.
+Loading, transient network/5xx errors and deadlines are not access denials.
+This enforces the existing R8 lifecycle, not a new retention policy or a fix for
+session-token leakage: pending storage contains only IDs and format/operation
+metadata, not private payloads or credentials.
+
+Private local evidence is retained under
+`/var/folders/zl/fkgnlthd363175f4ffymzcjh0000gn/T/opencode/`:
+
+- `denial-red-r2/browser.json`, `browser.log` and `artifacts/`: the pre-fix real
+  browser regression failed specifically because pending storage survived a
+  genuine initial `/api/v1/me` 401 after persisted-session revocation. Its scan
+  POST actually committed (including receipt), then its response was dropped.
+  Denied/unclaimed UI appeared, private scan UI/result stayed absent, and there
+  were zero status GETs and zero additional scan POSTs. The initial-loading
+  retention assertion, transient initial 503 and unchanged valid same-player
+  reload case passed. No fabricated authentication response was used.
+- `denial-green/browser.json`: all 12 focused cases passed after the code fix.
+  The red/green source manifests differ only in `src/app/player/page.tsx`;
+  this is a causal fix, not a pass obtained by rerunning unchanged source.
+- `denial-canonical/run.json`: the existing canonical production entry completed
+  all 21 stages, including lint, fresh nonincremental types, clean-database
+  checks, production build, A/B compatibility, ordinary browser, physical
+  recovery and enabled security. Native source-bound discovery/outcome counts
+  are **379 unit/integration, 50 ordinary (48 existing + 2 new), 19 security,
+  1 physical recovery**, with **21/21 compatibility observations** passing.
+  No tests were skipped, retried or allowlisted; existing assertions and
+  timeout limits were unchanged. Lint has the same four existing warnings and
+  no errors. The new revocation timestamp is fixed, not part of a dynamic title.
+
+Canonical B source SHA-256 is
+`eff0957b27b819e064229c33f52d7bdfedcc3a444a3b96025e652cc36742e523`;
+Next build ID is `cG1dUxGwFbeI3DozbTpRP`, with build artifact SHA-256
+`a3d6aa18a88d3074c80e80e9cdb45b74a4d0d9394754d9b0579f78aead293354`.
+The focused-green and canonical source manifests match. This evidence section
+was added after that run; `denial-final-audit.json` records that documentation-
+only delta, preserved comment-only simplifications, unchanged old test source
+outside the inserted cases, and the untouched plan. It does not attribute the
+later documentation bytes to the earlier build.
+
+Runtime: macOS/Darwin 27.0.0 arm64, Node 24.8.0, npm 11.6.0, PostgreSQL 16.15,
+Next 15.5.23, React 19.1.0, Prisma 6.19.3, TypeScript 5.9.3, Vitest 4.1.11,
+Playwright 1.62.1 and Chromium 151.0.7922.34; one worker, zero retries, UTC.
+The run used its own dotenv-free capsule and explicit local disposable PG16
+resources, not the original PG14 database or dependency tree. Pinned A
+`c2e00f2a9fb505b1f159476447acd880b7216dc2` was materialized from history before
+capturing B, with source identity
+`1f3fda4b0d0c017c1107d0acc6b25c31a76c616274bdf11dd3570ada6919e354`,
+separate generated clients and separate workers. Details and unchanged-state
+fingerprints are in `denial-canonical/compatibility/compatibility.json`.
+
+The earlier `denial-red` attempt was infrastructure-blocked before browser
+execution: parent and sanitized child resolved different temporary lease
+directories. It is retained, not counted as the behavioral red; explicitly
+aligning the owned runner's TMPDIR produced `denial-red-r2`. No application
+change was made for that infrastructure correction. Raw diagnostics remain
+private and were not uploaded. Owned servers and leases were released; no
+inherited evidence or dependencies were deleted. These are local synthetic
+results, not production-incidence measurements or an operational rollback
+guarantee to A. The unsupported paths above still apply.

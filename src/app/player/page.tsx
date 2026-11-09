@@ -19,6 +19,7 @@ import { useGameEventStream } from "@/components/useGameEventStream";
 import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
 import { useVersionedMutation } from "@/components/useVersionedMutation";
 import { useProjectionReconciliation } from "@/components/useProjectionReconciliation";
+import { isAccessDenial } from "@/lib/access-lifetime";
 import { clearPendingQr, decodeScanAcknowledgement, decodeScanStatus, definitelyRejected,
   hydratePendingQr, retainPendingQr, type PendingQrIdentity } from "@/lib/command-outcome";
 import { isPlayerView, type PlayerView } from "@/lib/presentation/types";
@@ -100,6 +101,9 @@ function PlayerLoadingShell() {
 type PlayerProjectionOwner = ReturnType<typeof useProjectionReconciliation<PlayerGameProjection>>;
 function PlayerAccessBoundary() {
   const projection = useProjectionReconciliation(null, signal => api<PlayerGameProjection>("/api/v1/me", { signal }));
+  useEffect(() => {
+    if (isAccessDenial(projection.error, true)) clearPendingQr();
+  }, [projection.error]);
   const identity = projection.data ? `${projection.data.gameId}:${projection.data.me.playerId}` : "unbound";
   return <PlayerPageInner key={`${projection.accessGeneration}:${identity}`} projection={projection} />;
 }

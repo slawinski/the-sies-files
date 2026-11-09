@@ -50,6 +50,69 @@ test('E2E-13 real committed QR response loss survives reload without another POS
   } finally { await st.dispose(); }
 });
 
+for (const initialFailure of ['revoked session', 'transient 503'] as const) {
+  test(`E2E-13 reload with ${initialFailure} handles retained uncertain identity before hydration`, async ({ page, playwright }) => {
+    const st = await playwright.request.newContext({ baseURL: 'http://localhost:3100' });
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    try {
+      const game = await specimen(st, page.request, page);
+      let posts = 0, reads = 0, commandId = '';
+      page.on('request', request => {
+        if (request.method() === 'POST' && request.url().endsWith('/scenario/qr/scan')) posts++;
+        if (request.method() === 'GET' && request.url().includes('/me/commands/')) reads++;
+      });
+      await page.route('**/scenario/qr/scan', async route => {
+        commandId = route.request().postDataJSON().commandId;
+        expect((await route.fetch()).status()).toBe(200);
+        await route.abort('failed');
+      });
+      await scan(page);
+      await expect(page.getByRole('button', { name: 'Sprawdź wynik skanu' })).toBeVisible();
+      const retained = await page.evaluate(() => sessionStorage.getItem('tsf:pending-qr'));
+      expect(JSON.parse(retained!)).toEqual({
+        format: 1, operation: 'scanQr', gameId: game.gameId, playerId: game.playerIds[0], commandId,
+      });
+      expect(await prisma.qrScan.count({ where: { gameId: game.gameId, commandId } })).toBe(1);
+      expect(await prisma.commandReceipt.count({ where: { gameId: game.gameId, commandId } })).toBe(1);
+      if (initialFailure === 'revoked session') {
+        const revoked = await prisma.browserSession.updateMany({
+          where: { playerId: game.playerIds[0] }, data: { revokedAt: new Date('2026-01-01T00:00:00Z') },
+        });
+        expect(revoked.count).toBe(1);
+      }
+      let started!: () => void;
+      const requested = new Promise<void>(resolve => { started = resolve; });
+      await page.route('**/api/v1/me', async route => {
+        started(); await held;
+        if (initialFailure === 'transient 503') await route.fulfill({ status: 503, json: { error: { code: 'UNKNOWN' } } });
+        else await route.continue();
+      });
+      const response = page.waitForResponse(response => response.url().endsWith('/api/v1/me'));
+      await page.reload();
+      await requested;
+      // Loading alone must not discard identity; the null-scope inner view has mounted.
+      expect(await page.evaluate(() => sessionStorage.getItem('tsf:pending-qr'))).toBe(retained);
+      release();
+      expect((await response).status()).toBe(initialFailure === 'revoked session' ? 401 : 503);
+      if (initialFailure === 'revoked session') {
+        await expect(page.getByText(/Nie odebrano jeszcze twojej tożsamości/)).toBeVisible();
+      } else {
+        await expect(page.getByRole('button', { name: 'Spróbuj ponownie' })).toBeVisible();
+      }
+      await expect(page.getByRole('button', { name: 'Skanuj kod QR', exact: true })).toHaveCount(0);
+      await expect(page.getByText(/Nowe dowody:|Otrzymano nowy dowód/)).toHaveCount(0);
+      expect(posts).toBe(1);
+      expect(reads).toBe(0);
+      if (initialFailure === 'revoked session') {
+        await expect.poll(() => page.evaluate(() => sessionStorage.getItem('tsf:pending-qr'))).toBeNull();
+      } else {
+        expect(await page.evaluate(() => sessionStorage.getItem('tsf:pending-qr'))).toBe(retained);
+      }
+    } finally { release(); await st.dispose(); }
+  });
+}
+
 test('E2E-13 same-game player change invalidates an older held outcome callback', async ({ page, playwright }) => {
   const st = await playwright.request.newContext({ baseURL: 'http://localhost:3100' });
   let release!: () => void;
