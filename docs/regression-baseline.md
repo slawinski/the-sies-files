@@ -218,3 +218,16 @@ The ledger records the native-inventory/identity audit, fresh build and isolated
 PG16 cluster cleanup. Root lint and nonincremental typechecking also pass with
 capsules retained. This note was added after the run; it is not evidence of
 three repetitions, a later development profile, or hosted CI for the final tree.
+
+## Durable command compatibility
+
+The canonical baseline also requires `compatibility/compatibility.json` from
+the pinned actual-A/actual-B service fixture described in
+[command-outcome-compatibility.md](command-outcome-compatibility.md). A is
+materialized before capsule capture, from the exact Git object; the capsule
+never needs Git history. Separate generated clients share one inherited lease.
+Missing/truncated/failed compatibility evidence cannot complete the baseline.
+CI retains this report, synthetic committed rows and producer source hashes.
+The original 292/38/18/1 test identities are checked as a multiset, in addition
+to running the full current release gates. This is a selected shape observation,
+not safe operational rollback to A or a substitute for physical recovery.

@@ -10,10 +10,11 @@ export async function GET(
   try {
     const { gameId, commandId } = await params;
     const admitted = await resolvePlayer(gameId);
-    const status = await getCommandStatus(gameId, commandId, { kind: "player", playerId: admitted.playerId });
-    const current = await resolvePlayer(gameId);
-    if (current.sessionId !== admitted.sessionId || current.playerId !== admitted.playerId)
-      throw new DomainError("GAME_NOT_FOUND", "Game not found");
+    const status = await getCommandStatus(gameId, commandId, { kind: "player", playerId: admitted.playerId }).finally(async () => {
+      const current = await resolvePlayer(gameId);
+      if (current.sessionId !== admitted.sessionId || current.playerId !== admitted.playerId)
+        throw new DomainError("GAME_NOT_FOUND", "Game not found");
+    });
     return jsonOk(status);
   } catch (err) {
     return jsonError(err);

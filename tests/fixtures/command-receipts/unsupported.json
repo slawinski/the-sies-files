@@ -1,0 +1,10 @@
+{
+  "fixtureKind": "synthetic-reader-negatives-not-actual-producer-output",
+  "receipts": [
+    { "operation": "scanQr", "actor": "player:fixture", "resultVersion": null, "requestHash": null, "status": "APPLIED", "resultingVersion": 2, "resultJson": {} },
+    { "operation": "futureOperation", "actor": "player:fixture", "resultVersion": 1, "requestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "status": "APPLIED", "resultingVersion": 2, "resultJson": {} },
+    { "operation": "scanQr", "actor": "player:fixture", "resultVersion": 99, "requestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "status": "APPLIED", "resultingVersion": 2, "resultJson": { "outcome": { "duplicate": true } } },
+    { "operation": null, "actor": null, "resultVersion": null, "requestHash": null, "status": "APPLIED", "resultingVersion": 2, "resultJson": null },
+    { "operation": "renameGame", "actor": "storyteller", "resultVersion": 1, "requestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "status": "UNKNOWN", "resultingVersion": 2, "resultJson": {} }
+  ]
+}

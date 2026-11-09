@@ -10,9 +10,10 @@ export async function GET(
   try {
     const { gameId, commandId } = await params;
     const admitted = await resolveStoryteller(gameId);
-    const status = await getCommandStatus(gameId, commandId, { kind: "storyteller" });
-    const current = await resolveStoryteller(gameId);
-    if (current.sessionId !== admitted.sessionId) throw new DomainError("GAME_NOT_FOUND", "Game not found");
+    const status = await getCommandStatus(gameId, commandId, { kind: "storyteller" }).finally(async () => {
+      const current = await resolveStoryteller(gameId);
+      if (current.sessionId !== admitted.sessionId) throw new DomainError("GAME_NOT_FOUND", "Game not found");
+    });
     return jsonOk(status);
   } catch (err) {
     return jsonError(err);

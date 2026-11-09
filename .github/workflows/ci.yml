@@ -32,6 +32,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -67,6 +69,10 @@ jobs:
             baseline-results/ci-production/unit.json
             baseline-results/ci-production/browser.json
             baseline-results/ci-production/security-summary.json
+            baseline-results/ci-production/compatibility/compatibility.json
+            baseline-results/ci-production/compatibility/*-rows.json
+            baseline-results/ci-production/compatibility/*.log
+            baseline-results/ci-production/compatibility-A/manifest.json
             baseline-results/ci-production/recovery/recovery.json
             baseline-results/ci-production/recovery/recovery-native.json
             baseline-results/ci-production/recovery/recovery-discovery.json

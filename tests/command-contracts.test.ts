@@ -17,6 +17,24 @@ const meaningful: Partial<Record<CommandOperation, unknown[]>> = {
   createCheckpoint: [{ checkpointId: "checkpoint" }],
 };
 
+// This is an intent-coverage audit, not inferred from the production catalog:
+// dropping a URL ID/payload field must fail even if the output schema is empty.
+const bindings: Record<CommandOperation, string[]> = {
+  renameGame: ["name", "normalizeGameName"], setParticipantKind: ["playerId", "participantKind"],
+  addPlayer: ["displayName", "normalizeDisplayName"], updatePlayer: ["playerId", "displayName", "normalizeDisplayName"],
+  removePlayer: ["playerId"], reorderPlayers: ["orderedPlayerIds"], issueClaimToken: ["playerId"],
+  generateSetup: ["seedSupplied", "seed"], commitSetup: [], acknowledgeRole: [], startOperational: [],
+  submitAction: ["actionId", "targetPlayerIds"], resolveAction: ["actionId", "resolutionSupplied", "resolution"], completeOperational: [],
+  openNominations: [], closeNominations: [], nominate: ["nomineeId"], resolveNominationTrigger: ["nominationId", "optionId"],
+  voteIntent: ["nominationId", "intent"], startVotingPass: ["nominationId"], advanceVotingPass: ["nominationId"], lockVote: ["nominationId"],
+  resolveExecution: [], exileTraveller: ["playerId"], slayer: ["targetPlayerId"], resolveSlayerDecision: ["slayerPlayerId", "optionId"],
+  closeInvestigation: [], scanQr: ["tokenDigest", "createHash", "token"], storytellerRevealClue: ["clueId", "targetSupplied", "targetPlayerId"],
+  storytellerCompleteTask: ["taskId"], storytellerSetStage: ["stageId"], storytellerSetMap: ["mapVersionId"],
+  storytellerSetCondition: ["conditionId", "active"], createCheckpoint: ["reasonSupplied", "reason"],
+  resetPlayerAccess: ["playerId"], recoveryOverride: ["payload", "trimmedReason"],
+};
+const playerOperations = new Set(["acknowledgeRole", "submitAction", "nominate", "voteIntent", "slayer", "scanQr"]);
+
 describe("durable command contracts", () => {
   for (const operation of Object.keys(commandContracts) as CommandOperation[]) {
     it(`${operation} accepts its branches and refuses extra fields and non-JSON`, () => {
@@ -53,6 +71,14 @@ describe("durable command contracts", () => {
           const op = properties.get("operation");
           if (!op || !ts.isStringLiteral(op)) throw new Error("Operation must be statically auditable");
           expect(Object.hasOwn(commandContracts, op.text)).toBe(true);
+          const operation = op.text as CommandOperation;
+          const input = properties.get("input")!.getText(source);
+          for (const field of bindings[operation]) expect(input).toMatch(new RegExp(`\\b${field}\\b`));
+          if (!bindings[operation].length) expect(input).toBe("{}");
+          if (operation === "issueClaimToken" || operation === "resetPlayerAccess") expect(input).toBe("{ playerId }");
+          const actor = properties.get("actor")!.getText(source);
+          expect(actor.startsWith("`player:")).toBe(playerOperations.has(operation));
+          if (!playerOperations.has(operation)) expect(actor).toBe('"storyteller"');
           found.push(op.text);
         }
         ts.forEachChild(node, visit);

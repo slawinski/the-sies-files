@@ -1,10 +1,11 @@
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { createStorytellerGame, claimPlayer } from './fixtures';
 import { prisma } from '../../src/lib/db';
+import { randomUUID } from 'node:crypto';
 
 test.afterAll(async () => { await prisma.$disconnect(); });
-async function specimen(st: APIRequestContext, player: APIRequestContext, page: Page) {
-  const game = await createStorytellerGame(st, 'Durable QR', 1);
+async function specimen(st: APIRequestContext, player: APIRequestContext, page: Page, count = 1) {
+  const game = await createStorytellerGame(st, 'Durable QR', count);
   const claimed = await claimPlayer(st, player, game.gameId, game.playerIds[0], game.version);
   await prisma.gameSession.update({ where: { id: game.gameId }, data: { status: 'ACTIVE', phase: 'INVESTIGATION', cycleNumber: 1 } });
   await prisma.scenarioState.create({ data: { gameId: game.gameId, scenarioId: 'THE_SIES_FILES_MILLIONAIRE', scenarioVersion: 1, stageId: 'ARRIVAL', mapVersionId: 'MAP_BASE' } });
@@ -24,6 +25,9 @@ test('E2E-13 real committed QR response loss survives reload without another POS
     let posts = 0, commandId = '';
     await page.route('**/scenario/qr/scan', async route => {
       posts++; commandId = route.request().postDataJSON().commandId;
+      expect(JSON.parse((await page.evaluate(() => sessionStorage.getItem('tsf:pending-qr')))!)).toEqual({
+        format: 1, operation: 'scanQr', gameId: game.gameId, playerId: game.playerIds[0], commandId,
+      });
       const response = await route.fetch();
       expect(response.status()).toBe(200);
       await route.abort('failed');
@@ -43,6 +47,60 @@ test('E2E-13 real committed QR response loss survives reload without another POS
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`recovered-qr-${width}.png`), fullPage: true });
     }
+  } finally { await st.dispose(); }
+});
+
+test('E2E-13 same-game player change invalidates an older held outcome callback', async ({ page, playwright }) => {
+  const st = await playwright.request.newContext({ baseURL: 'http://localhost:3100' });
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  try {
+    const game = await specimen(st, page.request, page, 2);
+    await page.route('**/scenario/qr/scan', async route => { await route.fetch(); await route.abort('failed'); });
+    await scan(page);
+    let reads = 0;
+    await page.route('**/me/commands/*', async route => {
+      reads++; const response = await route.fetch(); await held; await route.fulfill({ response });
+    });
+    await page.getByRole('button', { name: 'Sprawdź wynik skanu' }).click();
+    await expect.poll(() => reads).toBe(1);
+    const version = (await prisma.gameSession.findUniqueOrThrow({ where: { id: game.gameId } })).version;
+    await claimPlayer(st, page.request, game.gameId, game.playerIds[1], version);
+    const nextProjection = page.waitForResponse(async response => response.url().endsWith('/api/v1/me') && response.status() === 200 && (await response.json()).me.playerId === game.playerIds[1]);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await nextProjection;
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('tsf:pending-qr'))).toBeNull();
+    await expect(page.getByRole('dialog', { name: 'Skaner kodów QR' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Skanuj kod QR', exact: true })).toBeEnabled();
+    release();
+    await expect(page.getByText(/Nowe dowody:|Otrzymano nowy dowód/)).toHaveCount(0);
+    expect(await page.evaluate(() => sessionStorage.getItem('tsf:pending-qr'))).toBeNull();
+    expect(reads).toBe(1);
+  } finally { release(); await st.dispose(); }
+});
+
+test('E2E-13 committed scan behind 5xx recovers by GET despite projection refresh failure', async ({ page, playwright }) => {
+  const st = await playwright.request.newContext({ baseURL: 'http://localhost:3100' });
+  try {
+    const game = await specimen(st, page.request, page);
+    let posts = 0, commandId = '', failRefresh = true;
+    await page.route('**/scenario/qr/scan', async route => {
+      posts++; commandId = route.request().postDataJSON().commandId;
+      expect((await route.fetch()).status()).toBe(200);
+      await route.fulfill({ status: 503, json: { error: { code: 'UNKNOWN' } } });
+    });
+    await scan(page);
+    await page.route('**/api/v1/me', route => failRefresh ? route.fulfill({ status: 503, json: { error: { code: 'UNKNOWN' } } }) : route.continue());
+    await page.getByRole('button', { name: 'Sprawdź wynik skanu' }).click();
+    await expect(page.getByText(/Nowe dowody:|Otrzymano nowy dowód/).first()).toBeVisible();
+    expect(await page.evaluate(() => sessionStorage.getItem('tsf:pending-qr'))).toBeNull();
+    await page.getByRole('button', { name: 'Zamknij okno' }).click();
+    await expect(page.getByRole('button', { name: 'Skanuj kod QR', exact: true })).toBeDisabled();
+    failRefresh = false;
+    await page.getByRole('button', { name: 'Spróbuj ponownie' }).click();
+    await expect(page.getByRole('button', { name: 'Skanuj kod QR', exact: true })).toBeEnabled();
+    expect(posts).toBe(1);
+    expect(await prisma.qrScan.count({ where: { gameId: game.gameId, commandId } })).toBe(1);
   } finally { await st.dispose(); }
 });
 
@@ -156,3 +214,30 @@ test('E2E-13 reload under a different authorized scope discards identity before 
     expect(queries).toBe(0);
   } finally { await st.dispose(); }
 });
+
+for (const operation of ['reset', 'claim-token'] as const) {
+  test(`E2E-13 duplicate ${operation} modal acknowledges acceptance without a credential field`, async ({ page }) => {
+    const game = await createStorytellerGame(page.request, 'Duplicate credential acknowledgement', 1);
+    const commandId = randomUUID();
+    const endpoint = `/api/v1/games/${game.gameId}/players/${game.playerIds[0]}/${operation === 'reset' ? 'access/reset' : 'claim-token'}`;
+    expect((await page.request.post(endpoint, { data: { commandId, expectedVersion: game.version } })).status()).toBe(200);
+    const events = await prisma.domainEvent.count({ where: { gameId: game.gameId } });
+    await page.route(`**${endpoint}`, async route => {
+      const response = await route.fetch({ postData: JSON.stringify({ ...route.request().postDataJSON(), commandId }) });
+      expect(response.status()).toBe(200);
+      const body = await response.json();
+      expect(body.duplicate).toBe(true);
+      expect(body.credentialAvailable).toBe(false);
+      expect(body.claimToken).toBeUndefined();
+      await route.fulfill({ response });
+    });
+    await page.goto(`/storyteller/${game.gameId}?view=players`);
+    await page.getByRole('button', { name: 'Akcje dla: Player 0', exact: true }).click();
+    await page.getByRole('button', { name: operation === 'reset' ? 'Reset dostępu' : 'Link do odbioru', exact: true }).click();
+    if (operation === 'reset') await page.getByRole('button', { name: 'Resetuj dostęp', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: operation === 'reset' ? 'Reset dostępu: Player 0' : 'Link do odbioru: Player 0', exact: true });
+    await expect(dialog.getByText(operation === 'reset' ? /Reset przyjęto wcześniej/ : /Polecenie przyjęto wcześniej/)).toBeVisible();
+    await expect(dialog.locator('input')).toHaveCount(0);
+    expect(await prisma.domainEvent.count({ where: { gameId: game.gameId } })).toBe(events);
+  });
+}

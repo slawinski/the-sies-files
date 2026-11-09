@@ -55,6 +55,8 @@ describe("actor-scoped command status", () => {
     const { playerId } = await addPlayer({ gameId, commandId, expectedVersion: 1, displayName: "Ada" });
     const viewer = { kind: "player" as const, playerId };
     expect(await getCommandStatus(gameId, commandId, viewer)).toEqual({ status: "UNKNOWN" });
+    await prisma.commandReceipt.update({ where: { gameId_commandId: { gameId, commandId } }, data: { actor: `player:${playerId}`, operation: "unsupportedPlayerOperation" } });
+    expect(await getCommandStatus(gameId, commandId, viewer)).toEqual({ status: "UNKNOWN" });
     expect(await getCommandStatus(gameId, randomUUID(), viewer)).toEqual({ status: "UNKNOWN" });
     await prisma.commandReceipt.update({ where: { gameId_commandId: { gameId, commandId } }, data: { actor: "player:other", resultJson: { privateMarker: "never disclose" } } });
     expect(await getCommandStatus(gameId, commandId, viewer)).toEqual({ status: "UNKNOWN" });
@@ -80,5 +82,12 @@ describe("bounded legacy reader fixtures (not source-attributed producer proof)"
   });
   it.each([null, { outcome: { duplicate: true } }, { outcome: { discoveries: [] } }])("refuses unsupported historical scan results %j", resultJson => {
     expect(() => readCommandReceipt({ ...receipt, resultJson }, [primary])).toThrowError(expect.objectContaining({ code: "COMMAND_RECEIPT_INVALID" }));
+  });
+  it.each([
+    ["PLAYER_ADDED", { playerId: "event-player", displayName: "Ada", virtualSeat: 0 }, { playerId: "different-player" }],
+    ["CHECKPOINT_CREATED", { checkpointId: "event-checkpoint", reason: null }, { checkpointId: "different-checkpoint" }],
+  ] as const)("refuses mismatched legacy result IDs for %s", (eventType, payload, resultJson) => {
+    expect(() => readCommandReceipt({ ...receipt, resultJson }, [{ actor: "storyteller", gameVersion: 2, eventType, payload }]))
+      .toThrowError(expect.objectContaining({ code: "COMMAND_RECEIPT_INVALID" }));
   });
 });

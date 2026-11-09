@@ -5,10 +5,41 @@ import { createGame, addPlayer } from "@/modules/game-session/game-session.servi
 import { runCommand } from "@/lib/command";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { scanQr } from "@/modules/scenario/scenario.service";
 
 beforeEach(resetDb);
 
 describe("runCommand (idempotency / versioning)", () => {
+  it("refuses an orphan scan without inventing an outcome, event or replacement receipt", async () => {
+    const { gameId } = await createGame("Inconsistent scan fixture");
+    const { playerId } = await addPlayer({ gameId, commandId: randomUUID(), expectedVersion: 1, displayName: "Ada" });
+    await prisma.gameSession.update({ where: { id: gameId }, data: { status: "ACTIVE", phase: "INVESTIGATION" } });
+    const commandId = randomUUID();
+    const scan = await prisma.qrScan.create({ data: { gameId, playerId, commandId, qrTokenId: "synthetic-orphan", outcome: "CONSUMED" } });
+    const events = await prisma.domainEvent.count({ where: { gameId } });
+    await expect(scanQr({ gameId, playerId, commandId, expectedVersion: 2, token: "tsf-qr-letter-001" }))
+      .rejects.toMatchObject({ code: "COMMAND_RECEIPT_INVALID" });
+    expect(await prisma.qrScan.findUnique({ where: { id: scan.id } })).toEqual(scan);
+    expect(await prisma.domainEvent.count({ where: { gameId } })).toBe(events);
+    expect(await prisma.commandReceipt.count({ where: { gameId, commandId } })).toBe(0);
+    expect((await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } })).version).toBe(2);
+  });
+  it.each([undefined, null, { playerId: 42 }, { playerId: "valid", claimToken: "must-not-persist" }, { playerId: new Date("2026-01-01T00:00:00.000Z") }])(
+    "invalid meaningful output rolls back authoritative player writes: %j", async result => {
+      const { gameId } = await createGame("Rollback");
+      const commandId = randomUUID();
+      await expect(runCommand({ gameId, commandId, expectedVersion: 1, actor: "storyteller", operation: "addPlayer", input: { displayName: "Ada" },
+        handler: async ({ tx, appendEvent }) => {
+          const player = await tx.player.create({ data: { gameId, displayName: "Ada", virtualSeat: 0 } });
+          await appendEvent("PLAYER_ADDED", { playerId: player.id, displayName: "Ada", virtualSeat: 0 });
+          return result;
+        },
+      })).rejects.toMatchObject({ code: "COMMAND_RESULT_INVALID" });
+      expect(await prisma.player.count({ where: { gameId } })).toBe(0);
+      expect(await prisma.domainEvent.count({ where: { gameId, commandId } })).toBe(0);
+      expect(await prisma.commandReceipt.count({ where: { gameId } })).toBe(0);
+      expect((await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } })).version).toBe(1);
+    });
   it("serializes identical commands and normalizes existing name semantics", async () => {
     const { gameId } = await createGame("Test");
     const commandId = randomUUID();

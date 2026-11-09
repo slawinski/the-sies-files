@@ -100,7 +100,8 @@ function PlayerLoadingShell() {
 type PlayerProjectionOwner = ReturnType<typeof useProjectionReconciliation<PlayerGameProjection>>;
 function PlayerAccessBoundary() {
   const projection = useProjectionReconciliation(null, signal => api<PlayerGameProjection>("/api/v1/me", { signal }));
-  return <PlayerPageInner key={projection.accessGeneration} projection={projection} />;
+  const identity = projection.data ? `${projection.data.gameId}:${projection.data.me.playerId}` : "unbound";
+  return <PlayerPageInner key={`${projection.accessGeneration}:${identity}`} projection={projection} />;
 }
 
 function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) {
@@ -141,16 +142,16 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
   }, [refresh]);
 
   const gameId = game?.gameId ?? null;
+  const playerId = game?.me.playerId ?? null;
   const realtime = useGameEventStream(gameId, () => void projection.refresh(), projection);
   usePresenceHeartbeat(gameId);
   const { busy, actionError, stale, setActionError, run, runWithResult, recoverWithResult } =
-    useVersionedMutation(apply, { scope: gameId, ready: () => game !== null && projection.canCommand(game),
+    useVersionedMutation(apply, { scope: gameId && playerId ? `${gameId}:${playerId}` : null, ready: () => game !== null && projection.canCommand(game),
       current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge,
       captureAccess: projection.captureAccess, ownsAccess: projection.ownsAccess, denyAccess: projection.denyAccess });
   const canCommand = () => game !== null && projection.canCommand(game) && !busy;
   useEffect(() => { setScanMessage(null); setScanError(null); setNomineeId(null); }, [gameId]);
 
-  const playerId = game?.me.playerId ?? null;
   const checkQrRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     if (!gameId || !playerId) return;
