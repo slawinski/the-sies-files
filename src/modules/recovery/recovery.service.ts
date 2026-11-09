@@ -82,6 +82,8 @@ export async function createCheckpoint({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "createCheckpoint",
+    input: reason === undefined ? { reasonSupplied: false } : { reasonSupplied: true, reason },
     handler: async ({ tx, game, appendEvent }) => {
       // Normalize (Dates → strings) so the stored JSON hashes identically.
       const snapshot = JSON.parse(JSON.stringify(await buildSnapshot(tx, gameId)));
@@ -208,6 +210,8 @@ export async function resetPlayerAccess({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "resetPlayerAccess",
+    input: { playerId },
     handler: async ({ tx, appendEvent }) => {
       const player = await tx.player.findFirst({ where: { id: playerId, gameId } });
       if (!player) throw new DomainError("PLAYER_NOT_FOUND", "Player not found");
@@ -254,6 +258,8 @@ export async function recoveryOverride({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "recoveryOverride",
+    input: { payload, reason: trimmedReason },
     handler: async ({ tx, appendEvent }) => {
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};

@@ -101,6 +101,8 @@ export async function openNominations({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "openNominations",
+    input: {},
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "INVESTIGATION") throw new DomainError("INVALID_PHASE", "Nominations require Investigation");
       const inv = await ensureInvestigation(tx, gameId, game.cycleNumber);
@@ -130,6 +132,8 @@ export async function closeNominations({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "closeNominations",
+    input: {},
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "INVESTIGATION") throw new DomainError("INVALID_PHASE", "Nominations require Investigation");
       await ensureInvestigation(tx, gameId, game.cycleNumber);
@@ -163,6 +167,8 @@ export async function nominate({
     commandId,
     expectedVersion,
     actor: `player:${nominatorId}`,
+    operation: "nominate",
+    input: { nomineeId },
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "INVESTIGATION") throw new DomainError("INVALID_PHASE", "Nomination requires Investigation");
       const inv = await ensureInvestigation(tx, gameId, game.cycleNumber);
@@ -288,6 +294,8 @@ export async function resolveNominationTrigger({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "resolveNominationTrigger",
+    input: { nominationId, optionId },
     handler: async ({ tx, game, appendEvent }) => {
       const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
       if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
@@ -346,6 +354,8 @@ export async function voteIntent({
     commandId,
     expectedVersion,
     actor: `player:${playerId}`,
+    operation: "voteIntent",
+    input: { nominationId, intent },
     handler: async ({ tx, appendEvent }) => {
       const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
       if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
@@ -405,6 +415,8 @@ export async function startVotingPass({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "startVotingPass",
+    input: { nominationId },
     handler: async ({ tx, appendEvent }) => {
       const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
       if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
@@ -440,6 +452,8 @@ export async function advanceVotingPass({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "advanceVotingPass",
+    input: { nominationId },
     handler: async ({ tx, appendEvent }) => {
       const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
       if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
@@ -480,6 +494,8 @@ export async function lockVote({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "lockVote",
+    input: { nominationId },
     handler: async ({ tx, game, appendEvent }) => {
       const nomination = await tx.nomination.findFirst({ where: { id: nominationId, gameId } });
       if (!nomination) throw new DomainError("GAME_NOT_FOUND", "Nomination not found");
@@ -599,6 +615,8 @@ export async function resolveExecution({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "resolveExecution",
+    input: {},
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "INVESTIGATION") throw new DomainError("INVALID_PHASE", "Execution requires Investigation");
       const inv = await ensureInvestigation(tx, gameId, game.cycleNumber);
@@ -673,6 +691,8 @@ export async function exileTraveller({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "exileTraveller",
+    input: { playerId },
     handler: async ({ tx, appendEvent }) => {
       const traveller = await tx.player.findFirst({ where: { id: playerId, gameId } });
       if (!traveller || traveller.participantKind !== "TRAVELLER") {
@@ -710,6 +730,8 @@ export async function slayer({
     commandId,
     expectedVersion,
     actor: `player:${playerId}`,
+    operation: "slayer",
+    input: { targetPlayerId },
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "INVESTIGATION") throw new DomainError("INVALID_PHASE", "Slayer requires Investigation");
       const slayer = await tx.player.findFirst({ where: { id: playerId, gameId } });
@@ -806,6 +828,8 @@ export async function resolveSlayerDecision({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "resolveSlayerDecision",
+    input: { slayerPlayerId, optionId },
     handler: async ({ tx, game, appendEvent }) => {
       const secret = await tx.playerSecret.findUnique({ where: { playerId: slayerPlayerId } });
       if (!secret) throw new DomainError("PLAYER_NOT_FOUND", "Slayer not found");
@@ -870,6 +894,8 @@ export async function closeInvestigation({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "closeInvestigation",
+    input: {},
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "INVESTIGATION") throw new DomainError("INVALID_PHASE", "Investigation not in progress");
       const inv = await ensureInvestigation(tx, gameId, game.cycleNumber);

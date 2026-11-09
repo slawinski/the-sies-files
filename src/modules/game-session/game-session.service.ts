@@ -7,7 +7,6 @@
 
 import { prisma } from "@/lib/db";
 import { runCommand, runGameTransaction } from "@/lib/command";
-import { z } from "zod";
 import { DomainError } from "@/lib/errors";
 import { systemClock } from "@/lib/clock";
 import { cryptoSecureRng } from "@/lib/rng";
@@ -109,6 +108,8 @@ export async function renameGame({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "renameGame",
+    input: { name: normalizeGameName(name) },
     handler: async ({ tx, game, appendEvent }) => {
       if (game.status !== "LOBBY" && game.status !== "SETUP") {
         throw new DomainError("INVALID_SESSION_STATE", `Game cannot be renamed in status ${game.status}`);
@@ -136,6 +137,8 @@ export async function setParticipantKind({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "setParticipantKind",
+    input: { playerId, participantKind },
     handler: async ({ tx, game, appendEvent }) => {
       assertRosterEditable(game.status);
       const player = await tx.player.findFirst({ where: { id: playerId, gameId } });
@@ -165,7 +168,8 @@ export async function addPlayer({
     commandId,
     expectedVersion,
     actor: "storyteller",
-    resultSchema: z.object({ playerId: z.string() }),
+    operation: "addPlayer",
+    input: { displayName: normalizeDisplayName(displayName) },
     handler: async ({ tx, game, appendEvent }) => {
       assertRosterEditable(game.status);
       const count = await tx.player.count({ where: { gameId } });
@@ -202,6 +206,8 @@ export async function updatePlayer({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "updatePlayer",
+    input: { playerId, displayName: normalizeDisplayName(displayName) },
     handler: async ({ tx, game, appendEvent }) => {
       assertRosterEditable(game.status);
       const player = await tx.player.findFirst({ where: { id: playerId, gameId } });
@@ -235,6 +241,8 @@ export async function removePlayer({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "removePlayer",
+    input: { playerId },
     handler: async ({ tx, game, appendEvent }) => {
       assertRosterEditable(game.status);
       const player = await tx.player.findFirst({ where: { id: playerId, gameId } });
@@ -269,6 +277,8 @@ export async function reorderPlayers({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "reorderPlayers",
+    input: { orderedPlayerIds },
     handler: async ({ tx, game, appendEvent }) => {
       assertRosterEditable(game.status);
       const players = await tx.player.findMany({ where: { gameId } });
@@ -335,6 +345,8 @@ export async function issueClaimToken({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "issueClaimToken",
+    input: { playerId },
     handler: async ({ tx, game, appendEvent }) => {
       // Claim tokens are about player access (incl. re-issue), not roster edits —
       // so they remain issuable after setup commit / during the game.

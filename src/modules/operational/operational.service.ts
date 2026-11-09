@@ -208,6 +208,8 @@ export async function startOperational({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "startOperational",
+    input: {},
     handler: async ({ tx, game, appendEvent }) => {
       let cycle: number;
       if (game.status === "ROLE_REVEAL") {
@@ -310,6 +312,8 @@ export async function submitAction({
     commandId,
     expectedVersion,
     actor: `player:${playerId}`,
+    operation: "submitAction",
+    input: { actionId, targetPlayerIds },
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "OPERATIONAL") throw new DomainError("INVALID_PHASE", "No Operational phase in progress");
       const action = await tx.operationalAction.findUnique({
@@ -408,6 +412,8 @@ export async function resolveAction({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "resolveAction",
+    input: { actionId, ...(resolution === undefined ? { resolutionSupplied: false } : { resolutionSupplied: true, resolution }) },
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "OPERATIONAL") throw new DomainError("INVALID_PHASE", "No Operational phase in progress");
       const action = await tx.operationalAction.findUnique({
@@ -619,6 +625,8 @@ export async function completeOperational({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "completeOperational",
+    input: {},
     handler: async ({ tx, game, appendEvent }) => {
       if (game.phase !== "OPERATIONAL") throw new DomainError("INVALID_PHASE", "No Operational phase in progress");
       const phase = await tx.operationalPhase.findFirst({

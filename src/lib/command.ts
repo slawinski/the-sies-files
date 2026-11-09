@@ -18,7 +18,9 @@
 
 import { Prisma } from "@prisma/client";
 import type { GameSession } from "@prisma/client";
-import type { ZodType } from "zod";
+import { createHash } from "node:crypto";
+import { isJson, parseCommandResult, readCommandReceipt, receiptInvalid,
+  type CommandActor, type CommandOperation, type CommandResultFor, type Json } from "./command-contracts";
 import { prisma } from "./db";
 import { DomainError } from "./errors";
 
@@ -110,22 +112,31 @@ async function commitVersion(
   });
 }
 
-export async function runCommand<T>({
+function canonical(value: Json): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+}
+
+export async function runCommand<O extends CommandOperation>({
   gameId,
   commandId,
   expectedVersion,
   actor,
   handler,
-  resultSchema,
+  operation,
+  input,
 }: {
   gameId: string;
   commandId: string;
   expectedVersion: number;
-  actor?: string;
-  handler: Handler<T>;
-  /** Optional runtime codec for the persisted result (audit spec 22 §5). */
-  resultSchema?: ZodType<T>;
-}): Promise<CommandResult<T>> {
+  actor: CommandActor;
+  operation: O;
+  input: unknown;
+  handler: Handler<unknown>;
+}): Promise<CommandResult<CommandResultFor<O>>> {
+  if (!isJson(input)) throw new DomainError("COMMAND_RESULT_INVALID", "Command identity is invalid");
+  const requestHash = createHash("sha256").update(canonical({ format: 1, operation, actor, input })).digest("hex");
   return prisma.$transaction(async (tx) => {
     const locked = await lockAndRead(tx, gameId, { actor, commandId });
 
@@ -135,24 +146,14 @@ export async function runCommand<T>({
       where: { gameId_commandId: { gameId, commandId } },
     });
     if (existing) {
-      if (resultSchema) {
-        const parsed = resultSchema.safeParse(existing.resultJson);
-        if (!parsed.success) {
-          // Fail closed — never re-run the handler, never cast through.
-          throw new DomainError(
-            "COMMAND_RECEIPT_INVALID",
-            `Stored receipt for command ${commandId} is incompatible`,
-          );
-        }
-        return {
-          result: parsed.data,
-          version: existing.resultingVersion,
-          sequence: -1,
-          duplicate: true,
-        };
-      }
+      if (existing.actor !== null && existing.actor !== actor) throw new DomainError("FORBIDDEN", "Command identity is unavailable");
+      // Historical and partially identified receipts can never establish input equivalence.
+      if (!existing.operation || !existing.actor || !existing.requestHash || existing.resultVersion === null) receiptInvalid();
+      readCommandReceipt(existing);
+      if (existing.operation !== operation || existing.requestHash !== requestHash)
+        throw new DomainError("DUPLICATE_COMMAND", "Command identity does not match this request");
       return {
-        result: (existing.resultJson ?? null) as T,
+        result: parseCommandResult(operation, existing.resultJson),
         version: existing.resultingVersion,
         sequence: -1,
         duplicate: true,
@@ -166,12 +167,13 @@ export async function runCommand<T>({
       );
     }
 
-    const result = await handler({
+    const rawResult = await handler({
       tx,
       game: locked.game,
       version: locked.game.version,
       appendEvent: locked.appendEvent,
     });
+    const result = parseCommandResult(operation, rawResult, true);
 
     if (locked.appendedCount() === 0) {
       throw new Error(
@@ -187,8 +189,11 @@ export async function runCommand<T>({
         gameId,
         resultingVersion: locked.newVersion(),
         status: "APPLIED",
-        resultJson:
-          result === undefined ? undefined : (result as Prisma.InputJsonValue),
+        operation,
+        actor,
+        resultVersion: 1,
+        requestHash,
+        resultJson: result as Prisma.InputJsonValue,
       },
     });
 

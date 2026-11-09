@@ -183,6 +183,10 @@ model CommandReceipt {
   resultingVersion Int
   status           CommandReceiptStatus @default(APPLIED)
   resultJson       Json?
+  operation        String?
+  actor            String?
+  resultVersion    Int?
+  requestHash      String?
   createdAt        DateTime    @default(now())
 
   @@unique([gameId, commandId])

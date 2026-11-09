@@ -33,6 +33,7 @@ export const DOMAIN_ERROR_CODES = [
   "ROSTER_FULL",
   "RATE_LIMITED",
   "COMMAND_RECEIPT_INVALID",
+  "COMMAND_RESULT_INVALID",
 ] as const;
 
 export type DomainErrorCode = (typeof DOMAIN_ERROR_CODES)[number];
@@ -64,6 +65,7 @@ export function httpStatusFor(code: DomainErrorCode): number {
     case "RATE_LIMITED":
       return 429;
     case "COMMAND_RECEIPT_INVALID":
+    case "COMMAND_RESULT_INVALID":
       return 500;
     default:
       return 400;

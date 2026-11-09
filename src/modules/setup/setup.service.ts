@@ -4,7 +4,6 @@
 
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { runCommand } from "@/lib/command";
 import { DomainError } from "@/lib/errors";
@@ -61,7 +60,8 @@ export async function generateSetup({
     commandId,
     expectedVersion,
     actor: "storyteller",
-    resultSchema: z.object({ regenerationIndex: z.number() }),
+    operation: "generateSetup",
+    input: seed === undefined ? { seedSupplied: false } : { seedSupplied: true, seed },
     handler: async ({ tx, game, appendEvent }) => {
       if (game.status !== "LOBBY" && game.status !== "SETUP") {
         throw new DomainError("INVALID_SESSION_STATE", `Cannot generate setup in status ${game.status}`);
@@ -130,7 +130,8 @@ export async function commitSetup({
     commandId,
     expectedVersion,
     actor: "storyteller",
-    resultSchema: z.object({ setupHash: z.string() }),
+    operation: "commitSetup",
+    input: {},
     handler: async ({ tx, game, appendEvent }) => {
       if (game.status !== "SETUP") {
         throw new DomainError("INVALID_SESSION_STATE", `Cannot commit setup in status ${game.status}`);
@@ -204,6 +205,8 @@ export async function acknowledgeRole({
     commandId,
     expectedVersion,
     actor: `player:${playerId}`,
+    operation: "acknowledgeRole",
+    input: {},
     handler: async ({ tx, game, appendEvent }) => {
       if (game.status !== "ROLE_REVEAL" && game.status !== "ACTIVE") {
         throw new DomainError("INVALID_SESSION_STATE", `Cannot acknowledge role in status ${game.status}`);
