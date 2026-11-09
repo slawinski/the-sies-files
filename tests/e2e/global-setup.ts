@@ -7,7 +7,7 @@ export default async function globalSetup() {
     // The baseline owner resets before launching the server, never underneath it.
     return;
   }
-  const lease = acquireLease(target);
+  const lease = acquireLease(target, 3100);
   try { resetDatabase(target, lease.token); }
   catch (error) { lease.release(); throw error; }
   return () => lease.release();

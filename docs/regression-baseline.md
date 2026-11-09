@@ -130,6 +130,22 @@ exists, but neither stage can excuse the other's failure. Development explicitly
 records recovery as `not-applicable`: it deliberately removed production output.
 Use PostgreSQL **16** server and client binaries, not the system's linked major.
 
+The access-boundaries profile is independently inventoried after ordinary browser
+and (for production) physical recovery shutdown. The parent retains its database
+lease and reacquires the port lease. `npm run test:security` selects E2E-12 only,
+with enabled limits, explicit `APP_ORIGIN=http://localhost:3100`, one worker and
+zero retries. Verification purpose overrides an inherited limiter bypass in the
+actual owned child launcher. Ordinary E2E-01–10 and physical E2E-11 identities
+are unchanged. Development also requires security; physical recovery remains
+production-only and mandatory there.
+
+`security-summary.json` contains only native case identities and statuses.
+Raw security native reports, diagnostics and artifacts remain under
+`security-private/` and must not be uploaded. Missing, truncated, skipped or failed
+security outcomes prevent release completion even if other stages pass. See
+[access-secrecy-verification.md](access-secrecy-verification.md) for the bounded
+route matrix, local trust assumptions and retained negative controls.
+
 Each run stores `stages.json`, `run.json`, native `unit.json`/`browser.json`, both
 discovery inventories, ordinary stage logs and first-attempt traces in
 `browser-artifacts/`. Missing/truncated or incomplete reports, failed/blocked

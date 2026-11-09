@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { runInNewContext } from "node:vm";
 import { resetDb, createGameWithPlayers, defaultActionTargets } from "./helpers/db";
 import { prisma } from "@/lib/db";
 import { scanQr } from "@/modules/scenario/scenario.service";
@@ -39,6 +40,27 @@ import {
 } from "@/components/map-camera";
 
 beforeEach(resetDb);
+
+it("service worker never intercepts private API, assets or event streams", async () => {
+  type FetchEvent = { request: Request; respondWith: (response: Promise<Response>) => void };
+  let handle: (event: FetchEvent) => void = () => {};
+  const network = vi.fn().mockResolvedValue(new Response('shell'));
+  const cache = vi.fn().mockResolvedValue({ put: vi.fn() });
+  runInNewContext(readFileSync(path.join(process.cwd(), 'public/sw.js'), 'utf8'), {
+    URL, Response, fetch: network, caches: { open: cache },
+    self: { addEventListener: (name: string, listener: (event: FetchEvent) => void) => { if (name === 'fetch') handle = listener; } },
+  });
+  const respondWith = vi.fn();
+  for (const pathname of ['/api/v1/me', '/api/v1/games/game/map/layers/WEST_AREA', '/api/v1/games/game/events/stream']) {
+    handle({ request: new Request(`http://localhost${pathname}`), respondWith });
+  }
+  expect(respondWith).not.toHaveBeenCalled();
+  expect(network).not.toHaveBeenCalled();
+  expect(cache).not.toHaveBeenCalled();
+  handle({ request: new Request('http://localhost/shell'), respondWith });
+  expect(await respondWith.mock.calls[0][0]).toBeInstanceOf(Response);
+  expect(network).toHaveBeenCalledTimes(1);
+});
 
 const ROLES13: CharacterId[] = [
   "MONK", "SOLDIER", "EMPATH", "CHEF", "FORTUNE_TELLER", "WASHERWOMAN",

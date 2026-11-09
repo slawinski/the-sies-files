@@ -95,13 +95,18 @@ function PlayerLoadingShell() {
   );
 }
 
-function PlayerPageInner() {
+type PlayerProjectionOwner = ReturnType<typeof useProjectionReconciliation<PlayerGameProjection>>;
+function PlayerAccessBoundary() {
+  const projection = useProjectionReconciliation(null, signal => api<PlayerGameProjection>("/api/v1/me", { signal }));
+  return <PlayerPageInner key={projection.accessGeneration} projection={projection} />;
+}
+
+function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawView = searchParams.get("view");
   const requestedView: PlayerView = isPlayerView(rawView) ? rawView : "case";
 
-  const projection = useProjectionReconciliation(null, signal => api<PlayerGameProjection>("/api/v1/me", { signal }));
   const { refresh } = projection;
   const game = projection.data;
   const failure = projection.error as ApiClientError | null;
@@ -134,7 +139,8 @@ function PlayerPageInner() {
   usePresenceHeartbeat(gameId);
   const { busy, actionError, stale, setActionError, run, runWithResult } =
     useVersionedMutation(apply, { scope: gameId, ready: () => game !== null && projection.canCommand(game),
-      current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge });
+      current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge,
+      captureAccess: projection.captureAccess, ownsAccess: projection.ownsAccess, denyAccess: projection.denyAccess });
   const canCommand = () => game !== null && projection.canCommand(game) && !busy;
   useEffect(() => { setScanMessage(null); setScanError(null); setNomineeId(null); }, [gameId]);
 
@@ -207,6 +213,7 @@ function PlayerPageInner() {
 
   async function scanWithToken(token: string): Promise<void> {
     if (!game || !canCommand()) return;
+    const access = projection.captureAccess();
     setScanMessage(null);
     setScanError(null);
     const result = await runWithResult(() => api<ScanResponseDto>(`/api/v1/games/${game.gameId}/scenario/qr/scan`, {
@@ -217,7 +224,7 @@ function PlayerPageInner() {
           payload: { token },
         }),
       }).catch((error: ApiClientError) => {
-        if (currentGame.current?.gameId === game.gameId) {
+        if (projection.ownsAccess(access) && currentGame.current?.gameId === game.gameId) {
           setScanError(error.code === "TERRAIN_UNAVAILABLE"
             ? "Teren niedostępny — skanowanie możliwe tylko podczas śledztwa, poza formalnymi nominacjami."
             : error.code === "QR_ALREADY_CONSUMED" ? "Ten kod został już wykorzystany."
@@ -225,7 +232,7 @@ function PlayerPageInner() {
         }
         throw error;
       }));
-    if (result.ok && result.value && currentGame.current?.gameId === game.gameId) {
+    if (projection.ownsAccess(access) && result.ok && result.value && currentGame.current?.gameId === game.gameId) {
       setScanMessage(describeScanOutcome(result.value.outcome, currentGame.current.scenario));
     }
   }
@@ -380,7 +387,7 @@ function PlayerPageInner() {
 export default function PlayerPage() {
   return (
     <Suspense fallback={<PlayerLoadingShell />}>
-      <PlayerPageInner />
+      <PlayerAccessBoundary />
     </Suspense>
   );
 }

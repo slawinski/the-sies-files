@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { resetDb } from "./helpers/db";
 import { createGame, addPlayer } from "@/modules/game-session/game-session.service";
 import { prisma } from "@/lib/db";
+import type { SetupCandidate } from "@/modules/setup/types";
 import {
   buildPublicProjection,
   buildPlayerProjection,
@@ -22,6 +23,26 @@ const FORBIDDEN_KEYS = [
 ];
 
 describe("projections (server-side allow-lists)", () => {
+  it("paired other-player secrets leave the complete public and own-player projections equal", async () => {
+    const { gameId } = await createGame("Paired");
+    const a = await addPlayer({ gameId, commandId: randomUUID(), expectedVersion: 1, displayName: "Ada" });
+    const b = await addPlayer({ gameId, commandId: randomUUID(), expectedVersion: a.version, displayName: "Bob" });
+    const game = await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } });
+    const players = await prisma.player.findMany({ where: { gameId } });
+    const secret = await prisma.playerSecret.create({ data: { playerId: b.playerId, trueCharacterId: "MONK", perceivedCharacterId: "MONK", trueAlignment: "GOOD", abilityStateJson: {} } });
+    const ownSecret = await prisma.playerSecret.create({ data: { playerId: a.playerId, trueCharacterId: "SOLDIER", perceivedCharacterId: "SOLDIER", trueAlignment: "GOOD", abilityStateJson: {} } });
+    const candidate: SetupCandidate = { generatorVersion: 1, participantCount: 2, normalCount: 2,
+      assignments: [{ playerId: a.playerId, virtualSeat: 0, participantKind: "NORMAL", trueCharacterId: "SOLDIER", perceivedCharacterId: "SOLDIER", trueAlignment: "GOOD" }, { playerId: b.playerId, virtualSeat: 1, participantKind: "NORMAL", trueCharacterId: "MONK", perceivedCharacterId: "MONK", trueAlignment: "GOOD" }],
+      fortuneTellerRedHerringPlayerId: null, demonBluffs: [] };
+    const before = { public: buildPublicProjection(game, players), own: buildPlayerProjection(game, players, a.playerId, { secret: ownSecret, candidate }) };
+    expect(before.own.myRole).not.toBeNull();
+    const positive = buildPlayerProjection(game, players, b.playerId, { secret, candidate });
+    const changed = await prisma.playerSecret.update({ where: { playerId: b.playerId }, data: { trueCharacterId: "IMP", perceivedCharacterId: "IMP", trueAlignment: "EVIL" } });
+    const changedCandidate: SetupCandidate = { ...candidate, assignments: candidate.assignments.map(row => row.playerId === b.playerId ? { ...row, trueCharacterId: "IMP", perceivedCharacterId: "IMP", trueAlignment: "EVIL" } : row) };
+    expect({ public: buildPublicProjection(game, players), own: buildPlayerProjection(game, players, a.playerId, { secret: ownSecret, candidate: changedCandidate }) }).toEqual(before);
+    expect(buildPlayerProjection(game, players, b.playerId, { secret: changed, candidate: changedCandidate }).myRole).not.toEqual(positive.myRole);
+    // Same IDs, timestamps and version: no field is normalized or removed.
+  });
   it("public projection contains no secret fields", async () => {
     const { gameId } = await createGame("Test");
     await addPlayer({

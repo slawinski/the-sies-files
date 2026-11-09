@@ -26,9 +26,10 @@ export function isRateLimitingDisabled(): boolean {
 }
 
 export function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  // No authenticated ingress identity exists locally. All anonymous callers
+  // share the existing fallback; client-supplied addresses are not identities.
+  void req;
+  return "unknown";
 }
 
 export async function rateLimit(key: string, limit: number, windowMs: number): Promise<void> {
@@ -48,10 +49,12 @@ export async function rateLimit(key: string, limit: number, windowMs: number): P
     throw new RateLimitError(retryAfterSeconds);
   }
 
-  // Opportunistic pruning of old windows (best-effort, ~1% of requests).
+  // Cleanup spans operations: the longest supported window is game creation's
+  // hour. A five-minute token check must not erase an active 15-minute claim
+  // or hourly creation bucket. Retention changes, never the active allowances.
   if (Math.floor(Math.random() * 100) === 0) {
     await prisma.rateLimitBucket
-      .deleteMany({ where: { windowStart: { lt: new Date(now - 2 * windowMs) } } })
+      .deleteMany({ where: { windowStart: { lt: new Date(now - 2 * Math.max(windowMs, 60 * 60 * 1000)) } } })
       .catch(() => undefined);
   }
 }

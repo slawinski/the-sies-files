@@ -7,7 +7,8 @@ on:
 
 jobs:
   release-gate:
-    runs-on: ubuntu-latest
+    # PostgreSQL 16 client tools are available in Ubuntu 24.04's repositories.
+    runs-on: ubuntu-24.04
 
     services:
       postgres:
@@ -65,6 +66,7 @@ jobs:
             baseline-results/ci-production/*discovery.json
             baseline-results/ci-production/unit.json
             baseline-results/ci-production/browser.json
+            baseline-results/ci-production/security-summary.json
             baseline-results/ci-production/recovery/recovery.json
             baseline-results/ci-production/recovery/recovery-native.json
             baseline-results/ci-production/recovery/recovery-discovery.json

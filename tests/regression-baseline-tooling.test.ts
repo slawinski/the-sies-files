@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { capture, runStages, verifySource, assertPortFree, readInventories, readRecoveryInventory } from '../scripts/regression-baseline.mjs';
+import { capture, runStages, verifySource, assertPortFree, readInventories, readRecoveryInventory, readSecurityInventory } from '../scripts/regression-baseline.mjs';
 import { hasSuccessionPrerequisites, scenarioSpecimen, commandVersion } from './e2e/fixtures';
 import { createServer } from 'node:http';
 import { request } from '@playwright/test';
@@ -22,6 +22,31 @@ function tree() {
   execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture'], { cwd: dir });
   return dir;
 }
+test('security inventory is mandatory, complete, non-skipped and strips secret-bearing diagnostics', () => {
+  const dir = tree();
+  const privateDir = path.join(dir, 'security-private'); fs.mkdirSync(privateDir);
+  expect(() => readSecurityInventory(dir)).toThrow('Missing or truncated');
+  const spec = { id: 'security-one', file: 'e2e-12-access-boundaries.spec.ts', title: 'safe case title', tests: [{ projectName: 'security-chromium', expectedStatus: 'passed', results: [{ status: 'passed', errors: ['private-token-marker'], attachments: [{ body: 'private-token-marker' }] }] }] };
+  fs.writeFileSync(path.join(privateDir, 'discovery.json'), JSON.stringify({ specs: [spec] }));
+  fs.writeFileSync(path.join(privateDir, 'native.json'), JSON.stringify({ specs: [spec] }));
+  const summary = readSecurityInventory(dir);
+  expect(summary.status).toBe('passed');
+  expect(JSON.stringify(summary)).not.toContain('private-token-marker');
+  spec.tests[0].results[0].status = 'skipped';
+  fs.writeFileSync(path.join(privateDir, 'native.json'), JSON.stringify({ specs: [spec] }));
+  expect(readSecurityInventory(dir).status).toBe('failed');
+  fs.writeFileSync(path.join(privateDir, 'native.json'), JSON.stringify({ specs: [] }));
+  expect(() => readSecurityInventory(dir)).toThrow('Incomplete');
+});
+
+test('failed private security diagnostics never enter the public stage-log glob', async () => {
+  const dir = tree(); const out = path.join(dir, 'baseline-results/run');
+  const results = await runStages([{ name: 'security', command: process.execPath,
+    args: ['-e', "console.error('private-fixture-marker'); process.exit(1)"], private: true }], dir, process.env, out);
+  expect(results[0].status).toBe('failed');
+  expect(fs.existsSync(path.join(out, 'security.log'))).toBe(false);
+  expect(fs.readFileSync(path.join(out, 'security-private/security.log'), 'utf8')).toContain('private-fixture-marker');
+});
 test('reconstructs dirty and untracked source with metadata without changing original', () => {
   const dir = tree();
   fs.writeFileSync(path.join(dir, 'source.ts'), 'edited');

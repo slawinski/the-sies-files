@@ -24,7 +24,7 @@ export const HEARTBEAT_OK_EVENT = "tsf:presence-heartbeat-ok";
 export function useGameEventStream(
   gameId: string | null,
   onInvalidate: () => void,
-  reconciliation: { gameId: string | null; ready: boolean; boundary: () => void; target: (version: number) => void },
+  reconciliation: { gameId: string | null; ready: boolean; boundary: () => void; target: (version: number) => void; accessLost: () => void; accessGeneration: number },
 ): RealtimeHealth {
   const [health, setHealth] = useState<"OPEN" | "RECONNECTING" | "OFFLINE">("RECONNECTING");
   const [streamGame, setStreamGame] = useState<string | null>(null);
@@ -44,6 +44,7 @@ export function useGameEventStream(
     }
 
     const source = new EventSource(`/api/v1/games/${gameId}/events/stream`);
+    let ended = false;
     sourceRef.current = source;
 
     const queueInvalidate = () => {
@@ -66,6 +67,7 @@ export function useGameEventStream(
     };
 
     const boundary = () => {
+      if (ended) return;
       if (reconciliationRef.current && reconciliationRef.current.gameId !== gameId) return;
       reconciliationRef.current?.boundary();
       onInvalidateRef.current();
@@ -74,6 +76,7 @@ export function useGameEventStream(
     const interrupted = () => { evaluateHealth(); boundary(); };
     const handleHeartbeatFailed = () => { setHealth("OFFLINE"); boundary(); };
     const metadata = (event: Event) => {
+      if (ended) return;
       if (reconciliationRef.current && reconciliationRef.current.gameId !== gameId) return;
       try {
         const value = JSON.parse((event as MessageEvent).data);
@@ -94,11 +97,19 @@ export function useGameEventStream(
       evaluateHealth();
       if (!reconciliationRef.current?.ready) onInvalidateRef.current();
     };
+    const accessLost = () => {
+      if (ended) return;
+      ended = true;
+      source.close();
+      if (debounceRef.current !== null) { window.clearTimeout(debounceRef.current); debounceRef.current = null; }
+      reconciliationRef.current.accessLost();
+    };
 
     source.addEventListener("open", open);
     source.addEventListener("error", interrupted);
     source.addEventListener("hello", metadata);
     source.addEventListener("invalidate", metadata);
+    source.addEventListener("access-lost", accessLost);
 
     window.addEventListener("offline", interrupted);
     window.addEventListener("online", online);
@@ -109,6 +120,7 @@ export function useGameEventStream(
     document.addEventListener("visibilitychange", foreground);
 
     return () => {
+      ended = true;
       if (debounceRef.current !== null) {
         window.clearTimeout(debounceRef.current);
         debounceRef.current = null;
@@ -117,6 +129,7 @@ export function useGameEventStream(
       source.removeEventListener("error", interrupted);
       source.removeEventListener("hello", metadata);
       source.removeEventListener("invalidate", metadata);
+      source.removeEventListener("access-lost", accessLost);
       source.close();
       sourceRef.current = null;
       window.removeEventListener("offline", interrupted);
@@ -127,7 +140,7 @@ export function useGameEventStream(
       window.removeEventListener("pageshow", foreground);
       document.removeEventListener("visibilitychange", foreground);
     };
-  }, [gameId]);
+  }, [gameId, reconciliation.accessGeneration]);
 
   if (streamGame !== gameId) return "RECONNECTING";
   return health === "OPEN" ? (reconciliation?.ready ? "LIVE" : "SYNCHRONIZING") : health;
