@@ -40,6 +40,7 @@ export async function POST(
         claimId: result.claimId,
         expiresAt: result.expiresAt,
         duplicate: true,
+        credentialAvailable: false,
         version: result.version,
       });
     }
@@ -48,6 +49,8 @@ export async function POST(
       claimId: result.claimId,
       expiresAt: result.expiresAt,
       claimToken: token,
+      duplicate: false,
+      credentialAvailable: true,
       version: result.version,
     });
   } catch (err) {

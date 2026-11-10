@@ -7,6 +7,7 @@ import os from 'node:os';
 import net from 'node:net';
 import { acquireLease, resolveTarget, stopOwnedServer } from './test-database.mjs';
 import { buildIdentity, completeClaims } from './playable-recovery.mjs';
+import { prepareCompatibilitySource, readCompatibilityReport } from './command-receipt-compatibility.mjs';
 
 const hash = (data: string | Buffer) => crypto.createHash('sha256').update(data).digest('hex');
 function git(root: string, args: string[]) {
@@ -207,6 +208,9 @@ export async function measure(root: string, out: string, profile: 'development' 
   fs.writeFileSync(path.join(out, 'security-summary.json'), JSON.stringify({ status: 'blocked', reason: 'Security stage has not completed' }));
   try {
     await assertPortFree(3100);
+    // This exact Git object must be materialized while history is available;
+    // workers inside the captured B source tree cannot substitute current code.
+    metadata.compatibilityProducer = prepareCompatibilitySource(root, path.join(out, 'compatibility-A'));
     const manifest = capture(root, path.join(out, 'capsule'));
     const work = path.join(out, 'capsule/source');
     metadata.sourceId = manifest.sourceId; metadata.observerSha256 = manifest.observerSha256;
@@ -236,10 +240,12 @@ export async function measure(root: string, out: string, profile: 'development' 
       stage('lint', 'npm', ['run', 'lint']),
       stage('types', 'npm', ['run', 'typecheck', '--', '--incremental', 'false']),
       stage('generate', 'npm', ['run', 'db:generate']),
+      stage('compatibility', 'npx', ['tsx', 'scripts/command-receipt-compatibility.mts', 'run', path.join(out, 'compatibility-A'), path.join(out, 'compatibility'), manifest.sourceId], ['generate']),
       stage('reset-unit', 'npx', ['tsx', 'scripts/test-database.mts', 'reset'], ['generate']),
       stage('postgres-version', 'psql', ['-Atc', 'SELECT version()'], ['reset-unit']),
       stage('unit-discovery', 'npx', ['vitest', 'list', '--staticParse=false', '--json=' + path.join(out, 'unit-discovery.json')], ['generate']),
       stage('unit', 'npm', ['test', '--', '--reporter=default', '--reporter=json', '--outputFile=' + path.join(out, 'unit.json')], ['reset-unit']),
+      stage('clean-database', 'bash', ['scripts/verify-clean-db.sh'], ['unit', 'generate']),
       stage('build', 'npm', ['run', 'build']),
       ...(profile === 'development' ? [stage('fresh-dev-output', process.execPath, ['-e', "require('node:fs').rmSync('.next', { recursive: true, force: true })"])] : []),
       stage('reset-browser', 'npx', ['tsx', 'scripts/test-database.mts', 'reset'], ['generate']),
@@ -278,6 +284,8 @@ export async function measure(root: string, out: string, profile: 'development' 
       write();
     });
     metadata.stages = results;
+    try { metadata.compatibility = readCompatibilityReport(path.join(out, 'compatibility/compatibility.json'), manifest.sourceId); }
+    catch { metadata.compatibility = { complete: false, reason: 'Compatibility report missing, failed or incomplete' }; }
     try { metadata.security = readSecurityInventory(out); }
     catch { metadata.security = { status: 'failed', reason: 'Security inventory missing or incomplete' }; }
     fs.writeFileSync(path.join(out, 'security-summary.json'), JSON.stringify(metadata.security, null, 2));
@@ -305,7 +313,7 @@ export async function measure(root: string, out: string, profile: 'development' 
     metadata.originalSourceUnchanged = capture(root).sourceId === manifest.sourceId;
     await stopOwnedServer(target, lease.token);
     await assertPortFree(3100); metadata.serverPortReleased = true;
-    metadata.complete = results.every(s => s.status === 'passed') && (metadata.security as { status: string }).status === 'passed' && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed'));
+    metadata.complete = results.every(s => s.status === 'passed') && (metadata.compatibility as { complete: boolean }).complete && (metadata.security as { status: string }).status === 'passed' && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed'));
     write();
     return metadata.complete === true;
   } catch (error) { metadata.complete = false; metadata.blocker = (error as Error).message; write(); return false; }

@@ -55,5 +55,27 @@ export function useVersionedMutation(apply: () => Promise<unknown>, options: {
     }
   }, [apply]);
   const run = useCallback(async (action: () => Promise<unknown>) => (await runWithResult(action)).ok, [runWithResult]);
-  return { busy, actionError, stale, setBusy, setActionError, setStale, run, runWithResult };
+  // Outcome reads need current access, not a fresh projection or permission to
+  // mutate. A null (UNKNOWN) observation must never acknowledge a commit.
+  const recoverWithResult = useCallback(async <T,>(read: () => Promise<T | null>): Promise<T | null> => {
+    const generation = lifetime.current;
+    const access = current.current.captureAccess();
+    const ownsLifetime = () => generation.active && generation === lifetime.current;
+    const valid = () => ownsLifetime() && current.current.ownsAccess(access) && current.current.current();
+    if (!valid() || running.current) return null;
+    running.current = true; setBusy(true);
+    try {
+      const value = await read();
+      if (!valid() || value === null) return null;
+      current.current.acknowledge(value);
+      try { await apply(); } catch {}
+      return valid() ? value : null;
+    } catch (error) {
+      if (valid()) current.current.denyAccess(error);
+      throw error;
+    } finally {
+      if (ownsLifetime()) { running.current = false; setBusy(false); }
+    }
+  }, [apply]);
+  return { busy, actionError, stale, setBusy, setActionError, setStale, run, runWithResult, recoverWithResult };
 }

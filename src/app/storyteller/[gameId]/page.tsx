@@ -44,14 +44,12 @@ import ScenarioView from "./_components/ScenarioView";
 import AuditView from "./_components/AuditView";
 import SystemView, { type RecoveryKind } from "./_components/SystemView";
 
-interface ClaimTokenResponse {
+type ClaimTokenResponse = AccessResetResponseDto & {
   playerId: string;
   claimId: string;
   expiresAt: string;
-  claimToken?: string;
-  duplicate?: boolean;
   version: number;
-}
+};
 
 function LoadingShell() {
   return (
@@ -130,6 +128,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
   const [privacyCovered, setPrivacyCovered] = useState(false);
 
   const [claimModal, setClaimModal] = useState<{
+    acceptedUnavailable?: boolean;
     player: StorytellerPlayerDto;
     link: string | null;
     busy: boolean;
@@ -137,6 +136,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
   } | null>(null);
 
   const [resetModal, setResetModal] = useState<{
+    acceptedUnavailable?: boolean;
     player: StorytellerPlayerDto;
     token: string | null;
     busy: boolean;
@@ -314,7 +314,8 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
         player,
         link: res.claimToken ? `${window.location.origin}/claim#${res.claimToken}` : null,
         busy: false,
-        error: res.claimToken ? null : "Dla tego gracza wydano już link do odbioru.",
+        error: null,
+        acceptedUnavailable: !res.credentialAvailable,
       });
     } else {
       setClaimModal({
@@ -348,7 +349,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
     if (!alive.current || !projection.ownsAccess(access)) return;
     if (result.ok && result.value) {
       const res = result.value;
-      setResetModal({ player, token: res.claimToken, busy: false, error: null });
+      setResetModal({ player, token: res.credentialAvailable ? res.claimToken : null, busy: false, error: null, acceptedUnavailable: !res.credentialAvailable });
     } else {
       setResetModal({
         player,
@@ -780,6 +781,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
           description="Wyślij ten jednorazowy link do gracza. Działa raz i nie zostanie pokazany ponownie."
         >
           {claimModal.busy && <p className="text-sm text-ink-secondary">Wydaję jednorazowy link do odbioru…</p>}
+          {claimModal.acceptedUnavailable && <Notice>Polecenie przyjęto wcześniej. Jednorazowy link nie jest już dostępny. Odśwież stan przed świadomym wydaniem nowego linku.</Notice>}
           {!claimModal.busy && claimModal.error && (
             <Notice variant="error">{claimModal.error}</Notice>
           )}
@@ -797,6 +799,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
           description="Nowy jednorazowy token zastępuje poprzedni dostęp gracza. Nie zostanie pokazany ponownie."
         >
           {resetModal.busy && <p className="text-sm text-ink-secondary">Resetuję dostęp i wydaję nowy token…</p>}
+          {resetModal.acceptedUnavailable && <Notice>Reset przyjęto wcześniej. Jednorazowy token nie jest już dostępny. Nie zresetowano dostępu ponownie. Odśwież stan przed świadomym wydaniem nowego linku.</Notice>}
           {!resetModal.busy && resetModal.error && (
             <Notice variant="error">{resetModal.error}</Notice>
           )}

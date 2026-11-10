@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { runCommand } from "@/lib/command";
+import { legacyPlayerOwns, metadataFree, readCommandReceipt } from "@/lib/command-contracts";
 import { DomainError } from "@/lib/errors";
 import { systemClock } from "@/lib/clock";
 import { generateToken, hashToken } from "@/lib/auth/tokens";
@@ -82,6 +83,8 @@ export async function createCheckpoint({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "createCheckpoint",
+    input: reason === undefined ? { reasonSupplied: false } : { reasonSupplied: true, reason },
     handler: async ({ tx, game, appendEvent }) => {
       // Normalize (Dates → strings) so the stored JSON hashes identically.
       const snapshot = JSON.parse(JSON.stringify(await buildSnapshot(tx, gameId)));
@@ -118,16 +121,30 @@ export async function validateCheckpoint(gameId: string, checkpointId: string) {
 
 // ---------- Command status ----------
 
-export async function getCommandStatus(gameId: string, commandId: string) {
-  const receipt = await prisma.commandReceipt.findUnique({
-    where: { gameId_commandId: { gameId, commandId } },
+export type CommandStatusViewer = { kind: "storyteller" } | { kind: "player"; playerId: string };
+const playerOperations = new Set(["scanQr", "nominate", "voteIntent", "acknowledgeRole", "submitAction", "slayer"]);
+
+export async function getCommandStatus(gameId: string, commandId: string, viewer: CommandStatusViewer) {
+  const receipt = await prisma.commandReceipt.findFirst({
+    where: { gameId, commandId, ...(viewer.kind === "player" ? { OR: [
+      { actor: `player:${viewer.playerId}` },
+      { actor: null, operation: null, resultVersion: null, requestHash: null },
+    ] } : {}) },
   });
   if (!receipt) return { status: "UNKNOWN" as const };
+  let legacyEvents;
+  if (metadataFree(receipt)) {
+    legacyEvents = await prisma.domainEvent.findMany({ where: { gameId, commandId } });
+    if (viewer.kind === "player" && !legacyPlayerOwns(legacyEvents, viewer.playerId)) return { status: "UNKNOWN" as const };
+  } else if (viewer.kind === "player" && (!receipt.operation || !playerOperations.has(receipt.operation))) {
+    return { status: "UNKNOWN" as const };
+  }
+  const decoded = readCommandReceipt(receipt, legacyEvents);
   return {
-    status: receipt.status,
+    status: "APPLIED" as const,
     commandId,
-    resultingGameVersion: receipt.resultingVersion,
-    result: receipt.resultJson,
+    ...decoded,
+    ...(["issueClaimToken", "resetPlayerAccess"].includes(decoded.operation) ? { credentialAvailable: false as const } : {}),
   };
 }
 
@@ -188,6 +205,11 @@ export async function runConsistencyChecks(gameId: string): Promise<ConsistencyI
 
 // ---------- Player access reset ----------
 
+export type AccessResetResult = { version: number } & (
+  | { duplicate: false; credentialAvailable: true; claimToken: string }
+  | { duplicate: true; credentialAvailable: false; claimToken?: never }
+);
+
 export async function resetPlayerAccess({
   gameId,
   playerId,
@@ -198,16 +220,18 @@ export async function resetPlayerAccess({
   playerId: string;
   commandId: string;
   expectedVersion: number;
-}): Promise<{ version: number; claimToken: string }> {
+}): Promise<AccessResetResult> {
   const rawToken = generateToken(cryptoSecureRng);
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(systemClock.now().getTime() + 60 * 60 * 24 * 7 * 1000);
 
-  const { version, sequence } = await runCommand({
+  const { version, sequence, duplicate } = await runCommand({
     gameId,
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "resetPlayerAccess",
+    input: { playerId },
     handler: async ({ tx, appendEvent }) => {
       const player = await tx.player.findFirst({ where: { id: playerId, gameId } });
       if (!player) throw new DomainError("PLAYER_NOT_FOUND", "Player not found");
@@ -222,7 +246,9 @@ export async function resetPlayerAccess({
     },
   });
   publishInvalidation(gameId, version, sequence);
-  return { version, claimToken: rawToken };
+  return duplicate
+    ? { version, duplicate: true, credentialAvailable: false }
+    : { version, duplicate: false, credentialAvailable: true, claimToken: rawToken };
 }
 
 // ---------- Bounded recovery overrides ----------
@@ -254,6 +280,8 @@ export async function recoveryOverride({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "recoveryOverride",
+    input: { payload, reason: trimmedReason },
     handler: async ({ tx, appendEvent }) => {
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};

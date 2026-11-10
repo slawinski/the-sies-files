@@ -19,6 +19,9 @@ import { useGameEventStream } from "@/components/useGameEventStream";
 import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
 import { useVersionedMutation } from "@/components/useVersionedMutation";
 import { useProjectionReconciliation } from "@/components/useProjectionReconciliation";
+import { isAccessDenial } from "@/lib/access-lifetime";
+import { clearPendingQr, decodeScanAcknowledgement, decodeScanStatus, definitelyRejected,
+  hydratePendingQr, retainPendingQr, type PendingQrIdentity } from "@/lib/command-outcome";
 import { isPlayerView, type PlayerView } from "@/lib/presentation/types";
 import {
   requiredTargetCount,
@@ -98,7 +101,11 @@ function PlayerLoadingShell() {
 type PlayerProjectionOwner = ReturnType<typeof useProjectionReconciliation<PlayerGameProjection>>;
 function PlayerAccessBoundary() {
   const projection = useProjectionReconciliation(null, signal => api<PlayerGameProjection>("/api/v1/me", { signal }));
-  return <PlayerPageInner key={projection.accessGeneration} projection={projection} />;
+  useEffect(() => {
+    if (isAccessDenial(projection.error, true)) clearPendingQr();
+  }, [projection.error]);
+  const identity = projection.data ? `${projection.data.gameId}:${projection.data.me.playerId}` : "unbound";
+  return <PlayerPageInner key={`${projection.accessGeneration}:${identity}`} projection={projection} />;
 }
 
 function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) {
@@ -119,6 +126,10 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
   const [nomineeId, setNomineeId] = useState<string | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const pendingQr = useRef<PendingQrIdentity | null>(null);
+  const checkingQr = useRef(false);
+  const [qrState, setQrState] = useState<"ready" | "sending" | "unresolved" | "checking" | "unreadable">("ready");
+  const [reloadUnavailable, setReloadUnavailable] = useState(false);
 
   const fetchProjection = useCallback(async (): Promise<PlayerGameProjection> => {
     const outcome = await refresh();
@@ -135,14 +146,33 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
   }, [refresh]);
 
   const gameId = game?.gameId ?? null;
+  const playerId = game?.me.playerId ?? null;
   const realtime = useGameEventStream(gameId, () => void projection.refresh(), projection);
   usePresenceHeartbeat(gameId);
-  const { busy, actionError, stale, setActionError, run, runWithResult } =
-    useVersionedMutation(apply, { scope: gameId, ready: () => game !== null && projection.canCommand(game),
+  const { busy, actionError, stale, setActionError, run, runWithResult, recoverWithResult } =
+    useVersionedMutation(apply, { scope: gameId && playerId ? `${gameId}:${playerId}` : null, ready: () => game !== null && projection.canCommand(game),
       current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge,
       captureAccess: projection.captureAccess, ownsAccess: projection.ownsAccess, denyAccess: projection.denyAccess });
   const canCommand = () => game !== null && projection.canCommand(game) && !busy;
   useEffect(() => { setScanMessage(null); setScanError(null); setNomineeId(null); }, [gameId]);
+
+  const checkQrRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    if (!gameId || !playerId) return;
+    const ticket = projection.captureAccess();
+    if (!projection.ownsAccess(ticket)) return;
+    const identity = hydratePendingQr(gameId, playerId);
+    pendingQr.current = identity;
+    if (identity) { setQrState("unresolved"); void checkQrRef.current(); }
+    return () => {
+      // Access generations remount this private view. A normal reload retains
+      // identity; detected access loss or a changed scope must discard it.
+      if (!projection.ownsAccess(ticket) || currentGame.current?.gameId !== gameId || currentGame.current?.me.playerId !== playerId) {
+        if (pendingQr.current) clearPendingQr(pendingQr.current);
+        pendingQr.current = null;
+      }
+    };
+  }, [gameId, playerId, projection.captureAccess, projection.ownsAccess]);
 
   // Reset the target picker whenever the active action changes.
   const activeActionId = game?.activeAction?.id ?? null;
@@ -212,19 +242,26 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
   }
 
   async function scanWithToken(token: string): Promise<void> {
-    if (!game || !canCommand()) return;
+    if (!game || !canCommand() || pendingQr.current) throw new Error("Scan is not ready");
     const access = projection.captureAccess();
+    const identity: PendingQrIdentity = { format: 1, gameId: game.gameId, playerId: game.me.playerId, operation: "scanQr", commandId: crypto.randomUUID() };
+    const valid = () => projection.ownsAccess(access) && currentGame.current?.gameId === identity.gameId && currentGame.current?.me.playerId === identity.playerId;
+    pendingQr.current = identity;
+    setReloadUnavailable(!retainPendingQr(identity));
+    setQrState("sending");
     setScanMessage(null);
     setScanError(null);
-    const result = await runWithResult(() => api<ScanResponseDto>(`/api/v1/games/${game.gameId}/scenario/qr/scan`, {
+    let failure: unknown;
+    const result = await runWithResult(() => api<unknown>(`/api/v1/games/${game.gameId}/scenario/qr/scan`, {
         method: "POST",
         body: JSON.stringify({
-          commandId: crypto.randomUUID(),
+          commandId: identity.commandId,
           expectedVersion: game.version,
           payload: { token },
         }),
-      }).catch((error: ApiClientError) => {
-        if (projection.ownsAccess(access) && currentGame.current?.gameId === game.gameId) {
+      }).then(decodeScanAcknowledgement).catch((error: ApiClientError) => {
+        failure = error;
+        if (valid() && definitelyRejected(error)) {
           setScanError(error.code === "TERRAIN_UNAVAILABLE"
             ? "Teren niedostępny — skanowanie możliwe tylko podczas śledztwa, poza formalnymi nominacjami."
             : error.code === "QR_ALREADY_CONSUMED" ? "Ten kod został już wykorzystany."
@@ -232,10 +269,40 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
         }
         throw error;
       }));
-    if (projection.ownsAccess(access) && result.ok && result.value && currentGame.current?.gameId === game.gameId) {
-      setScanMessage(describeScanOutcome(result.value.outcome, currentGame.current.scenario));
+    if (!valid()) throw new Error("Access changed");
+    if (result.ok && result.value) {
+      clearPendingQr(identity); pendingQr.current = null; setQrState("ready");
+      setScanMessage(describeScanOutcome(result.value.outcome, currentGame.current!.scenario));
+    } else {
+      if (definitelyRejected(failure)) {
+        clearPendingQr(identity); pendingQr.current = null; setQrState("ready");
+      } else {
+        setQrState("unresolved"); setActionError(null);
+      }
+      // QrScanner must not show its own success for an uncertain acknowledgement.
+      throw new Error("Scan outcome not acknowledged");
     }
   }
+
+  async function checkQrOutcome(): Promise<void> {
+    const identity = pendingQr.current;
+    const access = projection.captureAccess();
+    const valid = () => projection.ownsAccess(access) && currentGame.current?.gameId === identity?.gameId && currentGame.current?.me.playerId === identity?.playerId;
+    if (!identity || checkingQr.current || !valid()) return;
+    checkingQr.current = true; setQrState("checking");
+    try {
+      const result = await recoverWithResult(async () => decodeScanStatus(await api<unknown>(
+        `/api/v1/games/${identity.gameId}/me/commands/${identity.commandId}`), identity));
+      if (!valid()) return;
+      if (result) {
+        clearPendingQr(identity); pendingQr.current = null; setQrState("ready");
+        setScanMessage(describeScanOutcome(result.outcome, currentGame.current!.scenario));
+      } else setQrState("unresolved");
+    } catch (error) {
+      if (valid()) setQrState(error instanceof ApiClientError && error.code === "COMMAND_RECEIPT_INVALID" ? "unreadable" : "unresolved");
+    } finally { checkingQr.current = false; }
+  }
+  checkQrRef.current = checkQrOutcome;
 
   function navigate(next: PlayerView) {
     const url = next === "case" ? "/player" : `/player?view=${next}`;
@@ -253,6 +320,12 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
   const headerMode = mode === "GAME_ENDED" ? "critical" : formal ? "formal" : "quiet";
   const sortedRoster = game ? [...game.players].sort((a, b) => a.virtualSeat - b.virtualSeat) : [];
   const votingNomination = game ? selectActiveVotingNomination(game) : null;
+  const scanRecovery = qrState !== "ready" ? <Notice variant="warning">
+    {qrState === "sending" ? "Wysyłam skan…" : qrState === "checking" ? "Sprawdzam wynik skanu…" : qrState === "unreadable"
+      ? "Skan przyjęto, ale zapisany wynik jest nieczytelny. Nie skanuj ponownie."
+      : "Wynik skanu jest nieustalony. Brak wyniku nie oznacza, że skan się nie zapisał. Nie skanuj ponownie."}
+    {!["sending", "checking"].includes(qrState) && <Button variant="quiet" onClick={() => void checkQrOutcome()}>Sprawdź wynik skanu</Button>}
+  </Notice> : null;
 
   return (
     <AppShell texture>
@@ -302,6 +375,9 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
 
         {state === "ready" && game && (
           <div className="flex flex-col gap-3">
+            {view !== "map" && scanRecovery}
+            {reloadUnavailable && <Notice>Przechowywanie w tej karcie jest zablokowane. Możesz sprawdzić wynik tutaj, ale odzyskanie po przeładowaniu nie będzie dostępne.</Notice>}
+            {view !== "map" && scanMessage && <Notice variant="success">{scanMessage}</Notice>}
             {!projection.ready && (
               <Notice variant={error ? "error" : "warning"}>
                 {error ?? "Aktualizacja sprawy — polecenia czekają na bieżący stan."}
@@ -367,7 +443,8 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
             {view === "map" && (
               <PlayerMapView
                 game={game}
-                busy={busy || !projection.ready}
+                scanRecovery={scanRecovery}
+                busy={busy || !projection.ready || qrState !== "ready"}
                 scanMessage={scanMessage}
                 scanError={scanError}
                 onScan={scanWithToken}

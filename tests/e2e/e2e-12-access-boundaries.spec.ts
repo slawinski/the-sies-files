@@ -8,6 +8,41 @@ import { readProtectedLayerAsset } from '../../src/modules/map/assets';
 test.beforeEach(async () => { await prisma.rateLimitBucket.deleteMany(); });
 test.afterAll(async () => { await prisma.$disconnect(); });
 
+test('E2E-12 outcomes: current membership and actor ownership precede decoding or disclosure', async ({ playwright }) => {
+  const contexts = await Promise.all(Array.from({ length: 4 }, () => playwright.request.newContext({ baseURL: 'http://localhost:3100' })));
+  const [st, owner, other, anonymous] = contexts;
+  try {
+    const game = await createStorytellerGame(st, 'Outcome privacy', 2);
+    let version = (await claimPlayer(st, owner, game.gameId, game.playerIds[0], game.version)).version;
+    version = (await claimPlayer(st, other, game.gameId, game.playerIds[1], version)).version;
+    await prisma.gameSession.update({ where: { id: game.gameId }, data: { status: 'ACTIVE', phase: 'INVESTIGATION' } });
+    const commandId = randomUUID();
+    const scan = await owner.post(`/api/v1/games/${game.gameId}/scenario/qr/scan`, { data: { commandId, expectedVersion: version, payload: { token: 'tsf-qr-letter-001' } } });
+    expect(scan.status()).toBe(200);
+    const body = await scan.json();
+    const url = `/api/v1/games/${game.gameId}/me/commands/${commandId}`;
+    const own = await owner.get(url);
+    expect(own.status()).toBe(200);
+    expect(await own.json()).toMatchObject({ status: 'APPLIED', commandId, resultingGameVersion: body.version, result: { outcome: body.outcome } });
+    const absent = await other.get(`/api/v1/games/${game.gameId}/me/commands/${randomUUID()}`);
+    const denied = await other.get(url);
+    expect(await denied.json()).toEqual(await absent.json());
+    expect(denied.headers()['cache-control']).toContain('no-store');
+    expect((await anonymous.get(url)).status()).toBe(401);
+    const stReceipt = await prisma.commandReceipt.findFirstOrThrow({ where: { gameId: game.gameId, actor: 'storyteller' } });
+    expect(await (await owner.get(`/api/v1/games/${game.gameId}/me/commands/${stReceipt.commandId}`)).json()).toEqual({ status: 'UNKNOWN' });
+    expect((await owner.get(`/api/v1/games/${game.gameId}/commands/${commandId}`)).status()).toBe(401);
+    const marker = randomUUID();
+    await prisma.commandReceipt.update({ where: { gameId_commandId: { gameId: game.gameId, commandId } }, data: { resultJson: { marker } } });
+    expect(await (await other.get(url)).json()).toEqual(await absent.json());
+    const corrupt = await owner.get(url);
+    expect(corrupt.status()).toBe(500);
+    expect(await corrupt.text()).not.toContain(marker);
+    await prisma.browserSession.updateMany({ where: { playerId: game.playerIds[0] }, data: { revokedAt: new Date() } });
+    expect((await owner.get(url)).status()).toBe(404);
+  } finally { await Promise.all(contexts.map(c => c.dispose())); }
+});
+
 test('E2E-12 membership: two-game read and mutation denials are anti-oracle and non-mutating', async ({ playwright }) => {
   const contexts = await Promise.all(Array.from({ length: 5 }, () => playwright.request.newContext({ baseURL: 'http://localhost:3100' })));
   const [stA, playerA, stB, playerB, anonymous] = contexts;
@@ -111,11 +146,15 @@ test('E2E-12 enabled limits: sixteen joins, role reveal, reset/reclaim, recovery
       expect(ack.status()).toBe(200);
       version = (await ack.json()).version;
     }
-    const reset = await st.post(`/api/v1/games/${game.gameId}/players/${game.playerIds[0]}/access/reset`, { data: { commandId: randomUUID(), expectedVersion: version } });
+    const resetId = randomUUID();
+    const reset = await st.post(`/api/v1/games/${game.gameId}/players/${game.playerIds[0]}/access/reset`, { data: { commandId: resetId, expectedVersion: version } });
     expect(reset.status()).toBe(200);
     const resetBody = await reset.json();
     expect((await players[0].get('/api/v1/me')).status()).toBe(401);
     expect((await players[0].post('/api/v1/player-claims/claim', { data: { token: resetBody.claimToken, commandId: randomUUID() } })).status()).toBe(200);
+    const duplicate = await st.post(`/api/v1/games/${game.gameId}/players/${game.playerIds[0]}/access/reset`, { data: { commandId: resetId, expectedVersion: version } });
+    expect(await duplicate.json()).toEqual({ version: resetBody.version, duplicate: true, credentialAvailable: false });
+    expect((await players[0].get('/api/v1/me')).status()).toBe(200);
     const recovered = await st.post('/api/v1/storyteller/recover', { data: { gameId: game.gameId, recoverySecret: process.env.STORYTELLER_RECOVERY_SECRET } });
     expect(recovered.status()).toBe(200);
     expect((await st.post('/api/v1/session/logout')).status()).toBe(200);

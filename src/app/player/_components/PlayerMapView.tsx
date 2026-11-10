@@ -5,7 +5,7 @@
 // sheet that expands to the camera. The map list alternative is visible below
 // the artwork.
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ScanLine } from "lucide-react";
 import type { PlayerGameProjection } from "@/lib/client-api";
 import MapCard from "@/components/MapCard";
@@ -28,12 +28,14 @@ export default function PlayerMapView({
   scanMessage,
   scanError,
   onScan,
+  scanRecovery,
 }: {
   game: PlayerGameProjection;
   busy: boolean;
   scanMessage: string | null;
   scanError: string | null;
   onScan: (token: string) => Promise<void>;
+  scanRecovery?: ReactNode;
 }) {
   const [scanOpen, setScanOpen] = useState(false);
   const [devToken, setDevToken] = useState("");
@@ -63,6 +65,8 @@ export default function PlayerMapView({
       </Surface>
 
       {/* Actions */}
+      {!scanOpen && scanRecovery}
+      {!scanOpen && scanMessage && <Notice variant="success">{scanMessage}</Notice>}
       {scenarioVisible && (
         <Button
           fullWidth
@@ -100,6 +104,7 @@ export default function PlayerMapView({
           if (busy) throw new Error("Scan paused while catching up");
           await onScan(token);
         }} />
+        {scanRecovery}
 
         {scanMessage && (
           <Notice variant="success" className="mt-3">

@@ -2,6 +2,7 @@
 // map unlock, and scenario-only conditions. Scenario never mutates game state.
 
 import { Prisma } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { runCommand } from "@/lib/command";
 import { DomainError } from "@/lib/errors";
 import { EVENTS } from "@/modules/events/event-types";
@@ -96,6 +97,8 @@ export async function scanQr({
     commandId,
     expectedVersion,
     actor: `player:${playerId}`,
+    operation: "scanQr",
+    input: { tokenDigest: createHash("sha256").update(token).digest("hex") },
     handler: async ({ tx, game, appendEvent }) => {
       // Terrain availability guard (docs/08 §4).
       const investigation = await tx.investigationState.findUnique({ where: { gameId } });
@@ -113,7 +116,7 @@ export async function scanQr({
       const existing = await tx.qrScan.findUnique({
         where: { gameId_playerId_commandId: { gameId, playerId, commandId } },
       });
-      if (existing) return { outcome: { duplicate: true } };
+      if (existing) throw new DomainError("COMMAND_RECEIPT_INVALID", "Scan outcome is unavailable");
 
       // Repeat policy.
       if (qr.repeatPolicy !== "REPEATABLE_PER_PLAYER") {
@@ -211,6 +214,8 @@ export async function storytellerRevealClue({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "storytellerRevealClue",
+    input: { clueId, ...(targetPlayerId === undefined ? { targetSupplied: false } : { targetSupplied: true, targetPlayerId }) },
     handler: async ({ tx, appendEvent }) => {
       const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
       const clue = def.clues.find((c) => c.id === clueId);
@@ -250,6 +255,8 @@ export async function storytellerCompleteTask({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "storytellerCompleteTask",
+    input: { taskId },
     handler: async ({ tx, appendEvent }) => {
       const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
       if (!def.tasks.some((t) => t.id === taskId)) throw new DomainError("INVALID_TARGET", "Unknown task");
@@ -278,6 +285,8 @@ export async function storytellerSetStage({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "storytellerSetStage",
+    input: { stageId },
     handler: async ({ tx, appendEvent }) => {
       if (!stageId.trim()) throw new DomainError("INVALID_TARGET", "Stage id is required");
       await ensureScenarioState(tx, gameId);
@@ -301,6 +310,8 @@ export async function storytellerSetMap({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "storytellerSetMap",
+    input: { mapVersionId },
     handler: async ({ tx, appendEvent }) => {
       const def = getScenarioDefinition("THE_SIES_FILES_MILLIONAIRE", 1);
       if (!def.mapVersions.some((m) => m.id === mapVersionId)) throw new DomainError("INVALID_TARGET", "Unknown map version");
@@ -333,6 +344,8 @@ export async function storytellerSetCondition({
     commandId,
     expectedVersion,
     actor: "storyteller",
+    operation: "storytellerSetCondition",
+    input: { conditionId, active },
     handler: async ({ tx, appendEvent }) => {
       await ensureScenarioState(tx, gameId);
       await tx.scenarioCondition.upsert({

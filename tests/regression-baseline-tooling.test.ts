@@ -11,6 +11,17 @@ import { generateSetupCandidate } from '../src/modules/setup/generator';
 import { SeededRngV2 } from '../src/lib/rng';
 
 const trees: string[] = [];
+test('canonical baseline requires compatibility and CI retains its bounded evidence', () => {
+  const baseline = fs.readFileSync('scripts/regression-baseline.mts', 'utf8');
+  const ci = fs.readFileSync('.github/workflows/ci.yml', 'utf8');
+  expect(baseline.indexOf('prepareCompatibilitySource(root,')).toBeLessThan(baseline.indexOf('const manifest = capture(root,'));
+  expect(baseline).toContain("stage('compatibility'");
+  expect(baseline).toContain('readCompatibilityReport(');
+  expect(baseline).toContain('(metadata.compatibility as { complete: boolean }).complete');
+  expect(ci).toContain('fetch-depth: 0');
+  expect(ci).toContain('compatibility/compatibility.json');
+  expect(ci).toContain('compatibility/*-rows.json');
+});
 afterEach(() => { for (const tree of trees.splice(0)) fs.rmSync(tree, { recursive: true, force: true }); });
 function tree() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'baseline-contract-'));

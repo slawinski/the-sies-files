@@ -142,6 +142,7 @@ export async function virtualRecovery(mode: Mode, mutation: Mutation, dumpFailur
         };
         if (id === './regression-baseline.mjs') return { ...load('regression-baseline'), assertPortFree: async () => {} };
         if (id === './playable-recovery.mjs') return load('playable-recovery');
+        if (id === './command-receipt-compatibility.mjs') return load('command-receipt-compatibility');
         return require(id);
       },
     }, { filename });
