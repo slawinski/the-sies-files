@@ -219,7 +219,6 @@ export function runCompatibility(root: string, prepared: string, output: string,
   execute(root, path.join(root, 'node_modules/.bin/prisma'), ['migrate', 'deploy'], 'additive-migration');
   const aSpecimen = path.join(output, 'A-specimen.json'), bSpecimen = path.join(output, 'B-specimen.json');
   lane(a, 'produce', aSpecimen, 'A');
-  // The producer log name must remain unique when the second writer runs.
   execute(root, path.join(root, 'node_modules/.bin/tsx'), [script, 'worker', 'produce', bSpecimen, 'B'], 'produce-B');
   for (const mode of lanes) lane(mode.startsWith('B_A') ? a : root, mode, mode === 'A_PRE_MIGRATION_STATUS' ? beforeMigration : mode.startsWith('A_B') ? aSpecimen : bSpecimen, mode.startsWith('B_A') ? 'A' : 'B');
   const producerB = { sourceId, entries: ['src/lib/command.ts', 'src/lib/command-contracts.ts', 'src/modules/game-session/game-session.service.ts', 'src/modules/recovery/recovery.service.ts', 'src/modules/scenario/scenario.service.ts', 'prisma/schema.prisma'].map(name => ({ path: name, sha256: hash(fs.readFileSync(path.join(root, name))) })) };

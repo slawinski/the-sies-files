@@ -68,8 +68,7 @@ export function useVersionedMutation(apply: () => Promise<unknown>, options: {
       const value = await read();
       if (!valid() || value === null) return null;
       current.current.acknowledge(value);
-      // A refresh failure cannot uncommit the validated outcome.
-      try { await apply(); } catch { /* Freshness remains the projection owner's concern. */ }
+      try { await apply(); } catch {}
       return valid() ? value : null;
     } catch (error) {
       if (valid()) current.current.denyAccess(error);
