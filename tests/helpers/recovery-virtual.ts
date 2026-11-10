@@ -143,6 +143,7 @@ export async function virtualRecovery(mode: Mode, mutation: Mutation, dumpFailur
         if (id === './regression-baseline.mjs') return { ...load('regression-baseline'), assertPortFree: async () => {} };
         if (id === './playable-recovery.mjs') return load('playable-recovery');
         if (id === './command-receipt-compatibility.mjs') return load('command-receipt-compatibility');
+        if (id.startsWith('./provenance') || (name.startsWith('provenance/') && id.startsWith('./'))) return load(path.posix.join(path.posix.dirname(name), id).replace(/\.mjs$/, ''));
         return require(id);
       },
     }, { filename });

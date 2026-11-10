@@ -47,6 +47,7 @@ export function selectedBuildIdentity(root: string, sourceId: string): Build {
   };
   visit('');
   const migrations = fs.readdirSync(safePath(root, 'prisma/migrations')).sort()
+    .filter(name => fs.lstatSync(safePath(root, `prisma/migrations/${name}`)).isDirectory())
     .filter(name => fs.existsSync(safePath(root, `prisma/migrations/${name}/migration.sql`, true)))
     .map(name => [name, sha256(readBytes(root, `prisma/migrations/${name}/migration.sql`))]);
   return { sourceId, id: readText(root, '.next/BUILD_ID').text.trim(), lockSha256: sha256(readBytes(root, 'package-lock.json')), artifactSha256: sha256(JSON.stringify(members)), schemaSha256: sha256(readBytes(root, 'prisma/schema.prisma')), migrationsSha256: sha256(JSON.stringify(migrations)) };

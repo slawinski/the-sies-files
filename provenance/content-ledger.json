@@ -609,7 +609,7 @@
         },
         {
           "path": "scripts/provenance.mts",
-          "sha256": "d47cbf7ed4a7673893c87b20c8532b8afd268a6ffb47f1609e4a27c21bc2bf18"
+          "sha256": "b5419a9d6dce05f33510e7a3b1d7f0ff684a6c46d409d18863d3e088688a7c75"
         },
         {
           "path": "scripts/provenance/content.mts",
@@ -629,7 +629,7 @@
         },
         {
           "path": "scripts/regression-baseline.mts",
-          "sha256": "0e29a72154fe60ace9a7b3a04a4d57cefc8a1001dc99650d5137a9ed7fdecfb6"
+          "sha256": "60ee9673733d76bbca5ca1d5e49bf8621c2d5dcb067fbb128fc3c39eae4e1ea1"
         },
         {
           "path": "scripts/reset-e2e-db.sh",
@@ -1385,7 +1385,7 @@
         },
         {
           "path": "tests/helpers/recovery-virtual.ts",
-          "sha256": "91ecd4b9e6c0dc587a30ef6deb98e87680146c1a6bcf4ad270cc27fa241285a8"
+          "sha256": "990ca3547487c6e5e9bd619cb871616bd3621e63710b5ee3f4cdb55a9e47e169"
         },
         {
           "path": "tests/map-system.test.ts",
@@ -1413,7 +1413,7 @@
         },
         {
           "path": "tests/provenance-report.test.ts",
-          "sha256": "1dcd9c73d6fa59c1995c218015399240a1a3a43337cbd20e529a6ddac366ad50"
+          "sha256": "ac7ebe50ad11a45c27eec9b8389b7ef69bcf0dea389226b6375bec6de343743c"
         },
         {
           "path": "tests/provenance.vitest.config.mts",
@@ -1500,7 +1500,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "e92e319a8ca4eb51a2f0a121cb31323e13de275f5590d4beec4831ef615ab183"
+      "membershipDigest": "4ea141fe89843312e9ae90cfb8a5435e994dfd036e841a1832545b38e42fe2db"
     },
     {
       "id": "rules-names-prose",

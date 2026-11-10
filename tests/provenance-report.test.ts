@@ -62,6 +62,7 @@ test('selected build fingerprint and source record must agree, including after c
   const { root, output } = fixture();
   fs.mkdirSync(path.join(root, '.next')); fs.writeFileSync(path.join(root, '.next/BUILD_ID'), 'fixture-build');
   fs.mkdirSync(path.join(root, 'prisma/migrations'), { recursive: true }); fs.writeFileSync(path.join(root, 'prisma/schema.prisma'), 'fixture schema');
+  fs.writeFileSync(path.join(root, 'prisma/migrations/migration_lock.toml'), 'provider = "postgresql"');
   fs.mkdirSync(path.join(root, 'baseline-results/fixture'), { recursive: true });
   refreshPortable(root);
   const sourceId = 'a'.repeat(64); const build = selectedBuildIdentity(root, sourceId);

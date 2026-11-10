@@ -248,7 +248,7 @@ export async function measure(root: string, out: string, profile: 'development' 
       stage('unit', 'npm', ['test', '--', '--reporter=default', '--reporter=json', '--outputFile=' + path.join(out, 'unit.json')], ['reset-unit']),
       stage('clean-database', 'bash', ['scripts/verify-clean-db.sh'], ['unit', 'generate']),
       stage('build', 'npm', ['run', 'build']),
-      stage('provenance', 'npm', ['run', 'provenance:check', '--', '--output', path.join(out, 'provenance'), '--source-id', manifest.sourceId, '--build-record', path.join(out, 'run.json')], ['build']),
+      stage('provenance', 'npx', ['tsx', 'scripts/provenance.mts', 'check', '--output', path.join(out, 'provenance'), '--source-id', manifest.sourceId, '--build-record', path.join(out, 'run.json')], ['build']),
       ...(profile === 'development' ? [stage('fresh-dev-output', process.execPath, ['-e', "require('node:fs').rmSync('.next', { recursive: true, force: true })"])] : []),
       stage('reset-browser', 'npx', ['tsx', 'scripts/test-database.mts', 'reset'], ['generate']),
       stage('browser-discovery', 'npx', ['playwright', 'test', '--list', '--reporter=json']),
