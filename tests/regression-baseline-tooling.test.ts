@@ -204,6 +204,8 @@ test('reconstructed source excludes declared generated outputs without reading t
   fs.mkdirSync(path.join(work, 'node_modules'));
   fs.symlinkSync('/nonexistent/private', path.join(work, 'node_modules/link'));
   fs.writeFileSync(path.join(work, 'next-env.d.ts'), 'generated');
+  fs.mkdirSync(path.join(work, 'provenance-results'));
+  fs.symlinkSync('/nonexistent/private', path.join(work, 'provenance-results/private-contract.pdf'));
   expect(verifySource(manifest, work)).toEqual([]);
 });
 test('root tooling excludes retained capsules while still including current source', async () => {

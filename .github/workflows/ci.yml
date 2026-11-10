@@ -69,6 +69,8 @@ jobs:
             baseline-results/ci-production/unit.json
             baseline-results/ci-production/browser.json
             baseline-results/ci-production/security-summary.json
+            baseline-results/ci-production/provenance/report.json
+            baseline-results/ci-production/provenance/notices.json
             baseline-results/ci-production/compatibility/compatibility.json
             baseline-results/ci-production/compatibility/*-rows.json
             baseline-results/ci-production/compatibility/*.log

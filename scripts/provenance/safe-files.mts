@@ -6,7 +6,7 @@ export const sha256 = (bytes: string | Buffer) => createHash('sha256').update(by
 export const serialize = (value: unknown) => JSON.stringify(value, null, 2) + '\n';
 export const digest = (value: unknown) => sha256(serialize(value));
 export function relative(name: string) {
-  if (typeof name !== 'string' || !name || name.includes('\\') || name.includes('\0') || path.posix.isAbsolute(name) || /^[A-Za-z]:/.test(name) || name.split('/').some(p => !p || p === '.' || p === '..')) throw new Error('Unsafe relative path');
+  if (typeof name !== 'string' || !name || name.includes('\\') || /[\x00-\x1f\x7f]/.test(name) || path.posix.isAbsolute(name) || /^[A-Za-z]:/.test(name) || name.split('/').some(p => !p || p === '.' || p === '..')) throw new Error('Unsafe relative path');
   return name;
 }
 export function sourceRoot(root: string) {

@@ -317,11 +317,11 @@
       "files": [
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "b606f75eaa0efbeb3330be1a02faf39227915f20077a75356fb2f720ddcac6ca"
+          "sha256": "3e1f4fe6ea68b23363ff99b90df836abb89befbedf33a17b6d1bcbdbf9af2196"
         },
         {
           "path": ".gitignore",
-          "sha256": "2c3b7cd31264767a6613b713b01b20f5ce5191dc5cc714f247282eaad6f5f74f"
+          "sha256": "ea54926c61ab3e80adddf9006d2a994a514001a3db2ca60ab5d3232bc84bccb4"
         },
         {
           "path": ".notebook/INDEX.md",
@@ -405,7 +405,7 @@
         },
         {
           "path": "docs/regression-baseline.md",
-          "sha256": "515c6e6e632734bc4fd1c90536083e38b88a53fc74c7d9a09f71d5d2ed2bebde"
+          "sha256": "43b307abb2ec4771eabba4716cde00a269e11929f0ca821df7a4a66d067803bc"
         },
         {
           "path": "docs/regressions/F001-capture-migrations.md",
@@ -485,7 +485,7 @@
         },
         {
           "path": "package.json",
-          "sha256": "5e493723b5f85a2605ef6f4064d338bee3034076b42a84a68cbe45142a53b04f"
+          "sha256": "44b6cc59bf051ab22b9b0f5a6d5a90ae5bd21b792812def1309c062fa3585a10"
         },
         {
           "path": "playwright.config.ts",
@@ -600,6 +600,10 @@
           "sha256": "1e1f6040a64cd94d4ccf050e08d4bd0e7e6e3f2d4b8adfb9f30cc98c449b7dd6"
         },
         {
+          "path": "scripts/provenance.mts",
+          "sha256": "452e6180d0739af2123d6a18db721128c2fb7c3bdf84b62ad7c0f54aabc58202"
+        },
+        {
           "path": "scripts/provenance/content.mts",
           "sha256": "12628321497c13eea1f751c07a1e91dc38094e94ec3376564f1d0bedec751164"
         },
@@ -609,15 +613,15 @@
         },
         {
           "path": "scripts/provenance/notices.mts",
-          "sha256": "98438ee06c688eb581b8a1ea2ce8c86f4b9a7e3fa8ed52369c74e0cedb94792a"
+          "sha256": "734926171b09ebb36d8d2546d9caa5db27a8228e5c23bd7e94daf49ebbb66ea3"
         },
         {
           "path": "scripts/provenance/safe-files.mts",
-          "sha256": "0abca9865ccef689d6e5f1701130ee949985547abb7ebcb1aece7d9931210d6e"
+          "sha256": "ee514e6880320e0c19db19400fad838bad97775244c8a91588e6b6bbcc359f5e"
         },
         {
           "path": "scripts/regression-baseline.mts",
-          "sha256": "6ce594ff6b791156ea55eaa3f826cd8a7975846eef4dc304c8ad5b37ddd64205"
+          "sha256": "9084ff4437efcc3bf71d380177267dac7fa9865d16bda7731fa98402da268cbc"
         },
         {
           "path": "scripts/reset-e2e-db.sh",
@@ -1400,8 +1404,12 @@
           "sha256": "7206402d48bb8b87126307aa287a87a94b6e3d5b7260f02a314547828a0e14ff"
         },
         {
+          "path": "tests/provenance-report.test.ts",
+          "sha256": "ec4fb9b1acbef98a5d3014eeb048c37eff69916d9a8ec1965ff36fb1dd8877b9"
+        },
+        {
           "path": "tests/provenance.vitest.config.mts",
-          "sha256": "dfbada60bb42e7f6f185a340d4191eafcd640c4e90a7d9e7221e2ed36931fccf"
+          "sha256": "bab9871d3aec855894108584a9e3b93313ab3c02eeda7d634738eb3b7c822376"
         },
         {
           "path": "tests/r1.test.ts",
@@ -1421,7 +1429,7 @@
         },
         {
           "path": "tests/regression-baseline-tooling.test.ts",
-          "sha256": "be4d1b95752504187fc4fb4ad1e4a44be2d4b8c6afb8615abad5fd712c481953"
+          "sha256": "687670a726533e8b2baf70a5fbf993f22a147e3683bb9008f69d8b2082f45ebc"
         },
         {
           "path": "tests/release-hardening.test.ts",
@@ -1484,7 +1492,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "2c6a653a47c3ca6f1b95214f494570e38cac96befa46d34bcef188712ef8b7e5"
+      "membershipDigest": "969b89ed49dfdad9d13f944417f16c6326392ce477ec2127177a5215e8dffe0c"
     },
     {
       "id": "rules-names-prose",

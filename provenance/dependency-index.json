@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "manifestDigest": "5e493723b5f85a2605ef6f4064d338bee3034076b42a84a68cbe45142a53b04f",
+  "manifestDigest": "44b6cc59bf051ab22b9b0f5a6d5a90ae5bd21b792812def1309c062fa3585a10",
   "lockDigest": "558871d14c532929d3a5d518c9c116526f2e470bb4eefb94aabb137582cc7c7e",
   "interpretation": "All non-root locked candidates; declared flags overlap. Not an installed list or shipped-binary composition. License metadata is not full notice evidence.",
   "candidates": [

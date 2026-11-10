@@ -87,7 +87,7 @@ export function observeTraces(root: string) {
         if (typeof file !== 'string' || path.posix.isAbsolute(file) || file.includes('\\') || /^[A-Za-z]:/.test(file)) throw new Error();
         const normalized = path.posix.normalize(path.posix.join(path.posix.dirname(name), file));
         relative(normalized);
-        if (excluded(normalized.replace(/^node_modules\//, 'dependencies/').replace(/^\.next\//, 'selected-build/')) || !/^(node_modules|\.next)\//.test(normalized)) throw new Error();
+        if (packageExcluded(normalized.split('/').map(p => p === 'node_modules' ? 'dependencies' : p === '.next' ? 'selected-build' : p).join('/')) || !/^(node_modules|\.next)\//.test(normalized)) throw new Error();
         safePath(root, normalized, true);
         return normalized;
       });
