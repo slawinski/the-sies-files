@@ -353,7 +353,7 @@
         },
         {
           "path": "README.md",
-          "sha256": "63da223bfb7adf398c497e79c40e96d7e3550915fcc80efcf61fc59906f8f79b"
+          "sha256": "53e73d11e26b623326f84bf04dee7811e9118410114bd262354b4954646d2665"
         },
         {
           "path": "docs/access-secrecy-verification.md",
@@ -366,6 +366,10 @@
         {
           "path": "docs/command-request-bindings.md",
           "sha256": "65fabb2e3f9180d34fdcf4a6b8e53d7d2bb7df0a95513e54e09bbdf495115221"
+        },
+        {
+          "path": "docs/content-provenance.md",
+          "sha256": "9d5010763b124ece28015c5bdd137b2a2175f4e403745871e3f42b34e93eb078"
         },
         {
           "path": "docs/ideation/2026-10-28-legacy-app-reinforcement-ideation.html",
@@ -394,6 +398,10 @@
         {
           "path": "docs/plans/2026-11-10-2007-fix-content-provenance-and-notices-plan.md",
           "sha256": "3a1c0513c241c6149b75e5303f31a89da2374e254faabe99b6eff5e56b93dd66"
+        },
+        {
+          "path": "docs/provenance-owner-evidence.md",
+          "sha256": "8f517d5708953f646771e655a57faa343a640cec819e0e8ac4b835233904db9a"
         },
         {
           "path": "docs/recovery-drill.md",
@@ -601,7 +609,7 @@
         },
         {
           "path": "scripts/provenance.mts",
-          "sha256": "452e6180d0739af2123d6a18db721128c2fb7c3bdf84b62ad7c0f54aabc58202"
+          "sha256": "d47cbf7ed4a7673893c87b20c8532b8afd268a6ffb47f1609e4a27c21bc2bf18"
         },
         {
           "path": "scripts/provenance/content.mts",
@@ -613,15 +621,15 @@
         },
         {
           "path": "scripts/provenance/notices.mts",
-          "sha256": "734926171b09ebb36d8d2546d9caa5db27a8228e5c23bd7e94daf49ebbb66ea3"
+          "sha256": "79258dd1da95e2a30ade6fd6d62c3659465f82a7723c5294090525c402709ad2"
         },
         {
           "path": "scripts/provenance/safe-files.mts",
-          "sha256": "ee514e6880320e0c19db19400fad838bad97775244c8a91588e6b6bbcc359f5e"
+          "sha256": "1a00ba481eacb81726e8ad95d16972e895f62af5c6b020b77f3877ce0aca9c8a"
         },
         {
           "path": "scripts/regression-baseline.mts",
-          "sha256": "9084ff4437efcc3bf71d380177267dac7fa9865d16bda7731fa98402da268cbc"
+          "sha256": "0e29a72154fe60ace9a7b3a04a4d57cefc8a1001dc99650d5137a9ed7fdecfb6"
         },
         {
           "path": "scripts/reset-e2e-db.sh",
@@ -1401,11 +1409,11 @@
         },
         {
           "path": "tests/provenance-notices.test.ts",
-          "sha256": "7206402d48bb8b87126307aa287a87a94b6e3d5b7260f02a314547828a0e14ff"
+          "sha256": "e270ddb224f03cea7dd4ba0f3abd01e70144fb0dd6783a43b4635d0b555a5190"
         },
         {
           "path": "tests/provenance-report.test.ts",
-          "sha256": "ec4fb9b1acbef98a5d3014eeb048c37eff69916d9a8ec1965ff36fb1dd8877b9"
+          "sha256": "1dcd9c73d6fa59c1995c218015399240a1a3a43337cbd20e529a6ddac366ad50"
         },
         {
           "path": "tests/provenance.vitest.config.mts",
@@ -1492,7 +1500,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "969b89ed49dfdad9d13f944417f16c6326392ce477ec2127177a5215e8dffe0c"
+      "membershipDigest": "e92e319a8ca4eb51a2f0a121cb31323e13de275f5590d4beec4831ef615ab183"
     },
     {
       "id": "rules-names-prose",

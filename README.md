@@ -43,7 +43,25 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The current UI uses the system sans/monospace font stacks in
+`src/app/globals.css`. `src/app/layout.tsx` has no webfont loader, and no tracked
+webfont binaries were observed.
+
+## Content provenance and notices
+
+See the [content inventory and notice guide](docs/content-provenance.md) and
+[owner evidence checklist](docs/provenance-owner-evidence.md). Technical inventory
+validity is separate from permission: the current state is
+`permission_not_established`, with unresolved source/creator/grant and
+distribution-review questions. This work establishes no first-party license or
+reuse grant. Public repository visibility is not permission; the package's
+`private` flag does not make the repository private. Local-only app execution,
+potential static delivery and authorized in-game visibility are distinct.
+
+`npm run provenance:refresh` explicitly updates the versioned inventory;
+`npm run provenance:check` detects drift without refreshing it and retains full
+available public upstream notices in ignored supplemental outputs. A technical
+pass is not legal clearance or proof of complete shipped-binary composition.
 
 ## Learn More
 

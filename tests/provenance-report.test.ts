@@ -75,3 +75,14 @@ test('selected build fingerprint and source record must agree, including after c
   fs.writeFileSync(record, serialize({ sourceId: 'b'.repeat(64), build }));
   expect(checkProvenance(root, { output, sourceId, buildRecord: record }).complete).toBe(false);
 });
+test('failed new attempt invalidates prior success without copying malformed input or local paths', () => {
+  const { root, output } = fixture(); checkProvenance(root, { output });
+  fs.writeFileSync(path.join(root, 'provenance/dependency-index.json'), 'not-json');
+  expect(checkProvenance(root, { output }).complete).toBe(false);
+  fs.writeFileSync(path.join(root, 'package-lock.json'), 'SECRET MALFORMED INPUT');
+  expect(() => checkProvenance(root, { output })).toThrow();
+  const stored = JSON.parse(fs.readFileSync(path.join(output, 'report.json'), 'utf8'));
+  expect(stored.complete).toBe(false); expect(stored.permissionState).toBe('permission_not_established');
+  expect(JSON.stringify(stored)).not.toContain(root);
+  expect(JSON.stringify(stored)).not.toContain('SECRET MALFORMED INPUT');
+});

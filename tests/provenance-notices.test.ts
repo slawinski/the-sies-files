@@ -71,3 +71,21 @@ test('selected traces reject escapes and secrets without copying traced bytes', 
     expect(result.valid).toBe(false); expect(JSON.stringify(result)).not.toContain(name);
   }
 });
+test('package text budget is cumulative and never truncates an accepted notice', () => {
+  const { root, index, file } = fixture();
+  for (let i = 0; i < 9; i++) fs.writeFileSync(`${file}-${i}`, Buffer.alloc(2 * 1024 * 1024, 65));
+  const pkg = collectNotices(root, index).packages.find(p => p.name === 'lucide-react')!;
+  expect(pkg.complete).toBe(false);
+  expect(pkg.diagnostics.join()).toContain('Notice text limit');
+  expect(pkg.notices).toHaveLength(8);
+  expect(pkg.notices.every(n => n.complete && n.bytes === 2 * 1024 * 1024)).toBe(true);
+});
+test('secret names are excluded before reads and copyright source files are not notice documents', () => {
+  const { root, index, file } = fixture(); fs.writeFileSync(file, terms);
+  fs.symlinkSync('/nonexistent/private', path.join(path.dirname(file), '.env.private'));
+  fs.writeFileSync(path.join(path.dirname(file), 'copyright.js'), 'PRIVATE SOURCE MARKER');
+  const result = collectNotices(root, index);
+  expect(result.valid).toBe(true);
+  expect(JSON.stringify(result)).not.toContain('PRIVATE SOURCE MARKER');
+  expect(JSON.stringify(result)).not.toContain('/nonexistent/private');
+});

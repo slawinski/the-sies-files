@@ -60,15 +60,19 @@ export function collectNotices(root: string, index: DependencyIndex) {
         const read = readText(root, file);
         for (const match of read.text.matchAll(/\/\*[!*][\s\S]*?\*\//g)) {
           if (!/copyright|licen[sc]e|permission/i.test(match[0])) continue;
-          if (Buffer.byteLength(match[0]) > limits.bannerBytes) throw new Error('Embedded banner exceeds limit; incomplete');
+          const size = Buffer.byteLength(match[0]);
+          if (size > limits.bannerBytes || total + size > limits.packageBytes) throw new Error('Embedded banner exceeds limit; incomplete');
+          total += size;
           item.banners.push({ path: name, sourceSha256: read.sha256, text: match[0], sha256: sha256(match[0]), interpretation: 'Bounded observed public license banner; not exhaustive embedded/binary notice coverage' });
         }
       }
       if (!item.notices.length) gaps.push(`${candidate.path}: No conventional notice text observed; review upstream/bundled notices`);
-    } catch {
+    } catch (error) {
       // Filesystem/decoder/JSON errors may contain workstation paths or input bytes.
       item.status = 'unsafe_or_incomplete'; item.complete = false;
-      item.diagnostics.push('Unsafe, malformed, unreadable, nonregular, binary, invalid UTF-8 or oversized package input; collection incomplete');
+      const message = error instanceof Error ? error.message : '';
+      const safeReason = ['Unsafe relative path', 'Unsafe symlink', 'Nonregular file', 'Nonregular notice input', 'Non-directory package', 'Binary text', 'Oversized file', 'File changed during read', 'Notice text limit; incomplete', 'Embedded banner exceeds limit; incomplete', 'Package discovery limit; incomplete', 'Unsafe banner entry'].includes(message) ? message : error instanceof TypeError && 'code' in error && error.code === 'ERR_ENCODING_INVALID_ENCODED_DATA' ? 'Invalid UTF-8' : error instanceof SyntaxError ? 'Malformed package metadata' : 'Unreadable or unsafe package input';
+      item.diagnostics.push(`${safeReason}; collection incomplete`);
     }
   }
   gaps.push('Browser bundles, Prisma generated/native engines, sharp/libvips and upstream embedded notices are not exhaustively inventoried or legally assessed');

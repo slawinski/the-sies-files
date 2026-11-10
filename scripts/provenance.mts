@@ -79,6 +79,9 @@ function observedBuild(root: string, sourceId: string, record?: string) {
 }
 export function checkProvenance(root: string, options: Options) {
   root = sourceRoot(root); const output = outputRoot(root, options);
+  // An interrupted/failed new attempt must never leave an old success report.
+  fs.writeFileSync(safePath(output, 'report.json', true), serialize({ schema: 1, complete: false, technicalValid: false, permissionState: 'permission_not_established', gaps: ['Owner evidence required; technical collection has not completed'] }));
+  fs.writeFileSync(safePath(output, 'notices.json', true), serialize({ schema: 1, complete: false }));
   const before = sourceIdentity(root); const sourceId = options.sourceId ?? before.fingerprint;
   if (!/^[a-f0-9]{64}$/.test(sourceId)) throw new Error('Invalid source identity');
   const { ledger, index, indexCurrent } = inputs(root);
@@ -140,6 +143,7 @@ export function readProvenanceReport(output: string, root: string, sourceId: str
   return report as ReturnType<typeof checkProvenance>;
 }
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
   const [action, ...args] = process.argv.slice(2); const root = process.cwd();
   if (action === 'refresh') { if (args.length) throw new Error('Refresh takes no arguments'); refreshPortable(root); }
   else if (action === 'check') {
@@ -156,4 +160,8 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     console.log(JSON.stringify({ complete: report.complete, permissionState: report.permissionState, sourceId: report.sourceId, gaps: report.gaps.length, errors: [...report.errors, ...report.content.errors] }));
     process.exitCode = report.complete ? 0 : 1;
   } else throw new Error('Use refresh or check');
+  } catch {
+    console.error(JSON.stringify({ complete: false, permissionState: 'permission_not_established', diagnostic: 'Provenance input, path, identity or artifact validation failed; inspect source-bound technical evidence. No portable artifact was silently refreshed by check.' }));
+    process.exitCode = 1;
+  }
 }

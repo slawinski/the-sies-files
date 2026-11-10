@@ -42,7 +42,18 @@ export function readBytes(root: string, name: string, limit = Infinity) {
   try {
     const opened = fs.fstatSync(fd);
     if (!opened.isFile() || opened.size > limit || opened.ino !== stat.ino || opened.dev !== stat.dev) throw new Error('File changed during read');
-    const bytes = fs.readFileSync(fd);
+    let bytes: Buffer;
+    if (Number.isFinite(limit)) {
+      const buffer = Buffer.alloc(Math.min(opened.size + 1, limit + 1));
+      let length = 0;
+      while (length < buffer.length) {
+        const count = fs.readSync(fd, buffer, length, buffer.length - length, null);
+        if (!count) break;
+        length += count;
+      }
+      if (length !== opened.size) throw new Error('File changed during read');
+      bytes = buffer.subarray(0, length);
+    } else bytes = fs.readFileSync(fd);
     if (bytes.length > limit) throw new Error('Oversized file');
     return bytes;
   } finally { fs.closeSync(fd); }

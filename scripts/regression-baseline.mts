@@ -291,6 +291,10 @@ export async function measure(root: string, out: string, profile: 'development' 
     });
     metadata.stages = results;
     metadata.provenance ??= { complete: false, reason: 'Provenance stage did not complete' };
+    if (profile === 'production') {
+      try { metadata.provenance = readProvenanceReport(path.join(out, 'provenance'), work, manifest.sourceId, metadata.build as ReturnType<typeof buildIdentity>); }
+      catch { metadata.provenance = { complete: false, reason: 'Final provenance artifacts or source/build identity failed revalidation' }; }
+    }
     try { metadata.compatibility = readCompatibilityReport(path.join(out, 'compatibility/compatibility.json'), manifest.sourceId); }
     catch { metadata.compatibility = { complete: false, reason: 'Compatibility report missing, failed or incomplete' }; }
     try { metadata.security = readSecurityInventory(out); }
