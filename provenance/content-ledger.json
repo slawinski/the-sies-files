@@ -568,6 +568,10 @@
           "sha256": null
         },
         {
+          "path": "provenance/dependency-index.json",
+          "sha256": null
+        },
+        {
           "path": "public/manifest.webmanifest",
           "sha256": "edb0db382f48ac136c0694a5a18a0ea0edfc4ddbd877b30fbc70ebd751999426"
         },
@@ -598,6 +602,14 @@
         {
           "path": "scripts/provenance/content.mts",
           "sha256": "12628321497c13eea1f751c07a1e91dc38094e94ec3376564f1d0bedec751164"
+        },
+        {
+          "path": "scripts/provenance/dependencies.mts",
+          "sha256": "aeae5403dbaa9cb75931224307d88ca1120a1cf4cfecb333b3c0977ac18ae88b"
+        },
+        {
+          "path": "scripts/provenance/notices.mts",
+          "sha256": "98438ee06c688eb581b8a1ea2ce8c86f4b9a7e3fa8ed52369c74e0cedb94792a"
         },
         {
           "path": "scripts/provenance/safe-files.mts",
@@ -1380,6 +1392,14 @@
           "sha256": "8cfafed9fd44435e7c8781100d15abc501a67d326624f5e36d248f990aca3444"
         },
         {
+          "path": "tests/provenance-dependencies.test.ts",
+          "sha256": "3381dc2f4c854ff5863b5ddf36906656478707f06d3b3503a90e131c81bd8566"
+        },
+        {
+          "path": "tests/provenance-notices.test.ts",
+          "sha256": "7206402d48bb8b87126307aa287a87a94b6e3d5b7260f02a314547828a0e14ff"
+        },
+        {
           "path": "tests/provenance.vitest.config.mts",
           "sha256": "dfbada60bb42e7f6f185a340d4191eafcd640c4e90a7d9e7221e2ed36931fccf"
         },
@@ -1464,7 +1484,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "bff53e962f89bc8ffbb0738a36604fe7954e0fa3b61e1ff0b066d88b6260dd83"
+      "membershipDigest": "2c6a653a47c3ca6f1b95214f494570e38cac96befa46d34bcef188712ef8b7e5"
     },
     {
       "id": "rules-names-prose",
