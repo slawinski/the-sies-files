@@ -8,6 +8,7 @@ import net from 'node:net';
 import { acquireLease, resolveTarget, stopOwnedServer } from './test-database.mjs';
 import { buildIdentity, completeClaims } from './playable-recovery.mjs';
 import { prepareCompatibilitySource, readCompatibilityReport } from './command-receipt-compatibility.mjs';
+import { readProvenanceReport } from './provenance.mjs';
 
 const hash = (data: string | Buffer) => crypto.createHash('sha256').update(data).digest('hex');
 function git(root: string, args: string[]) {
@@ -17,7 +18,7 @@ function git(root: string, args: string[]) {
 }
 export function excluded(name: string): boolean {
   if (/\.sql$/i.test(name) && !/^prisma\/migrations\/[^/]+\/migration\.sql$/.test(name)) return true;
-  return name.split('/').some(p => /^(\.git|node_modules|\.next|out|build|coverage|test-results|playwright-report|baseline-results|\.vercel|\.yarn)$/.test(p) || /^\.env/.test(p) || /\.(pem|key|p12|pfx|dump|tsbuildinfo)$/.test(p) || /^(id_rsa|id_ed25519|credentials.*|secrets?.*|next-env\.d\.ts|\.DS_Store)$/i.test(p));
+  return name.split('/').some(p => /^(\.git|node_modules|\.next|out|build|coverage|test-results|playwright-report|baseline-results|provenance-results|\.vercel|\.yarn)$/.test(p) || /^\.env/.test(p) || /\.(pem|key|p12|pfx|dump|tsbuildinfo)$/.test(p) || /^(id_rsa|id_ed25519|credentials.*|secrets?.*|next-env\.d\.ts|\.DS_Store)$/i.test(p));
 }
 export function capture(root: string, output?: string) {
   root = fs.realpathSync(root);
@@ -247,6 +248,7 @@ export async function measure(root: string, out: string, profile: 'development' 
       stage('unit', 'npm', ['test', '--', '--reporter=default', '--reporter=json', '--outputFile=' + path.join(out, 'unit.json')], ['reset-unit']),
       stage('clean-database', 'bash', ['scripts/verify-clean-db.sh'], ['unit', 'generate']),
       stage('build', 'npm', ['run', 'build']),
+      stage('provenance', 'npx', ['tsx', 'scripts/provenance.mts', 'check', '--output', path.join(out, 'provenance'), '--source-id', manifest.sourceId, '--build-record', path.join(out, 'run.json')], ['build']),
       ...(profile === 'development' ? [stage('fresh-dev-output', process.execPath, ['-e', "require('node:fs').rmSync('.next', { recursive: true, force: true })"])] : []),
       stage('reset-browser', 'npx', ['tsx', 'scripts/test-database.mts', 'reset'], ['generate']),
       stage('browser-discovery', 'npx', ['playwright', 'test', '--list', '--reporter=json']),
@@ -266,6 +268,10 @@ export async function measure(root: string, out: string, profile: 'development' 
         const build = path.join(work, '.next/BUILD_ID');
         if (fs.existsSync(build)) metadata.build = buildIdentity(work, manifest.sourceId);
       }
+      if (result.name === 'provenance') {
+        try { metadata.provenance = readProvenanceReport(path.join(out, 'provenance'), work, manifest.sourceId, metadata.build as ReturnType<typeof buildIdentity>); }
+        catch { metadata.provenance = { complete: false, reason: 'Provenance evidence missing, failed, stale or incomplete' }; }
+      }
       if (result.name === 'browser') {
         await stopOwnedServer(target, lease.token);
         await assertPortFree(3100);
@@ -284,6 +290,11 @@ export async function measure(root: string, out: string, profile: 'development' 
       write();
     });
     metadata.stages = results;
+    metadata.provenance ??= { complete: false, reason: 'Provenance stage did not complete' };
+    if (profile === 'production') {
+      try { metadata.provenance = readProvenanceReport(path.join(out, 'provenance'), work, manifest.sourceId, metadata.build as ReturnType<typeof buildIdentity>); }
+      catch { metadata.provenance = { complete: false, reason: 'Final provenance artifacts or source/build identity failed revalidation' }; }
+    }
     try { metadata.compatibility = readCompatibilityReport(path.join(out, 'compatibility/compatibility.json'), manifest.sourceId); }
     catch { metadata.compatibility = { complete: false, reason: 'Compatibility report missing, failed or incomplete' }; }
     try { metadata.security = readSecurityInventory(out); }
@@ -313,7 +324,7 @@ export async function measure(root: string, out: string, profile: 'development' 
     metadata.originalSourceUnchanged = capture(root).sourceId === manifest.sourceId;
     await stopOwnedServer(target, lease.token);
     await assertPortFree(3100); metadata.serverPortReleased = true;
-    metadata.complete = results.every(s => s.status === 'passed') && (metadata.compatibility as { complete: boolean }).complete && (metadata.security as { status: string }).status === 'passed' && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed'));
+    metadata.complete = results.every(s => s.status === 'passed') && (metadata.provenance as { complete: boolean }).complete && (metadata.compatibility as { complete: boolean }).complete && (metadata.security as { status: string }).status === 'passed' && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed'));
     write();
     return metadata.complete === true;
   } catch (error) { metadata.complete = false; metadata.blocker = (error as Error).message; write(); return false; }

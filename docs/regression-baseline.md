@@ -100,6 +100,25 @@ LIVE/readiness expectations were weakened.
 
 ## Routine baseline entry point
 
+The required `provenance` technical stage runs after that capsule's successful
+build. It checks the committed content ledger and lock candidate index without
+refreshing them, collects bounded full public upstream notices, and binds
+`provenance/report.json` and `provenance/notices.json` to the same source/build.
+Completion requires report schema, section/count completeness, artifact digests,
+and source-before/after equality. Missing, stale, unsafe or mismatched evidence
+fails the technical gate; `permission_not_established` with explicit owner gaps
+does not. This is engineering evidence, not legal clearance or an exhaustive
+shipped-component inventory. Source capsules remain private. CI uploads only the
+two explicit provenance JSON artifacts, not a directory wildcard. Output under
+`provenance-results/` is ignored and excluded before baseline byte reads.
+
+Use `npm run provenance:refresh` only for intentional source/index updates, then
+`npm run provenance:check`. The standalone check writes excluded supplemental
+evidence to `provenance-results/current/`; it reports no build evidence unless a
+selected canonical build record is supplied. Pure tooling fixtures use
+`npm run test:provenance`, with no database or dotenv setup. Preserve failed
+source-bound runs rather than substituting an earlier green source's result.
+
 After `npm ci`, install the existing Chromium browser with
 `npx playwright install chromium` (CI uses `--with-deps`) and make PostgreSQL
 client tools available in PATH. Supply the explicit disposable local database
