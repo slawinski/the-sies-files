@@ -63,10 +63,11 @@ export function refreshContent(root: string, previous?: Ledger): Ledger {
   const entries = [...groups].sort(([a], [b]) => a.localeCompare(b, 'en')).map(([id, files]): Entry => {
     const membershipDigest = digest(files); const old = previous?.entries.find(e => e.id === id);
     if (old?.permission.status === 'verified' && old.membershipDigest !== membershipDigest) throw new Error('Cannot expand or refresh verified evidence scope');
+    if (old) return { ...old, id, files, membershipDigest };
     return { id, sourceSupplier: unknown, claimedCreator: unknown, importReference: unknown, derivation: unknown,
       intendedUse: 'Local playable application and publicly visible repository; future distribution intent requires owner evidence',
       distribution: { repository: 'public source visibility; not a grant', staticDelivery: id === 'runtime-derivatives' ? 'base public; west protected outside public/' : 'Public placement is potential static delivery, not proof of runtime use', inGame: 'Authorization and use determined by application; not a permission grant' },
-      noticeReferences: [], permission: old?.permission ?? { status: unknown }, files, membershipDigest };
+      noticeReferences: [], permission: { status: unknown }, files, membershipDigest };
   });
   return { schema: 1, policy, observations, entries };
 }

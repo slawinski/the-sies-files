@@ -613,7 +613,7 @@
         },
         {
           "path": "scripts/provenance/content.mts",
-          "sha256": "12628321497c13eea1f751c07a1e91dc38094e94ec3376564f1d0bedec751164"
+          "sha256": "681dea2999c6f02afe75d9c2588e3a1fa68de5452eb4e3e1a67d58fed2c5a3ff"
         },
         {
           "path": "scripts/provenance/dependencies.mts",
@@ -1401,7 +1401,7 @@
         },
         {
           "path": "tests/provenance-content.test.ts",
-          "sha256": "8cfafed9fd44435e7c8781100d15abc501a67d326624f5e36d248f990aca3444"
+          "sha256": "bf518dda5e649b6c40fd6f38eb5f9ee212c657757b3f4088ad5d9189d2563f46"
         },
         {
           "path": "tests/provenance-dependencies.test.ts",
@@ -1500,7 +1500,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "4ea141fe89843312e9ae90cfb8a5435e994dfd036e841a1832545b38e42fe2db"
+      "membershipDigest": "4ee43af453616e3a58dfc103a93b1d3ad29ac72e9ed539873c4eaaa89e8305ed"
     },
     {
       "id": "rules-names-prose",

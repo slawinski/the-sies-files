@@ -18,6 +18,28 @@ test('Git-free current unknown coverage passes reproducibly without granting per
   expect(validateContent(dir, ledger)).toMatchObject({ valid: true, permissionState: 'permission_not_established' });
   expect(validateContent(dir, ledger).gaps.length).toBeGreaterThan(0);
 });
+test.each(['OWNER_EVIDENCE_REQUIRED', 'verified'])('unchanged refresh preserves curated %s structural metadata across cycles', status => {
+  const dir = fixture(); const ledger = refreshContent(dir); const entry = ledger.entries[0];
+  Object.assign(entry, {
+    sourceSupplier: 'Synthetic supplier record', claimedCreator: 'Synthetic creator record',
+    importReference: 'records/fixture-import', derivation: 'Synthetic derivation note', intendedUse: 'Local fixture inspection only',
+    distribution: { repository: 'Fixture repository note', staticDelivery: 'Fixture static note', inGame: 'Fixture in-game note' },
+    noticeReferences: ['records/fixture-notice'], fixtureExtension: { note: 'Retain unrecognized metadata' },
+  });
+  // Structural records only: these synthetic fields establish no permission truth.
+  entry.permission = status === 'verified' ? { status, evidence: {
+    recordId: 'FIXTURE-1', custodian: 'fixture custodian', reference: 'records/fixture-1', reviewRecord: 'fixture-review',
+    membershipDigest: entry.membershipDigest, intendedUse: entry.intendedUse, revision: entry.membershipDigest,
+  } } : { status };
+  const expected = structuredClone(ledger);
+  expect(validateContent(dir, ledger)).toMatchObject({ valid: true, permissionState: 'permission_not_established' });
+  let current = ledger;
+  for (let cycle = 0; cycle < 3; cycle++) {
+    current = refreshContent(dir, current);
+    expect(current).toEqual(expected);
+    expect(validateContent(dir, current)).toMatchObject({ valid: true, permissionState: 'permission_not_established' });
+  }
+});
 test('stale assets, unowned additions, and duplicate primary ownership fail', () => {
   const dir = fixture(); const ledger = refreshContent(dir);
   fs.writeFileSync(path.join(dir, 'assets/map.png'), 'changed');
