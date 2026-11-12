@@ -6,12 +6,37 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { Viewer } from "@/lib/auth/http";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { DomainError } from "@/lib/errors";
+import { runGameAccessTransaction } from "@/lib/command";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
+const writerAdmission = new AsyncLocalStorage<{ gameId: string; viewer: Viewer }>();
+
+/** Only HTTP-resolved identity goes here, never request JSON. Scoped across awaits. */
+export function withGameAdmission<T>(gameId: string, viewer: Viewer, work: () => Promise<T>): Promise<T> {
+  return writerAdmission.run({ gameId, viewer }, work);
+}
+
+/** Called after acquiring the root lock. Trusted internal callers have no browser admission. */
+export async function recheckWriterAdmission(db: Db, gameId: string, actor?: string, requireStoryteller = false) {
+  const admission = writerAdmission.getStore();
+  if (!admission) {
+    if (requireStoryteller) throw new DomainError("UNAUTHORIZED", "Not authenticated");
+    return;
+  }
+  const { viewer } = admission;
+  const identity = viewer.kind === "storyteller" ? "storyteller" : `player:${viewer.playerId}`;
+  if (admission.gameId !== gameId || (actor && actor !== identity) || (requireStoryteller && viewer.kind !== "storyteller") ||
+      !await recheckViewerSession(viewer, gameId, new Date(), db)) {
+    throw new DomainError("GAME_NOT_FOUND", "Game not found");
+  }
+}
+
 /** Revalidate the exact admitted row; later request cookies cannot replace it. */
-export async function recheckViewerSession(viewer: Viewer, gameId: string, now = new Date()) {
-  return prisma.browserSession.findFirst({
+export async function recheckViewerSession(viewer: Viewer, gameId: string, now = new Date(), db: Db = prisma) {
+  return db.browserSession.findFirst({
     where: { id: viewer.sessionId, revokedAt: null, expiresAt: { gt: now },
       ...(viewer.kind === "storyteller"
         ? { storytellerGameId: gameId, playerId: null }
@@ -111,15 +136,23 @@ export async function findPlayerSessionByHashOnly(
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {
-  await prisma.browserSession.update({
-    where: { id: sessionId },
-    data: { revokedAt: new Date() },
-  });
+  const admitted = await prisma.browserSession.findUnique({ where: { id: sessionId }, include: { player: true } });
+  const gameId = admitted?.storytellerGameId ?? admitted?.player?.gameId;
+  if (!admitted || !gameId) return;
+  try {
+    await runGameAccessTransaction({ gameId, operation: "revokeSession", handler: async ({ tx }) => {
+      await tx.browserSession.updateMany({
+        where: { id: admitted.id, sessionTokenHash: admitted.sessionTokenHash, playerId: admitted.playerId, storytellerGameId: admitted.storytellerGameId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    } });
+  } catch (error) {
+    // An already-retired credential is already logged out. Never recreate it.
+    if (!(error instanceof DomainError && error.code === "GAME_NOT_FOUND")) throw error;
+  }
 }
 
 export async function revokeSessionByHash(sessionTokenHash: string): Promise<void> {
-  await prisma.browserSession.updateMany({
-    where: { sessionTokenHash, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
+  const session = await prisma.browserSession.findUnique({ where: { sessionTokenHash } });
+  if (session) await revokeSession(session.id);
 }

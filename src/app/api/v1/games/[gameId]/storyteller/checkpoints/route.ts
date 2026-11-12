@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonError, jsonOk, parseBody } from "@/lib/http";
-import { assertSameOrigin, resolveStoryteller } from "@/lib/auth/http";
+import { assertSameOrigin, resolveStoryteller, resolveStorytellerWriter } from "@/lib/auth/http";
 import { createCheckpoint, listCheckpoints, validateCheckpoint } from "@/modules/recovery/recovery.service";
 
 const createSchema = z.object({
@@ -34,15 +34,15 @@ export async function GET(
 export async function POST(req: Request, { params }: { params: Promise<{ gameId: string }> }) {
   try {
     const { gameId } = await params;
-    await resolveStoryteller(gameId);
+    const write = await resolveStorytellerWriter(gameId);
     assertSameOrigin(req);
     const { commandId, expectedVersion, payload } = await parseBody(req, createSchema);
-    const { version, checkpointId } = await createCheckpoint({
+    const { version, checkpointId } = await write(() => createCheckpoint({
       gameId,
       commandId,
       expectedVersion,
       reason: payload.reason,
-    });
+    }));
     const validation = await validateCheckpoint(gameId, checkpointId);
     return jsonOk({ version, checkpointId, valid: validation.valid }, 201);
   } catch (err) {

@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { DomainError } from "@/lib/errors";
 import { EVENTS } from "@/modules/events/event-types";
 import { clientIp, hashKeyPart, rateLimit } from "@/lib/rate-limit";
+import { runGameAccessTransaction } from "@/lib/command";
 
 const schema = z.object({
   gameId: z.string().min(1),
@@ -44,30 +45,21 @@ export async function POST(req: Request) {
 
     const token = generateToken(cryptoSecureRng);
     const tokenHash = hashToken(token);
-    await prisma.$transaction(async (tx) => {
-      await tx.browserSession.create({
-        data: {
-          storytellerGameId: gameId,
-          sessionTokenHash: tokenHash,
-          expiresAt: new Date(Date.now() + SESSION_TTL_SECONDS * 1000),
-        },
-      });
-      await tx.$queryRaw`SELECT id FROM game_sessions WHERE id = ${gameId} FOR UPDATE`;
-      const locked = await tx.gameSession.findUniqueOrThrow({ where: { id: gameId } });
-      await tx.domainEvent.create({
-        data: {
-          gameId,
-          sequence: locked.eventSequence + 1,
-          gameVersion: locked.version,
-          eventType: EVENTS.STORYTELLER_ACCESS_RECOVERED,
-          actor: "storyteller-recovery",
-        },
-      });
-      await tx.gameSession.update({
-        where: { id: gameId },
-        data: { eventSequence: locked.eventSequence + 1 },
-      });
-    });
+    try {
+      await runGameAccessTransaction({ gameId, operation: "recoverStorytellerAccess", actor: "storyteller-recovery", handler: async ({ tx, appendEvent }) => {
+        await tx.browserSession.create({
+          data: {
+            storytellerGameId: gameId,
+            sessionTokenHash: tokenHash,
+            expiresAt: new Date(Date.now() + SESSION_TTL_SECONDS * 1000),
+          },
+        });
+        await appendEvent(EVENTS.STORYTELLER_ACCESS_RECOVERED);
+      } });
+    } catch (error) {
+      if (error instanceof DomainError && error.code === "GAME_NOT_FOUND") throw new DomainError("UNAUTHORIZED", "Recovery failed");
+      throw error;
+    }
 
     await setStorytellerSessionCookie(token);
     return jsonOk({ ok: true });

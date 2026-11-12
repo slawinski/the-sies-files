@@ -46,11 +46,25 @@ export const commandContracts = {
   createCheckpoint: z.strictObject({ checkpointId: id }),
   resetPlayerAccess: empty,
   recoveryOverride: empty,
+  archiveGame: z.strictObject({ archivedAt: z.iso.datetime() }),
 } as const;
 
 export type CommandOperation = keyof typeof commandContracts;
 export type CommandResultFor<O extends CommandOperation> = z.output<(typeof commandContracts)[O]>;
 export type CommandActor = "storyteller" | `player:${string}`;
+// Exhaustive rather than an opt-in boolean: a new producer must be classified.
+export const archivedCommandPolicy = {
+  renameGame: "deny", setParticipantKind: "deny", addPlayer: "deny", updatePlayer: "deny",
+  removePlayer: "deny", reorderPlayers: "deny", issueClaimToken: "read-access",
+  generateSetup: "deny", commitSetup: "deny", acknowledgeRole: "deny", startOperational: "deny",
+  submitAction: "deny", resolveAction: "deny", completeOperational: "deny", openNominations: "deny",
+  closeNominations: "deny", nominate: "deny", resolveNominationTrigger: "deny", voteIntent: "deny",
+  startVotingPass: "deny", advanceVotingPass: "deny", lockVote: "deny", resolveExecution: "deny",
+  exileTraveller: "deny", slayer: "deny", resolveSlayerDecision: "deny", closeInvestigation: "deny",
+  scanQr: "deny", storytellerRevealClue: "deny", storytellerCompleteTask: "deny", storytellerSetStage: "deny",
+  storytellerSetMap: "deny", storytellerSetCondition: "deny", createCheckpoint: "deny",
+  resetPlayerAccess: "read-access", recoveryOverride: "deny", archiveGame: "deny",
+} as const satisfies Record<CommandOperation, "deny" | "read-access">;
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 /** Reject values JSON.stringify would silently alter or omit. */

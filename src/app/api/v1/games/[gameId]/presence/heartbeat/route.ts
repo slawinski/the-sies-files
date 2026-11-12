@@ -12,7 +12,7 @@ export async function POST(
     const { gameId } = await params;
     const viewer = await resolveViewer(gameId);
     const viewerId = viewer.kind === "storyteller" ? `storyteller:${viewer.sessionId}` : `player:${viewer.playerId}`;
-    await heartbeat(gameId, viewerId);
+    await heartbeat(gameId, viewerId, viewer);
     return jsonOk({ ok: true });
   } catch (err) {
     return jsonError(err);

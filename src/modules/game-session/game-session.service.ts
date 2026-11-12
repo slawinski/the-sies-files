@@ -97,6 +97,26 @@ interface BaseCommand {
   expectedVersion: number;
 }
 
+export async function archiveGame({ gameId, commandId, expectedVersion }: BaseCommand) {
+  const { result, version, sequence, duplicate } = await runCommand({
+    gameId,
+    commandId,
+    expectedVersion,
+    actor: "storyteller",
+    operation: "archiveGame",
+    input: {},
+    handler: async ({ tx, game, appendEvent }) => {
+      if (game.status !== "ENDED") throw new DomainError("INVALID_SESSION_STATE", "Only a completed game can be archived");
+      const archivedAt = systemClock.now();
+      await tx.gameSession.update({ where: { id: gameId }, data: { archivedAt } });
+      await appendEvent(EVENTS.GAME_ARCHIVED, { archivedAt: archivedAt.toISOString() });
+      return { archivedAt: archivedAt.toISOString() };
+    },
+  });
+  publishInvalidation(gameId, version, sequence);
+  return { ...result, version, duplicate };
+}
+
 export async function renameGame({
   gameId,
   commandId,
@@ -350,7 +370,7 @@ export async function issueClaimToken({
     handler: async ({ tx, game, appendEvent }) => {
       // Claim tokens are about player access (incl. re-issue), not roster edits —
       // so they remain issuable after setup commit / during the game.
-      if (game.status === "ENDED") {
+      if (game.status === "ENDED" && !game.archivedAt) {
         throw new DomainError("INVALID_SESSION_STATE", "Cannot issue a claim token after the game has ended");
       }
       const player = await tx.player.findFirst({ where: { id: playerId, gameId } });
@@ -411,25 +431,25 @@ export async function claimPlayer({
   const sessionHash = hashToken(sessionToken);
   const expiresAt = new Date(now.getTime() + SESSION_TTL_SECONDS * 1000);
 
-  if (claim.claimedAt != null) {
-    // Idempotent retry: same player, same client. Issue a fresh session.
-    if (commandId && claim.commandId === commandId) {
-      await prisma.browserSession.create({
-        data: { playerId, sessionTokenHash: sessionHash, expiresAt },
-      });
-      return { playerId, gameId, sessionToken, version: claim.player.game.version };
-    }
-    throw new DomainError("CLAIM_ALREADY_USED", "Claim token has already been used");
-  }
-
   const { version } = await runGameTransaction({
     gameId,
     commandId,
     actor: `player:${playerId}`,
+    operation: "claimPlayer",
     handler: async ({ tx, appendEvent }) => {
+      const freshNow = systemClock.now();
+      const fresh = await tx.playerClaim.findFirst({
+        where: { id: claim.id, tokenHash, playerId, player: { gameId }, revokedAt: null, expiresAt: { gt: freshNow } },
+      });
+      if (!fresh) throw new DomainError("UNAUTHORIZED", "Unknown or invalid claim token");
+      if (fresh.claimedAt != null) {
+        if (!commandId || fresh.commandId !== commandId) throw new DomainError("CLAIM_ALREADY_USED", "Claim token has already been used");
+        await tx.browserSession.create({ data: { playerId, sessionTokenHash: sessionHash, expiresAt } });
+        return {};
+      }
       const consumed = await tx.playerClaim.updateMany({
-        where: { tokenHash, claimedAt: null, revokedAt: null, expiresAt: { gt: now } },
-        data: { claimedAt: now, commandId },
+        where: { id: fresh.id, tokenHash, playerId, claimedAt: null, revokedAt: null, expiresAt: { gt: freshNow } },
+        data: { claimedAt: freshNow, commandId },
       });
       if (consumed.count !== 1) {
         throw new DomainError("CLAIM_ALREADY_USED", "Claim token has already been used");

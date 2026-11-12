@@ -6,7 +6,9 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { runCommand } from "@/lib/command";
+import { runCommand, runGameAccessTransaction } from "@/lib/command";
+import type { Viewer } from "@/lib/auth/http";
+import { recheckViewerSession } from "@/modules/auth/session";
 import { legacyPlayerOwns, metadataFree, readCommandReceipt } from "@/lib/command-contracts";
 import { DomainError } from "@/lib/errors";
 import { systemClock } from "@/lib/clock";
@@ -412,7 +414,7 @@ const replaySnapshotSchema = z.object({
 // Death/execution notifications are accompanied by PLAYER_DIED; role/effect
 // changes affect abilities, not alive/ghost-vote state. New types require review.
 const FLAG_NEUTRAL_EVENTS = new Set<string>([
-  "GAME_CREATED", "GAME_RENAMED", "GAME_ENDED", "VIRTUAL_CIRCLE_REORDERED",
+  "GAME_CREATED", "GAME_RENAMED", "GAME_ENDED", "GAME_ARCHIVED", "VIRTUAL_CIRCLE_REORDERED",
   "SETUP_GENERATED", "SETUP_COMMITTED", "ROLE_REVEALED_TO_PLAYER", "TRAVELLER_ALIGNMENT_ASSIGNED",
   "OPERATIONAL_STARTED", "ACTION_QUEUE_BUILT", "PLAYER_ACTION_SUBMITTED", "STORYTELLER_DECISION_RECORDED",
   "PRIVATE_INFORMATION_DELIVERED", "OPERATIONAL_COMPLETED", "DEATH_ATTEMPTED", "DEATH_PREVENTED", "DEATH_REDIRECTED",
@@ -535,6 +537,7 @@ const EVENT_CATEGORY: Record<string, AuditCategory> = {
   GAME_CREATED: "GAME_ENGINE",
   GAME_RENAMED: "GAME_ENGINE",
   GAME_ENDED: "GAME_ENGINE",
+  GAME_ARCHIVED: "GAME_ENGINE",
   PLAYER_ADDED: "GAME_ENGINE",
   PLAYER_UPDATED: "GAME_ENGINE",
   PLAYER_REMOVED: "GAME_ENGINE",
@@ -621,12 +624,18 @@ export function classifyPresence(lastSeenAt: Date, now: Date): PresenceConnectio
   return "OFFLINE";
 }
 
-export async function heartbeat(gameId: string, viewerId: string): Promise<void> {
-  await prisma.presence.upsert({
-    where: { gameId_viewerId: { gameId, viewerId } },
-    create: { gameId, viewerId, lastSeenAt: new Date() },
-    update: { lastSeenAt: new Date() },
-  });
+export async function heartbeat(gameId: string, viewerId: string, admission?: Viewer): Promise<void> {
+  await runGameAccessTransaction({ gameId, operation: "presence", handler: async ({ tx }) => {
+    if (admission) {
+      const expected = admission.kind === "storyteller" ? `storyteller:${admission.sessionId}` : `player:${admission.playerId}`;
+      if (viewerId !== expected || !await recheckViewerSession(admission, gameId, new Date(), tx)) throw new DomainError("GAME_NOT_FOUND", "Game not found");
+    }
+    await tx.presence.upsert({
+      where: { gameId_viewerId: { gameId, viewerId } },
+      create: { gameId, viewerId, lastSeenAt: new Date() },
+      update: { lastSeenAt: new Date() },
+    });
+  } });
 }
 
 export async function listPresence(gameId: string): Promise<Array<{ playerId: string | null; viewerId: string; connection: PresenceConnection; lastSeenAt: string }>> {

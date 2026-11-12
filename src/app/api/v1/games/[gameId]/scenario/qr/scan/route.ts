@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonError, jsonOk, parseBody } from "@/lib/http";
-import { assertSameOrigin, resolvePlayer } from "@/lib/auth/http";
+import { assertSameOrigin, resolvePlayerWriter } from "@/lib/auth/http";
 import { scanQr } from "@/modules/scenario/scenario.service";
 
 const schema = z.object({
@@ -12,16 +12,16 @@ const schema = z.object({
 export async function POST(req: Request, { params }: { params: Promise<{ gameId: string }> }) {
   try {
     const { gameId } = await params;
-    const { playerId } = await resolvePlayer(gameId);
+    const { playerId, write } = await resolvePlayerWriter(gameId);
     assertSameOrigin(req);
     const { commandId, expectedVersion, payload } = await parseBody(req, schema);
-    const { version, outcome } = await scanQr({
+    const { version, outcome } = await write(() => scanQr({
       gameId,
       playerId,
       token: payload.token,
       commandId,
       expectedVersion,
-    });
+    }));
     return jsonOk({ version, outcome });
   } catch (err) {
     return jsonError(err);

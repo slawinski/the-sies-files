@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonError, jsonOk, parseBody } from "@/lib/http";
-import { assertSameOrigin, resolveStoryteller } from "@/lib/auth/http";
+import { assertSameOrigin, resolveStorytellerWriter } from "@/lib/auth/http";
 import { resolveAction, type StorytellerActionResolution } from "@/modules/operational/operational.service";
 
 // Typed Storyteller resolution contract (audit spec 19 §3): no z.unknown() at
@@ -40,17 +40,17 @@ export async function POST(
 ) {
   try {
     const { gameId, actionId } = await params;
-    await resolveStoryteller(gameId);
+    const write = await resolveStorytellerWriter(gameId);
     assertSameOrigin(req);
     const { commandId, expectedVersion, payload } = await parseBody(req, schema);
-    const { version } = await resolveAction({
+    const { version } = await write(() => resolveAction({
       gameId,
       actionId,
       commandId,
       expectedVersion,
       // Runtime shape validated by `resolutionSchema` above; cast is type-only.
       resolution: payload.resolution as unknown as StorytellerActionResolution | undefined,
-    });
+    }));
     return jsonOk({ version });
   } catch (err) {
     return jsonError(err);
