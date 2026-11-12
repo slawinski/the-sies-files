@@ -400,6 +400,10 @@
           "sha256": "3a1c0513c241c6149b75e5303f31a89da2374e254faabe99b6eff5e56b93dd66"
         },
         {
+          "path": "docs/plans/2026-11-12-1705-fix-manual-game-data-lifecycle-plan.md",
+          "sha256": "3422fe8b20225bee690207fdf695d51f272ff5ed9598559011e2caa143b55b89"
+        },
+        {
           "path": "docs/provenance-owner-evidence.md",
           "sha256": "8f517d5708953f646771e655a57faa343a640cec819e0e8ac4b835233904db9a"
         },
@@ -1500,7 +1504,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "4ee43af453616e3a58dfc103a93b1d3ad29ac72e9ed539873c4eaaa89e8305ed"
+      "membershipDigest": "d2a56e9277f10153386ae5a5b8db0c8a8e52a5fb663341820bfd9b8173f487f8"
     },
     {
       "id": "rules-names-prose",
