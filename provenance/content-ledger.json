@@ -497,7 +497,7 @@
         },
         {
           "path": "package.json",
-          "sha256": "44b6cc59bf051ab22b9b0f5a6d5a90ae5bd21b792812def1309c062fa3585a10"
+          "sha256": "0c7f52c671189858d3c2f2df034e93a73d5cbf88ee0c2480217480fbf76c5dde"
         },
         {
           "path": "playwright.config.ts",
@@ -568,12 +568,16 @@
           "sha256": "fcc61e9816045cd14a9184cdcb273aefb88c76070fe574f0686b987e928ba18e"
         },
         {
+          "path": "prisma/migrations/20261113120000_game_retirement/migration.sql",
+          "sha256": "261d0ee930abab505ab780467617d081566224577f6e407c3a4946f06110cff4"
+        },
+        {
           "path": "prisma/migrations/migration_lock.toml",
           "sha256": "99836963713b4f5b269ad49af0ed3d7b0b2e336115c2f92dc9ac683d139d0900"
         },
         {
           "path": "prisma/schema.prisma",
-          "sha256": "f183e2fae4e8e4691e0fd1d82b5bfa9d717c1574ba2719d4553b8597f5332c48"
+          "sha256": "2f783ea1061f857e8e6144c08364345d197f3407c112bc53ace4c3e7af4868d9"
         },
         {
           "path": "provenance/content-ledger.json",
@@ -606,6 +610,18 @@
         {
           "path": "scripts/command-receipt-compatibility.mts",
           "sha256": "6e2e8ca6aa658e51f7da8d32ff397a421759ba59f8001e83be36cd2735611769"
+        },
+        {
+          "path": "scripts/game-data-journal.mts",
+          "sha256": "ce533c366ecb6e449e11e64252a9a8b491530ad39fc3022c0130e680bfacaeed"
+        },
+        {
+          "path": "scripts/game-data-lifecycle.mts",
+          "sha256": "9b8ab10bd571df240f542267eab58ccdcfdf82041e8f96c1a785612229ffc403"
+        },
+        {
+          "path": "scripts/game-data-policy.mts",
+          "sha256": "1b5963726cdc07cfd0431e0719cbd82124a3cb66e4439c43d8a0b5134980989b"
         },
         {
           "path": "scripts/playable-recovery.mts",
@@ -1384,6 +1400,14 @@
           "sha256": "48cd477f770824745a5823dff70acf165a9f556c9d0f7893646c03b52bd0b54e"
         },
         {
+          "path": "tests/game-data-lifecycle-tooling.test.ts",
+          "sha256": "ad9dc05da73f2502c7220fb94915b940daa246905e14ed6303b6b32d98dc5bf5"
+        },
+        {
+          "path": "tests/game-data-lifecycle.test.ts",
+          "sha256": "a0cf9f9ed489054139be3824093b85211a3b2a11db41d6ee4934fc9523c9a345"
+        },
+        {
           "path": "tests/game-lifecycle.test.ts",
           "sha256": "142cd6e89c66047aa22dfa35d79a3cdea93cf1053158a4f72a6e04cec4dc55b4"
         },
@@ -1512,7 +1536,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "f0d4b8e63eedc6be9629a629585d33ee568001d3d15eddb097fc2ecbf77baa10"
+      "membershipDigest": "40af0b292fd56f8c7ecc67bb3ddda0e211b1cc0ea631f55e42f0a042e00f7b63"
     },
     {
       "id": "rules-names-prose",

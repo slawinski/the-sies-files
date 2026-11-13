@@ -449,3 +449,15 @@ model RateLimitBucket {
   @@unique([key, windowStart])
   @@map("rate_limit_buckets")
 }
+
+// Independent evidence: deliberately no relation to the retired game.
+model GameRetirement {
+  gameId       String   @id
+  requestId    String   @unique
+  intentDigest String
+  planDigest   String
+  evidence     Json
+  retiredAt    DateTime
+
+  @@map("game_retirements")
+}
