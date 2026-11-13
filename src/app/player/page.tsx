@@ -153,7 +153,7 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
     useVersionedMutation(apply, { scope: gameId && playerId ? `${gameId}:${playerId}` : null, ready: () => game !== null && projection.canCommand(game),
       current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge,
       captureAccess: projection.captureAccess, ownsAccess: projection.ownsAccess, denyAccess: projection.denyAccess });
-  const canCommand = () => game !== null && projection.canCommand(game) && !busy;
+  const canCommand = () => game !== null && !game.archivedAt && projection.canCommand(game) && !busy;
   useEffect(() => { setScanMessage(null); setScanError(null); setNomineeId(null); }, [gameId]);
 
   const checkQrRef = useRef<() => Promise<void>>(async () => {});
@@ -375,6 +375,7 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
 
         {state === "ready" && game && (
           <div className="flex flex-col gap-3">
+            {game.archivedAt && <Notice>Sprawa zarchiwizowana — tylko do odczytu. Status: {game.status}. LIVE oznacza aktualność widoku, nie trwającą grę.</Notice>}
             {view !== "map" && scanRecovery}
             {reloadUnavailable && <Notice>Przechowywanie w tej karcie jest zablokowane. Możesz sprawdzić wynik tutaj, ale odzyskanie po przeładowaniu nie będzie dostępne.</Notice>}
             {view !== "map" && scanMessage && <Notice variant="success">{scanMessage}</Notice>}
@@ -418,7 +419,7 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
                   if (max !== null) toggleTarget(id, max);
                 }}
                 onSubmitAction={() => void handleSubmitAction()}
-                busy={busy || !projection.ready}
+                busy={busy || !projection.ready || !!game.archivedAt}
                 connectionBlocked={connectionBlocked}
                 nomineeId={nomineeId}
                 onSelectNominee={setNomineeId}
@@ -444,7 +445,7 @@ function PlayerPageInner({ projection }: { projection: PlayerProjectionOwner }) 
               <PlayerMapView
                 game={game}
                 scanRecovery={scanRecovery}
-                busy={busy || !projection.ready || qrState !== "ready"}
+                busy={busy || !projection.ready || !!game.archivedAt || qrState !== "ready"}
                 scanMessage={scanMessage}
                 scanError={scanError}
                 onScan={scanWithToken}

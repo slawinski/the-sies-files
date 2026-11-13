@@ -6,6 +6,7 @@
 // the extra `cache: "no-store"` is belt-and-suspenders for the browser.
 
 import { t } from "@/i18n/t";
+import { z } from "zod";
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -426,6 +427,7 @@ export type AccessResetResponseDto = { version: number } & (
 
 export interface StorytellerGameProjection {
   gameId: string;
+  archivedAt: string | null;
   name: string;
   status: string;
   phase: string | null;
@@ -444,6 +446,7 @@ export interface StorytellerGameProjection {
 
 export interface PlayerGameProjection {
   gameId: string;
+  archivedAt: string | null;
   name: string;
   status: string;
   phase: string | null;
@@ -541,3 +544,24 @@ export type StorytellerResolutionDto =
       starPassSuccessorPlayerId?: string;
     }
   | { kind: "REGISTRATION"; optionId: string };
+
+const archiveAcknowledgement = z.strictObject({
+  version: z.number().int().positive(), archivedAt: z.iso.datetime(), duplicate: z.boolean(),
+});
+export function decodeArchiveAcknowledgement(value: unknown) {
+  const parsed = archiveAcknowledgement.safeParse(value);
+  if (!parsed.success) throw new ApiClientError(0, "COMMAND_ACK_INVALID", "Nie można odczytać wyniku archiwizacji.");
+  return parsed.data;
+}
+export function decodeArchiveStatus(value: unknown, commandId: string) {
+  const parsed = z.union([
+    z.strictObject({ status: z.literal("UNKNOWN") }),
+    z.strictObject({ status: z.literal("APPLIED"), commandId: z.literal(commandId),
+      operation: z.literal("archiveGame"), resultVersion: z.literal(1),
+      resultingGameVersion: z.number().int().positive(), result: z.strictObject({ archivedAt: z.iso.datetime() }) }),
+  ]).safeParse(value);
+  if (!parsed.success) throw new ApiClientError(0, "COMMAND_ACK_INVALID", "Nie można odczytać wyniku archiwizacji.");
+  return parsed.data.status === "UNKNOWN" ? null : {
+    version: parsed.data.resultingGameVersion, archivedAt: parsed.data.result.archivedAt, duplicate: true,
+  };
+}

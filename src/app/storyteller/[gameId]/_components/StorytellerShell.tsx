@@ -129,11 +129,11 @@ export default function StorytellerShell({
               </>
             )}
           </div>
-          <Badge variant={ready ? "success" : "brass"}>
+          {game.status === "ENDED" ? <Badge variant="neutral">Zakończona · ENDED</Badge> : <Badge variant={ready ? "success" : "brass"}>
             {ready
               ? "Gotowe do konfiguracji"
               : `Dodaj jeszcze ${need} ${need === 1 ? "uczestnika" : "uczestników"}`}
-          </Badge>
+          </Badge>}
         </div>
 
         {children}

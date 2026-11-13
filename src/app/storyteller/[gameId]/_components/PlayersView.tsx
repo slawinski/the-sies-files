@@ -77,7 +77,7 @@ export default function PlayersView({
           <Button
             variant={arranging ? "secondary" : "quiet"}
             aria-pressed={arranging}
-            disabled={busy}
+            disabled={busy || !!game.archivedAt}
             icon={<UserRound aria-hidden="true" className="h-4 w-4" />}
             onClick={() => setArranging((value) => !value)}
           >
@@ -86,7 +86,7 @@ export default function PlayersView({
         )}
       </div>
 
-      {arranging && (
+      {arranging && !game.archivedAt && (
         <Notice variant="info">
           Tryb układania kręgu — zmień kolejność miejsc. Inne akcje na graczach są wstrzymane.
         </Notice>
@@ -167,13 +167,14 @@ export default function PlayersView({
                         </p>
                       </div>
 
-                      {arranging ? (
+                      {arranging && !game.archivedAt ? (
                         <div className="flex shrink-0 gap-1.5">
                           <Button variant="quiet" size="sm" disabled={busy || isFirst} aria-label={`Przenieś ${player.displayName} w górę`} icon={<ArrowUp aria-hidden="true" className="h-4 w-4" />} onClick={() => onMovePlayer(player.id, -1)} />
                           <Button variant="quiet" size="sm" disabled={busy || isLast} aria-label={`Przenieś ${player.displayName} w dół`} icon={<ArrowDown aria-hidden="true" className="h-4 w-4" />} onClick={() => onMovePlayer(player.id, 1)} />
                         </div>
                       ) : (
                         <OverflowMenu
+                          archived={!!game.archivedAt}
                           player={player}
                           busy={busy}
                           renameEnabled={renameEnabled}
@@ -260,6 +261,7 @@ export default function PlayersView({
 }
 
 function OverflowMenu({
+  archived,
   player,
   busy,
   renameEnabled,
@@ -268,6 +270,7 @@ function OverflowMenu({
   onResetAccess,
   onRemove,
 }: {
+  archived: boolean;
   player: StorytellerPlayerDto;
   busy: boolean;
   renameEnabled: boolean;
@@ -310,7 +313,7 @@ function OverflowMenu({
               Reset dostępu
             </Button>
           )}
-          <Button variant="danger" fullWidth busy={busy} onClick={() => { setOpen(false); onRemove(); }}>
+          <Button variant="danger" fullWidth busy={busy} disabled={archived} onClick={() => { setOpen(false); onRemove(); }}>
             Usuń z kręgu
           </Button>
         </div>

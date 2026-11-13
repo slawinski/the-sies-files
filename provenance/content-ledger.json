@@ -897,7 +897,7 @@
         },
         {
           "path": "src/app/player/_components/PlayerCaseView.tsx",
-          "sha256": "d163246ad20a976132078bedbb96e04ba2f015952ee69a06593840729f162642"
+          "sha256": "f4d2346bd9bf2dcfbdca22709b2ff4e00af55dca121a1c55df4544189b592a02"
         },
         {
           "path": "src/app/player/_components/PlayerJournalView.tsx",
@@ -905,7 +905,7 @@
         },
         {
           "path": "src/app/player/_components/PlayerMapView.tsx",
-          "sha256": "22622ef17114b13125d8dbe399fd78b76b9c4f746dd6e5249c77f270176118ee"
+          "sha256": "d70c585cbdf5c6f39ad5be2364228bccefe8ab3693d0bfd1f777ad4d9324f6ca"
         },
         {
           "path": "src/app/player/_components/PlayerPeopleView.tsx",
@@ -913,7 +913,7 @@
         },
         {
           "path": "src/app/player/page.tsx",
-          "sha256": "4fa808337a212d2c80334864a60b84ec6b235d0748c3ccdbcfcaf1224c11eb23"
+          "sha256": "c8cfcfb462a53245d0edac023dde164d397a0da5680643e7d43af336f66a8d42"
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/AuditView.tsx",
@@ -921,7 +921,7 @@
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/ControlView.test.ts",
-          "sha256": "82fa1cb527a290b4f56c78792f662f2956f1175dee2f6b97bf8008d35cf83414"
+          "sha256": "e0a65d8c8a5e970f7a9b1913e6c9662506229233bc2c0c9f40590e322294e7b7"
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/ControlView.tsx",
@@ -933,7 +933,7 @@
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/PlayersView.tsx",
-          "sha256": "de53d1137a1b80954c6bf143f94277c5c89839d10cd16b12f32521cfe8663db3"
+          "sha256": "8f71a8ce604a02f3c591628a1e935dee418c317c4983384217ff6ac91e6db643"
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/ScenarioView.tsx",
@@ -941,19 +941,19 @@
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/StorytellerShell.tsx",
-          "sha256": "9aeb17851bf504480868422f1d032db854ed961b872766669cb76a4f5352cd03"
+          "sha256": "d37efea9615947457319e33297b16539022272c7321f821b3da181e4a2ca8b13"
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/SystemView.tsx",
-          "sha256": "589c96e6db965a831cf8db7629606093dcde0142963b620aaed4d35ce9b4fd6b"
+          "sha256": "cc371a336a70dc7fc305ee841e64e31f44b457e3c445c85005559541234d6d27"
         },
         {
           "path": "src/app/storyteller/[gameId]/page.tsx",
-          "sha256": "1b4e7fae7a85d5e983a1ea78011b7f7c42a01380ab53e9288024e893c2edc183"
+          "sha256": "dcb6c0d6e6cbe18705b11a68abf57ad2f6a112a20b4a1d935bd147ea55fd8c2f"
         },
         {
           "path": "src/app/storyteller/page.tsx",
-          "sha256": "f0104fcafe13141926ac12dbd6c6868f9d8ba69aaa6ac9ae48a4a85b58b8d4ee"
+          "sha256": "10e0af336df5aa3f09a8fb7d5692e600b40cfb1a946df2df858b67a5fb0906c7"
         },
         {
           "path": "src/components/ActionDecisionPanel.tsx",
@@ -1125,7 +1125,7 @@
         },
         {
           "path": "src/lib/client-api.ts",
-          "sha256": "5826b233305f17716a12449faa7b6adea93c4947806ec4e2b410ca6ae4722a3e"
+          "sha256": "914b301517de2a858f8b894d7d7b31ddccb62fbbfabd8188bef136a7b5d547ea"
         },
         {
           "path": "src/lib/clock.ts",
@@ -1265,7 +1265,7 @@
         },
         {
           "path": "src/modules/projections/projections.ts",
-          "sha256": "e9ff89ca316e07605916a2021f5ade27a273bbcfb3a86cdff0b4d06df2fe13da"
+          "sha256": "07e378ec9b419e78eca9e85afe20f9c35fca8303a16b4e30099e40571f51af56"
         },
         {
           "path": "src/modules/realtime/broker.ts",
@@ -1380,6 +1380,10 @@
           "sha256": "bea1a337c705c6dadc7c31e9b9b81c239b9c2f2e4681f174587b1cd4cba18de5"
         },
         {
+          "path": "tests/e2e/e2e-14-game-lifecycle.spec.ts",
+          "sha256": "a2635dfaf3c933b885f7563b1e308199e2eba8f21c074238445a27d6ab132b23"
+        },
+        {
           "path": "tests/e2e/fixtures.ts",
           "sha256": "8fb1f22fc6ff25a7718c8cfe8cab93da1e97c1fd53cb0230da0926484757b147"
         },
@@ -1433,7 +1437,7 @@
         },
         {
           "path": "tests/projections.test.ts",
-          "sha256": "2ddff5426a5a39a3151d094975951b3289b272da53e6987962debdfeb22ca7a7"
+          "sha256": "7cbc02af238d71965234038b129266d561a47ff94f6587a8133a47bdf830b819"
         },
         {
           "path": "tests/provenance-content.test.ts",
@@ -1536,7 +1540,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "40af0b292fd56f8c7ecc67bb3ddda0e211b1cc0ea631f55e42f0a042e00f7b63"
+      "membershipDigest": "d2fcf5e98b6672f94f7e297f74cd88ba05b83731167f9067423a59ca1671380c"
     },
     {
       "id": "rules-names-prose",
@@ -1637,7 +1641,7 @@
         },
         {
           "path": "src/lib/presentation/player-mode.test.ts",
-          "sha256": "bfcc37b1ead84d8a8fe9883f3f64a8c11e307974afb9beb2d0aa6b7b91f6cf54"
+          "sha256": "8e763c3ca3379f2648e67212b6a4f4c7da0a0deaef817387a525bfddc4cf854a"
         },
         {
           "path": "src/lib/presentation/player-mode.ts",
@@ -1649,7 +1653,7 @@
         },
         {
           "path": "src/lib/presentation/storyteller-mode.test.ts",
-          "sha256": "bff7889d5481ecf0f161b812f1bea4f5833ccc4d5d01311b7c34b9ba717c3304"
+          "sha256": "72d72c0136c88a4024782d1afcedc6f914101460af4ba0393778475326bd29ec"
         },
         {
           "path": "src/lib/presentation/storyteller-mode.ts",
@@ -1668,7 +1672,7 @@
           "sha256": "8ffcf25d711fec2681585f2b3733fea4e4c11245571762647fe52570e8b2ff1e"
         }
       ],
-      "membershipDigest": "61e17c1bf537fb615ebb9e9a862e3e9d565e3fd88bec25999f5e975bb9bd081d"
+      "membershipDigest": "169c501b905fdbfc6486c9d6bbf6e5e36b6bde2a5331fb095437edea9d90e668"
     },
     {
       "id": "vectors-favicon",

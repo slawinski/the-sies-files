@@ -8,7 +8,7 @@ import type { StorytellerGameProjection } from "@/lib/client-api";
 
 function game(overrides: Partial<StorytellerGameProjection> = {}): StorytellerGameProjection {
   return {
-    gameId: "g1", name: "Test", status: "ACTIVE", phase: "INVESTIGATION",
+    gameId: "g1", archivedAt: null, name: "Test", status: "ACTIVE", phase: "INVESTIGATION",
     cycleNumber: 1, version: 1, participantCount: 13, isReady: true,
     players: [], result: null, setup: null, operational: null,
     investigation: null, nominations: [], scenario: null, ...overrides,

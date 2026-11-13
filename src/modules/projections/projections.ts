@@ -37,6 +37,7 @@ export interface PlayerPublicDto {
 
 export interface PublicGameProjection {
   gameId: string;
+  archivedAt: string | null;
   name: string;
   status: string;
   phase: string | null;
@@ -199,6 +200,7 @@ export function buildPublicProjection(
   const sorted = sortBySeat(players);
   return {
     gameId: game.id,
+    archivedAt: game.archivedAt?.toISOString() ?? null,
     name: game.name,
     status: game.status,
     phase: game.phase,
