@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { execFileSync } from 'node:child_process';
 import { proveLifecycle, readLifecycleReport, LIFECYCLE_WITNESSES, LIFECYCLE_BROWSER_CASE } from "../scripts/game-data-lifecycle-proof.mjs";
 import { capture } from '../scripts/regression-baseline.mjs';
@@ -70,6 +70,24 @@ it("physically restores a pre-retirement ACTIVE PG16 backup and reconciles only 
     blocked: { outcome: "blocked", conflictCount: 1 }, rechecked: { outcome: "clear", conflictCount: 0 },
     sourceRemaining: 1, stagingRemaining: 1, otherUnchanged: true, liveApplyRefused: true });
   expect(report.cleanup).toEqual({ source: "released", staging: "released" });
+});
+
+it("physical proof uses owned target credentials without adopting or mutating the ambient operator password", async () => {
+  const parent = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "u4-proof-auth-"));
+  const ambient = "SYNTHETIC_WRONG_AMBIENT_OPERATOR_PASSWORD";
+  vi.stubEnv("GAME_DATA_PASSWORD", ambient);
+  try {
+    const report = await proveLifecycle({ output: path.join(parent, "success") }, { stage() {
+      expect(process.env.GAME_DATA_PASSWORD).toBe(ambient);
+    } });
+    expect(report.complete).toBe(true);
+    expect(report.cleanup).toEqual({ source: "released", staging: "released" });
+    expect(process.env.GAME_DATA_PASSWORD).toBe(ambient);
+    const stored = fs.readFileSync(path.join(parent, "success/lifecycle.json"), "utf8");
+    expect(stored).not.toContain(ambient);
+    const password = new URL(process.env.DATABASE_URL!).password;
+    if (password) expect(stored).not.toContain(decodeURIComponent(password));
+  } finally { vi.unstubAllEnvs(); }
 });
 
 it.each(["dump", "restore", "observation", "cleanup"] as const)("keeps a failed %s proof nonzero-equivalent with a durable report and owned cleanup", async fault => {

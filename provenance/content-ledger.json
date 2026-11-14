@@ -621,11 +621,11 @@
         },
         {
           "path": "scripts/game-data-lifecycle-browser.mts",
-          "sha256": "74ebbec331666412b9acc51201b3e9dcc483a69d462361a7034f846bebba57b3"
+          "sha256": "508570073ed2672213c098586b731911508a3e754e51bb79f9dc608f84e3eea8"
         },
         {
           "path": "scripts/game-data-lifecycle-proof.mts",
-          "sha256": "cf4e63da520b0708ac93a31f4b0a65cae0efaea8738036a728a8eb18c1305b0e"
+          "sha256": "5812fab08f1eba75fb37bcc25278abe7eb931086e64866df11a7879a7af85378"
         },
         {
           "path": "scripts/game-data-lifecycle.mts",
@@ -1417,15 +1417,15 @@
         },
         {
           "path": "tests/game-data-lifecycle-proof.test.ts",
-          "sha256": "3ac3dbd68f0f833be7b70d89959acb9f7842cfe0ad6d1d4df9950e35df91b461"
+          "sha256": "c47a8bf55792bb43cbbec162bc786d704fa744282fa85ed3c2cb3504d32dcdb1"
         },
         {
           "path": "tests/game-data-lifecycle-tooling.test.ts",
-          "sha256": "af126ec9a5770ea526052dc2aff04c1100694c2f253d5e443ff2043bd00a585b"
+          "sha256": "c0de6fa3677d591d047fd53d27ecf84a97668305f133325526d2c41091777aab"
         },
         {
           "path": "tests/game-data-lifecycle.test.ts",
-          "sha256": "21a97de9221c523670c16da10ebcd049fbd7d5c50d1b89013578b2f70fe0ae9c"
+          "sha256": "156b82f167e856c76d59398529842fd0fccbcba28229fd8fbc0a1d573593db17"
         },
         {
           "path": "tests/game-lifecycle.test.ts",
@@ -1556,7 +1556,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "4e7d5b35037fcf336a0dfb527233b0c9e2fbe3cb8ee22f9ebaacc09583a85c95"
+      "membershipDigest": "2d1469adf11747978002f68181914899b79a2a839c44ef596fe75244b1d00d04"
     },
     {
       "id": "rules-names-prose",

@@ -9,7 +9,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { resolveTarget } from './test-database.mjs';
 import { buildIdentity, derivedTarget, ownedDatabase, preflight } from './playable-recovery.mjs';
 import { verifySource, type capture } from './regression-baseline.mjs';
-import { execute, restoreCheck, LifecycleFailure, type Options } from './game-data-lifecycle.mjs';
+import { LifecycleFailure, type Options, type RestoreOptions } from './game-data-lifecycle.mjs';
 import { bytesDigest, digest, identities, readGraph, selection } from './game-data-policy.mjs';
 import { writePrivate } from './game-data-journal.mjs';
 import { proveBrowserLifecycle } from './game-data-lifecycle-browser.mjs';
@@ -109,6 +109,22 @@ export async function proveLifecycle(options: ProofOptions, hooks: Hooks = {}): 
     report.stages.push({ name: stage + ':' + path.basename(exe), exit: r.status, at: new Date().toISOString() }); save();
     if (r.status !== 0 || cancelled) throw new Error('Physical stage failed');
   };
+  // Credentials belong only to this owned target's private child environment,
+  // never the operator options, argv, reports, or the caller's global environment.
+  const operator = (mode: string, options: Options | RestoreOptions, env: NodeJS.ProcessEnv) => {
+    const args = Object.entries(options).flatMap(([key, value]) => key === 'stoppedApplication' ? ['--stopped-application']
+      : key === 'unservedStaging' ? ['--unserved-staging'] : ['--' + key, String(value)]);
+    const r = spawnSync(path.join(cwd, 'node_modules/.bin/tsx'), ['scripts/game-data-lifecycle.mts', mode, ...args], {
+      cwd, env: { ...env, GAME_DATA_PASSWORD: decodeURIComponent(new URL(env.DATABASE_URL!).password) },
+      encoding: 'utf8', timeout: 120000, maxBuffer: 8 * 1024 * 1024,
+    });
+    report.stages.push({ name: stage + ':operator-' + mode, exit: r.status, at: new Date().toISOString() }); save();
+    if (cancelled) throw new Error('Physical stage failed');
+    const result = JSON.parse(r.stdout);
+    if (result.outcome === 'failed') throw new LifecycleFailure(result);
+    if (r.status !== (result.outcome === 'blocked' ? 1 : 0)) throw new Error('Physical stage failed');
+    return result;
+  };
   let source: ReturnType<typeof ownedDatabase> | undefined;
   let browserPort: number | undefined;
   let staging: ReturnType<typeof ownedDatabase> | undefined;
@@ -155,7 +171,7 @@ export async function proveLifecycle(options: ProofOptions, hooks: Hooks = {}): 
     command(path.join(cwd, 'node_modules/.bin/tsx'), ['-e', `import {closeInvestigation} from './src/modules/investigation/investigation.service'; import {archiveGame} from './src/modules/game-session/game-session.service'; import {prisma} from './src/lib/db'; (async()=>{const ended=await closeInvestigation({gameId:${JSON.stringify(retired.id)},commandId:${JSON.stringify(randomUUID())},expectedVersion:0}); if(!ended.winner) throw new Error('No completion'); await archiveGame({gameId:${JSON.stringify(retired.id)},commandId:${JSON.stringify(randomUUID())},expectedVersion:ended.version});})().finally(()=>prisma.$disconnect());`], source.target.env);
     const database = new URL(source.target.env.DATABASE_URL!); database.password = '';
     const opts: Options = { database: database.href, game: retired.id, request: randomUUID(), plan: path.join(custody, 'plan.json'), journal: path.join(custody, 'intent.json'), receipt: path.join(custody, 'receipt.json'), stoppedApplication: true };
-    enter('retire-source'); await execute('plan', opts); await execute('apply', opts);
+    enter('retire-source'); operator('plan', opts, source.target.env); operator('apply', opts, source.target.env);
     const evidence = path.join(custody, 'collection.json');
     writePrivate(evidence, { format: 'game-retirement-custody/1', complete: true, entries: [{ journal: opts.journal, receipt: opts.receipt }] });
     report.observations.sourceRemaining = await db.gameSession.count();
@@ -171,14 +187,14 @@ export async function proveLifecycle(options: ProofOptions, hooks: Hooks = {}): 
     if ((report.observations.oldRoot as { status: string; archivedAt: unknown }).status !== 'ACTIVE' || (report.observations.oldRoot as { archivedAt: unknown }).archivedAt !== null || report.observations.oldAnchorCount !== 0) throw new Error('Not an old active copy');
     await restored.$disconnect();
     const checkOptions = { database: stagingURL.href, evidence, unservedStaging: true as const };
-    const blocked = await restoreCheck(checkOptions); report.observations.blocked = blocked;
+    const blocked = operator('restore-check', checkOptions, staging.target.env); report.observations.blocked = blocked;
     if (blocked.outcome !== 'blocked' || !('conflicts' in blocked) || blocked.conflicts[0]?.kind !== 'committed' || blocked.conflicts[0]?.game !== retired.id) throw new Error('Retirement not detected');
     const liveOptions = { ...opts, database: stagingURL.href, request: randomUUID(), plan: path.join(custody, 'live-plan.json'), journal: path.join(custody, 'live-intent.json'), receipt: path.join(custody, 'live-receipt.json') };
     // Ordinary planning/apply must never turn restore detection into eligibility.
     let refused = false;
-    try { await execute('plan', liveOptions); } catch { refused = true; }
+    try { operator('plan', liveOptions, staging.target.env); } catch { refused = true; }
     let applyRefused = false;
-    try { await execute('apply', liveOptions); } catch { applyRefused = true; }
+    try { operator('apply', liveOptions, staging.target.env); } catch { applyRefused = true; }
     report.observations.liveApplyRefused = refused && applyRefused;
     if (!refused || !applyRefused) throw new Error('Live root admitted');
     enter('manual-staging-reconciliation');
@@ -195,7 +211,7 @@ export async function proveLifecycle(options: ProofOptions, hooks: Hooks = {}): 
     report.observations.stagingRemaining = await restored.gameSession.count();
     if (!report.observations.otherUnchanged || report.observations.stagingRemaining !== 1) throw new Error('Other game changed');
     await restored.$disconnect();
-    report.observations.rechecked = await restoreCheck(checkOptions);
+    report.observations.rechecked = operator('restore-check', checkOptions, staging.target.env);
     if ((report.observations.rechecked as { outcome: string }).outcome !== 'clear') throw new Error('Recheck failed');
     if (options.buildRecord) {
       enter('browser-offline-purge');

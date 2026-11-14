@@ -120,7 +120,8 @@ export async function proveBrowserLifecycle(target: Target, db: PrismaClient, cu
       '--receipt', path.join(custody, 'browser-receipt.json'), '--stopped-application'];
     // The real CLI performs its normal pg_stat_activity/quiescence check. No
     // session termination, application flag endpoint or test-only bypass.
-    for (const mode of ['plan', 'apply']) command(path.join(cwd, 'node_modules/.bin/tsx'), ['scripts/game-data-lifecycle.mts', mode, ...args], target.env);
+    for (const mode of ['plan', 'apply']) command(path.join(cwd, 'node_modules/.bin/tsx'), ['scripts/game-data-lifecycle.mts', mode, ...args],
+      { ...target.env, GAME_DATA_PASSWORD: decodeURIComponent(new URL(target.env.DATABASE_URL!).password) });
     check(await db.gameSession.findUnique({ where: { id: game.gameId } }), null);
     check(selection(await db.$transaction(tx => readGraph(tx)), other.gameId).data, otherDigest);
     await db.$disconnect();

@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -32,8 +32,10 @@ const secret = "SYNTHETIC_PRIVATE_NEVER_SERIALIZE";
 const connection = new URL(url); connection.password = "";
 const options = (game: string, label = randomUUID()): Options => ({ database: connection.href, game, plan: path.join(dir, label + ".plan.json"), journal: path.join(dir, label + ".intent.json"), receipt: path.join(dir, label + ".receipt.json"), request: randomUUID(), stoppedApplication: true });
 afterAll(async () => { await disconnect(); await observer.$disconnect(); });
+afterEach(() => { vi.unstubAllEnvs(); });
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllEnvs(); cookieJar.clear();
+  vi.stubEnv("GAME_DATA_PASSWORD", decodeURIComponent(new URL(url).password));
   await db.$executeRaw`TRUNCATE game_retirements, game_sessions, domain_events, command_receipts, checkpoints, presence, rate_limit_buckets CASCADE`;
 });
 
@@ -85,7 +87,7 @@ async function run(mode: "plan" | "apply" | "reconcile", opts: Options, hooks: H
 }
 function cli(mode: string, opts: Options) {
   const args = Object.entries(opts).flatMap(([key, value]) => key === "stoppedApplication" ? ["--stopped-application"] : ["--" + key, String(value)]);
-  const result = spawnSync(path.join(process.cwd(), "node_modules/.bin/tsx"), ["scripts/game-data-lifecycle.mts", mode, ...args], { env: { ...process.env, DATABASE_URL: "deliberately-invalid-ambient", GAME_DATA_PASSWORD: new URL(url).password }, encoding: "utf8" });
+  const result = spawnSync(path.join(process.cwd(), "node_modules/.bin/tsx"), ["scripts/game-data-lifecycle.mts", mode, ...args], { env: { ...process.env, DATABASE_URL: "deliberately-invalid-ambient", GAME_DATA_PASSWORD: decodeURIComponent(new URL(url).password) }, encoding: "utf8" });
   expect(result.stderr).not.toContain(secret);
   return { code: result.status, report: JSON.parse(result.stdout) };
 }
@@ -100,6 +102,8 @@ it("real CLI purges all 22 families, retaining the complete other game and globa
   await db.rateLimitBucket.create({ data: { key: secret, windowStart: new Date(), count: 9 } });
   const retained = await allRows();
   const selected = await fixture(); const actual = options(selected.g.id);
+  const [endpoint] = await db.$queryRaw<{ host: string; port: number }[]>`SELECT host(inet_server_addr()) AS host, inet_server_port() AS port`;
+  expect(endpoint).toEqual({ host: connection.hostname === "localhost" ? "127.0.0.1" : connection.hostname.replace(/[\[\]]/g, ""), port: Number(connection.port || 5432) });
   await disconnect();
   expect(cli("plan", actual)).toMatchObject({ code: 0, report: { outcome: "planned" } });
   const plan = readPrivate(actual.plan) as { counts: Record<string, number> };
