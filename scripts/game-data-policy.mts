@@ -12,16 +12,10 @@ export function canonical(value: unknown): string {
 }
 export const digest = (v: unknown) => createHash('sha256').update(canonical(v)).digest('hex');
 export const bytesDigest = (v: string | Buffer) => createHash('sha256').update(v).digest('hex');
-// Reviewed fresh PG16 catalog after all 14 admitted migrations, including the
-// independent retirement anchor. Never learn this identity from an operator DB.
 const admittedCatalog = '3d148430b8f8ec58f02d04fdc1d870aef225eac93e3c302ee58f17ed092d880f';
 const admittedSourceSchema = '2f783ea1061f857e8e6144c08364345d197f3407c112bc53ace4c3e7af4868d9';
-// AS5: aggregate limits include both games and global budgets, not only the
-// selected graph. Exceeding either limit requires refusal, never a batched purge.
 export const graphBudget = { rows: 100_000, bytes: 16 * 1024 * 1024 } as const;
 
-// This is an admission policy, not a discovery-driven deletion list. New fields,
-// models and relations require a reviewed policy change, even with fresh plans.
 const inventory = [
   ['GameSession', 'game_sessions', 'id name status phase cycleNumber version eventSequence scriptId scriptVersion scenarioId scenarioVersion winner winReason archivedAt createdAt updatedAt'],
   ['Player', 'players', 'id gameId displayName virtualSeat participantKind alive ghostVoteAvailable createdAt updatedAt'],
@@ -65,8 +59,6 @@ function sourceFiles(dir: string): [string, string][] {
 }
 export function identities() {
    const schema = fs.readFileSync(path.join(root, 'prisma/schema.prisma'), 'utf8');
-   // Includes relation attributes and native types: checking names alone would
-   // let a stale generated client silently admit an unknown source shape.
    if (bytesDigest(schema) !== admittedSourceSchema) throw new Error('Unadmitted source schema');
   const migrations = sourceFiles('prisma/migrations').filter(([name]) => name.endsWith('/migration.sql'));
   const admittedMigrations = ['20260820113931_init','20260820114215_claim_command_id','20260820115707_harden_sessions','20260820133857_slice2_setup_operational','20260820143455_slice3_effects','20260820182427_slice4_investigation','20260820185337_slice5_scenario','20260820192850_slice6_checkpoints','20260821181635_remediation_nomination_trigger','20260821182909_remediation_vote_pass','20260821210000_r1_presence_checkpoint_boundary','20260821220000_r2_security_durability','20261109110000_command_receipt_metadata','20261113120000_game_retirement'];

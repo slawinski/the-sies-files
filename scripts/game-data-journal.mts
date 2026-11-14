@@ -44,6 +44,16 @@ export function readPrivate(file: string): unknown {
     return JSON.parse(fs.readFileSync(fd, 'utf8'));
   } finally { fs.closeSync(fd); }
 }
+export function syncPrivate(file: string) {
+  privatePath(file);
+  const fd = fs.openSync(file, c.O_RDONLY | c.O_NOFOLLOW);
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.uid !== uid() || (st.mode & 0o077) || st.nlink !== 1 || st.size > 1024 * 1024) fail();
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
+  syncDirectory(file);
+}
 export type FileStage = 'pending-file' | 'pending-directory' | 'final-file' | 'final-rename' | 'final-directory';
 export type FileHook = (stage: FileStage) => void;
 export function pending(file: string, value: unknown, hook?: FileHook) {
@@ -52,8 +62,6 @@ export function pending(file: string, value: unknown, hook?: FileHook) {
   hook?.('pending-directory');
   syncDirectory(file);
 }
-// Reserve the destination exclusively. Only this intent's reservation may be
-// replaced by rename, including after a crash; unrelated files are never replaced.
 export function finalize(file: string, value: unknown, intentDigest: string, hook?: FileHook) {
   privatePath(file);
   const reservation = { format: 'game-retirement-reservation/1', intentDigest };
@@ -61,8 +69,6 @@ export function finalize(file: string, value: unknown, intentDigest: string, hoo
   if (fs.existsSync(file)) {
     const existing = readPrivate(file);
     if (JSON.stringify(existing) === JSON.stringify(value)) { syncDirectory(file); return; }
-    // A rename may have succeeded before directory sync failed. An exact old
-    // receipt with no recorded failure is ours, not an unrelated collision.
     const beforeFailure = { ...(value as Record<string, unknown>), firstFailure: null };
     if (JSON.stringify(existing) === JSON.stringify(beforeFailure)) replace = existing;
     else if (JSON.stringify(existing) !== JSON.stringify(reservation)) fail();

@@ -9,6 +9,7 @@ import { acquireLease, resolveTarget, stopOwnedServer } from './test-database.mj
 import { buildIdentity, completeClaims } from './playable-recovery.mjs';
 import { prepareCompatibilitySource, readCompatibilityReport } from './command-receipt-compatibility.mjs';
 import { readProvenanceReport } from './provenance.mjs';
+import { readLifecycleReport } from './game-data-lifecycle-proof.mjs';
 
 const hash = (data: string | Buffer) => crypto.createHash('sha256').update(data).digest('hex');
 function git(root: string, args: string[]) {
@@ -296,7 +297,6 @@ export async function measure(root: string, out: string, profile: 'development' 
       try { metadata.provenance = readProvenanceReport(path.join(out, 'provenance'), work, manifest.sourceId, metadata.build as ReturnType<typeof buildIdentity>); }
       catch { metadata.provenance = { complete: false, reason: 'Final provenance artifacts or source/build identity failed revalidation' }; }
       try {
-        const { readLifecycleReport } = await import('./game-data-lifecycle-proof.mjs');
         metadata.lifecycle = readLifecycleReport(path.join(out, 'lifecycle'), work, manifest, metadata.build as ReturnType<typeof buildIdentity>, out);
       } catch { metadata.lifecycle = { complete: false, reason: 'Lifecycle evidence missing, failed, stale or incomplete' }; }
     }

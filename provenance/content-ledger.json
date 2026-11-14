@@ -617,7 +617,7 @@
         },
         {
           "path": "scripts/game-data-journal.mts",
-          "sha256": "ce533c366ecb6e449e11e64252a9a8b491530ad39fc3022c0130e680bfacaeed"
+          "sha256": "d3643c6791ada2002651fe47e88c4774ec886f364bd766224c501b6b1fa9c2a3"
         },
         {
           "path": "scripts/game-data-lifecycle-browser.mts",
@@ -629,11 +629,11 @@
         },
         {
           "path": "scripts/game-data-lifecycle.mts",
-          "sha256": "2428326aaa9ed386a1f4a4c01ef8714df3fd10b5cecaa2a3507ce265d192ce9f"
+          "sha256": "ac726f01fb8aba043ed82ad6d19842fa20fb6f7c93b46391107cdc693c66f775"
         },
         {
           "path": "scripts/game-data-policy.mts",
-          "sha256": "1b5963726cdc07cfd0431e0719cbd82124a3cb66e4439c43d8a0b5134980989b"
+          "sha256": "f8b971ba29fd49fd5c1ee0764fd1929534873ded7bf74c623703a7f4006aac0e"
         },
         {
           "path": "scripts/playable-recovery.mts",
@@ -661,7 +661,7 @@
         },
         {
           "path": "scripts/regression-baseline.mts",
-          "sha256": "7e787682a55f255cb1032c8519a7b4a7a6529e14e23c7c4ceee97135e34432f7"
+          "sha256": "b3b1835902c9324298b963aa9ea046d2577d9fcbfc9ecbf65f6e3b919822c6f9"
         },
         {
           "path": "scripts/reset-e2e-db.sh",
@@ -1421,15 +1421,15 @@
         },
         {
           "path": "tests/game-data-lifecycle-tooling.test.ts",
-          "sha256": "6fca8fba52bc539999225e642edd434b7e17b2acd2ea44c4663f3538a512759d"
+          "sha256": "af126ec9a5770ea526052dc2aff04c1100694c2f253d5e443ff2043bd00a585b"
         },
         {
           "path": "tests/game-data-lifecycle.test.ts",
-          "sha256": "4deda19119806654be8021b3fcc6be3ada685657a1322b5a7f1d9e0f62bb591f"
+          "sha256": "1eb7e0c9b602239978f587a3d4432d3276ab447896de630e6130fc2bd548592c"
         },
         {
           "path": "tests/game-lifecycle.test.ts",
-          "sha256": "142cd6e89c66047aa22dfa35d79a3cdea93cf1053158a4f72a6e04cec4dc55b4"
+          "sha256": "66cc058f981993da9cdc491b30af7c058d63644bb9b87274dfac58dcd7185cc6"
         },
         {
           "path": "tests/game-session.test.ts",
@@ -1441,7 +1441,7 @@
         },
         {
           "path": "tests/helpers/recovery-virtual.ts",
-          "sha256": "990ca3547487c6e5e9bd619cb871616bd3621e63710b5ee3f4cdb55a9e47e169"
+          "sha256": "a2f29bf3ce125726591085f985e8e28833fbb0f007c7c50c6ec384d7fd219703"
         },
         {
           "path": "tests/map-system.test.ts",
@@ -1556,7 +1556,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "32b2b1f061452dbc73d5da062e27ae3c495a704fec69ba9af1ebac0ac2b36104"
+      "membershipDigest": "023756f002380d2024322c74ee4a4a59f71f2a45b26c119c8d925c2a3770399b"
     },
     {
       "id": "rules-names-prose",

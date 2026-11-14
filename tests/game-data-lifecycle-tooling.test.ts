@@ -32,6 +32,14 @@ it("classifies exactly 22 owned families and hashes JSON independent of key inse
   expect(canonical({ b: [1, { z: 2, a: null }], a: "x" })).toBe(canonical({ a: "x", b: [1, { a: null, z: 2 }] }));
 });
 
+it("rejects a duplicate option in an otherwise complete valid operator invocation", () => {
+  const args = ["apply", "--database", "postgresql://operator@127.0.0.1:55499/staging_test",
+    "--game", "4e0dbdb5-9c39-4113-988e-c70a09d90bc5", "--request", "a7f96d42-4c1f-4c97-8799-40c61f10ef15",
+    "--plan", "/private/plan.json", "--journal", "/private/intent.json", "--receipt", "/private/receipt.json", "--stopped-application"];
+  expect(parseArguments(args).mode).toBe("apply");
+  expect(() => parseArguments([...args, "--database", "postgresql://operator@127.0.0.1:55499/other_test"])).toThrow();
+});
+
 it("refuses unsafe ancestors, symlinks, public files and collisions without overwriting", () => {
   const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "item7-u3-path-"));
   fs.chmodSync(dir, 0o700);

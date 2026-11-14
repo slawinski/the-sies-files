@@ -216,6 +216,27 @@ it.each(["history-FK", "zero-residue", "before-commit"] as const)("rolls the act
   expect(readPrivate(opts.receipt)).toMatchObject({ firstFailure: { state: "rolled-back" } });
 });
 
+it.each(["apply", "reconcile"] as const)("%s cannot delete while readable pending intent contents cannot be synchronized", async mode => {
+  const { g } = await fixture(); const opts = options(g.id); await run("plan", opts);
+  const fsync = fs.fsyncSync;
+  vi.spyOn(fs, "fsyncSync").mockImplementation(fd => {
+    if (fs.fstatSync(fd).isFile()) throw new Error(secret);
+    fsync(fd);
+  });
+  await expect(run("apply", opts)).rejects.toThrow();
+  expect(readPrivate(opts.journal)).toMatchObject({ format: "game-retirement-intent/1", plan: { game: g.id } });
+  expect(await db.gameSession.findUnique({ where: { id: g.id } })).not.toBeNull();
+  let deletes = 0;
+  await expect(run(mode, opts, { beforeDelete() { deletes++; } })).rejects.toThrow();
+  expect(deletes).toBe(0);
+  expect(await db.gameSession.findUnique({ where: { id: g.id } })).not.toBeNull();
+  expect(await db.gameRetirement.count()).toBe(0);
+  vi.restoreAllMocks();
+  expect(await run(mode, opts)).toMatchObject({ outcome: "purged" });
+  expect(await db.gameSession.findUnique({ where: { id: g.id } })).toBeNull();
+  expect(readPrivate(opts.receipt)).toMatchObject({ firstFailure: { stage: "pending" } });
+});
+
 it.each(["pending-file", "pending-directory", "final-file", "final-rename", "final-directory"] as const)("injects a real filesystem failure at %s and reconciles exact committed evidence only", async fault => {
   const { g } = await fixture(); const opts = options(g.id); await run("plan", opts);
   let injected = false;
@@ -374,8 +395,9 @@ it.each(["claim-retry", "recovery", "heartbeat"])("drains an actually admitted %
   });
   const writer = (async () => {
     if (kind === "claim-retry") return games.claimPlayer({ token, commandId });
-    if (kind === "heartbeat") return heartbeatPost(new Request("http://localhost:3000/api", { method: "POST", headers: { origin: "http://localhost:3000", "content-type": "application/json" }, body: "{}" }), { params: Promise.resolve({ gameId: g.id }) });
-    return recoverPost(new Request("http://localhost:3000/api", { method: "POST", headers: { origin: "http://localhost:3000", "content-type": "application/json" }, body: JSON.stringify({ gameId: g.id, recoverySecret: secret }) }));
+    const origin = process.env.APP_ORIGIN ?? "http://localhost:3000";
+    if (kind === "heartbeat") return heartbeatPost(new Request(`${origin}/api`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: "{}" }), { params: Promise.resolve({ gameId: g.id }) });
+    return recoverPost(new Request(`${origin}/api`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ gameId: g.id, recoverySecret: secret }) }));
   })().then(value => ({ value }), error => ({ error }));
   try {
     await admitted.wait;

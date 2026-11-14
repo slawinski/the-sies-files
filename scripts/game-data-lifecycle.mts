@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { canonical, digest, identities, tables, tableSQL, checkSchema, readGraph, selection, zeroResidue } from './game-data-policy.mjs';
-import { privatePath, readPrivate, writePrivate, pending, finalize, syncDirectory, type FileHook } from './game-data-journal.mjs';
+import { privatePath, readPrivate, writePrivate, pending, finalize, syncPrivate, type FileHook } from './game-data-journal.mjs';
 
 const uuid = z.string().uuid();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -55,7 +55,6 @@ export function operatorTarget(raw: string | undefined, env: Partial<NodeJS.Proc
     const port = Number(url.port || 5432);
     url.hostname = host === '::1' ? '[::1]' : host;
     url.port = String(port); url.password = env.GAME_DATA_PASSWORD ?? '';
-    // Only tool-owned options, never caller URL options or ambient libpq defaults.
     url.searchParams.set('connection_limit', '1');
     url.searchParams.set('connect_timeout', '5');
     url.searchParams.set('sslmode', 'disable');
@@ -117,9 +116,11 @@ export async function restoreCheck(raw: RestoreOptions) {
       const binding = await databaseIdentity(tx, target);
       const conflicts: { game: string; createdAt: string; request: string; kind: string }[] = [];
       let conflictCount = 0;
+      const ids = [...new Set(evidence.map(item => item.game))];
+      const roots = ids.length ? await tx.gameSession.findMany({ where: { id: { in: ids } }, select: { id: true, createdAt: true } }) : [];
+      const rootsById = new Map(roots.map(root => [root.id, root]));
       for (const item of evidence) {
-        // No archive-state filter and no dependency on an anchor in the old copy.
-        const root = await tx.gameSession.findUnique({ where: { id: item.game }, select: { createdAt: true } });
+        const root = rootsById.get(item.game);
         if (!root) continue;
         conflictCount++;
         if (conflicts.length < 100) conflicts.push({ game: item.game, createdAt: root.createdAt.toISOString(), request: item.request,
@@ -130,7 +131,6 @@ export async function restoreCheck(raw: RestoreOptions) {
         conflictCount, uncertainCount, conflicts, truncated: conflictCount > conflicts.length, scope: 'supplied-independent-evidence-only' };
     }, { isolationLevel: 'RepeatableRead', maxWait: 2000, timeout: 30000 });
   } catch {
-    // No filenames, row payloads, validation input or connection strings escape.
     return { outcome: 'blocked', reason: 'custody-or-staging-check-incomplete', scope: 'supplied-independent-evidence-only' };
   } finally { await client?.$disconnect(); }
 }
@@ -206,7 +206,6 @@ export async function execute(mode: Mode, rawOptions: Options, hooks: Hooks = {}
       stage = 'schema';
       const schema = await checkSchema(tx, identity);
       for (const table of tables) await tx.$executeRaw(Prisma.sql`LOCK TABLE ${tableSQL(table)} IN SHARE ROW EXCLUSIVE MODE NOWAIT`);
-      // Recheck after locks: a DDL writer between inspection and lock cannot be admitted.
       same(await checkSchema(tx, identity), schema);
       if (input) same([input.target,input.schema], [binding,schema]);
       stage = 'selection';
@@ -220,9 +219,7 @@ export async function execute(mode: Mode, rawOptions: Options, hooks: Hooks = {}
         same(intent.plan, input); same(intent.planDigest, digest(input));
         intentDigest = digest(intent);
         earlierFailure(o, intentDigest);
-        // A prior write may have failed its directory sync; make the validated
-        // intent durable again before any possible retry DELETE.
-        syncDirectory(o.journal);
+        syncPrivate(o.journal);
         if (anchor) {
           same([anchor.gameId,anchor.requestId,anchor.planDigest,anchor.intentDigest,anchor.evidence], [o.game,o.request,digest(input),intentDigest,intent]);
           const graph = await readGraph(tx);
@@ -262,7 +259,6 @@ export async function execute(mode: Mode, rawOptions: Options, hooks: Hooks = {}
       await quiescent(tx);
       stage = 'delete';
       await hooks.beforeDelete?.(tx);
-      // Failure from here rolls back the whole graph, including explicit history.
       state = 'rolled-back';
       for (const table of ['domain_events','command_receipts','checkpoints','presence']) await tx.$executeRaw(Prisma.sql`DELETE FROM ${tableSQL(table)} WHERE "gameId"=${o.game}`);
       await hooks.afterHistoryDelete?.(tx);
@@ -282,15 +278,12 @@ export async function execute(mode: Mode, rawOptions: Options, hooks: Hooks = {}
     await hooks.afterCommit?.();
     state = 'committed';
     stage = 'finalize';
-    // The anchor is truth; final evidence is stable across exact retries.
     const anchor = await client.gameRetirement.findUniqueOrThrow({ where: { gameId: o.game } });
     const receipt = { format: 'game-retirement-receipt/1', intent: intent!, intentDigest: intentDigest!, retiredAt: anchor.retiredAt.toISOString(),
       firstFailure: earlierFailure(o, intentDigest!), earlierAttempt: 'pending-or-incomplete', scope: 'selected-database-only' };
     finalize(o.receipt, receipt, intentDigest!, hooks.fileStage);
     return result;
   } catch {
-    // Never serialize driver/validation/OS error messages: they can contain URLs,
-    // row values, failed SQL, and user-controlled JSON. Preserve the first stage.
     let firstFailure: Failure | null = null;
     if (options && intent && intentDigest) {
       try {

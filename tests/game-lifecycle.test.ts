@@ -28,7 +28,7 @@ vi.mock("next/headers", () => ({ cookies: async () => ({
 }) }));
 
 const params = (gameId: string) => ({ params: Promise.resolve({ gameId }) });
-const request = (body: unknown, origin = "http://localhost:3000") => new Request(`${origin}/api`, {
+const request = (body: unknown, origin = process.env.APP_ORIGIN ?? "http://localhost:3000") => new Request(`${origin}/api`, {
   method: "POST", headers: { "content-type": "application/json", origin }, body: JSON.stringify(body),
 });
 
