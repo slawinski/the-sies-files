@@ -19,6 +19,8 @@ export default function StorytellerHome() {
   const [view, setView] = useState<View>("loading");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [archivedGameId, setArchivedGameId] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +30,10 @@ export default function StorytellerHome() {
         const current = await api<{ gameId: string | null }>("/api/v1/storyteller/current");
         if (cancelled) return;
         if (current.gameId) {
-          router.replace(`/storyteller/${current.gameId}`);
+          const game = await api<StorytellerGameProjection>(`/api/v1/games/${current.gameId}/storyteller`);
+          if (cancelled) return;
+          if (game.archivedAt) { setArchivedGameId(current.gameId); setView("form"); }
+          else router.replace(`/storyteller/${current.gameId}`);
         } else {
           setView("form");
         }
@@ -44,7 +49,7 @@ export default function StorytellerHome() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, attempt]);
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
@@ -94,19 +99,8 @@ export default function StorytellerHome() {
                 onClick={() => {
                   setView("loading");
                   setError(null);
-                  void api<{ gameId: string | null }>("/api/v1/storyteller/current")
-                    .then((c) =>
-                      c.gameId ? router.replace(`/storyteller/${c.gameId}`) : setView("form"),
-                    )
-                    .catch((err: ApiClientError) => {
-                      setError(
-                        friendlyMessage(
-                          err.code ?? "UNKNOWN",
-                          "Nie udało się sprawdzić otwartej sprawy.",
-                        ),
-                      );
-                      setView("error");
-                    });
+                   setArchivedGameId(null);
+                   setAttempt(value => value + 1);
                 }}
               >
                 Spróbuj ponownie
@@ -114,6 +108,11 @@ export default function StorytellerHome() {
             </div>
           )}
 
+          {archivedGameId && (view === "form" || view === "creating") && <Notice>
+            Sprawa zarchiwizowana — tylko do odczytu.{" "}
+            <Link className="underline" href={`/storyteller/${archivedGameId}`}>Otwórz archiwum bieżącej sprawy</Link>
+            <p className="mt-2">Nowa sprawa zastąpi bieżące ciasteczko dostępu. Powrót do poprzedniej może wymagać skonfigurowanego odzyskiwania dostępu.</p>
+          </Notice>}
           {(view === "form" || view === "creating") && (
             <Surface variant="system">
               <p className="eyebrow">Nowe akta sprawy</p>

@@ -164,6 +164,7 @@ export default function PlayerCaseView({
         </Notice>
       )}
       {primary}
+      {mode === "GAME_ENDED" && game.myRole && <WaitingCard role={game.myRole} nameById={nameById} ended />}
     </div>
   );
 }
@@ -173,16 +174,18 @@ export default function PlayerCaseView({
 function WaitingCard({
   role,
   nameById,
+  ended = false,
 }: {
   role: PlayerGameProjection["myRole"];
   nameById: Map<string, string>;
+  ended?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <Surface variant="system" className="text-center">
       <p className="eyebrow">Tożsamość</p>
       <p className="mt-3 text-base text-ink-primary">
-        {role ? "Rola potwierdzona — czekamy na rozpoczęcie sprawy." : "Czekamy na rozpoczęcie sprawy."}
+        {ended ? "Twoja rola w zakończonej sprawie." : role ? "Rola potwierdzona — czekamy na rozpoczęcie sprawy." : "Czekamy na rozpoczęcie sprawy."}
       </p>
       {role && (
         <Button variant="quiet" className="mt-3" onClick={() => setOpen(true)}>

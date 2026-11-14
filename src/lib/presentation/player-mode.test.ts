@@ -9,6 +9,7 @@ import {
 function baseGame(overrides: Partial<PlayerGameProjection> = {}): PlayerGameProjection {
   return {
     gameId: "g1",
+    archivedAt: null,
     name: "Test",
     status: "ACTIVE",
     phase: "INVESTIGATION",

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonError, jsonOk, parseBody } from "@/lib/http";
-import { assertSameOrigin, resolveStoryteller } from "@/lib/auth/http";
+import { assertSameOrigin, resolveStorytellerWriter } from "@/lib/auth/http";
 import { startOperational } from "@/modules/operational/operational.service";
 
 const schema = z.object({
@@ -14,10 +14,10 @@ export async function POST(
 ) {
   try {
     const { gameId } = await params;
-    await resolveStoryteller(gameId);
+    const write = await resolveStorytellerWriter(gameId);
     assertSameOrigin(req);
     const { commandId, expectedVersion } = await parseBody(req, schema);
-    const { version, actionCount } = await startOperational({ gameId, commandId, expectedVersion });
+    const { version, actionCount } = await write(() => startOperational({ gameId, commandId, expectedVersion }));
     return jsonOk({ version, actionCount });
   } catch (err) {
     return jsonError(err);

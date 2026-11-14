@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonError, jsonOk, parseBody } from "@/lib/http";
-import { assertSameOrigin, resolveStoryteller } from "@/lib/auth/http";
+import { assertSameOrigin, resolveStorytellerWriter } from "@/lib/auth/http";
 import {
   issueClaimToken,
   newClaimToken,
@@ -17,21 +17,21 @@ export async function POST(
 ) {
   try {
     const { gameId, playerId } = await params;
-    await resolveStoryteller(gameId);
+    const write = await resolveStorytellerWriter(gameId);
     assertSameOrigin(req);
     const { commandId, expectedVersion } = await parseBody(req, schema);
 
     // Raw token is generated outside the command and returned once here;
     // only its hash is persisted (never in receipts/events).
     const { token, tokenHash, expiresAt } = newClaimToken();
-    const result = await issueClaimToken({
+    const result = await write(() => issueClaimToken({
       gameId,
       playerId,
       commandId,
       expectedVersion,
       tokenHash,
       expiresAt,
-    });
+    }));
 
     if (result.duplicate) {
       // Retry of the same commandId: acknowledge without re-exposing the token.

@@ -15,6 +15,7 @@ const meaningful: Partial<Record<CommandOperation, unknown[]>> = {
   closeInvestigation: [{ winner: null }, { winner: "GOOD" }, { winner: "EVIL" }],
   scanQr: [{ outcome: { discoveries: ["clue"], tasks: ["task"], conditions: ["condition"], mapVersionId: null } }],
   createCheckpoint: [{ checkpointId: "checkpoint" }],
+  archiveGame: [{ archivedAt: "2026-11-12T00:00:00.000Z" }],
 };
 
 // This is an intent-coverage audit, not inferred from the production catalog:
@@ -32,6 +33,7 @@ const bindings: Record<CommandOperation, string[]> = {
   storytellerCompleteTask: ["taskId"], storytellerSetStage: ["stageId"], storytellerSetMap: ["mapVersionId"],
   storytellerSetCondition: ["conditionId", "active"], createCheckpoint: ["reasonSupplied", "reason"],
   resetPlayerAccess: ["playerId"], recoveryOverride: ["payload", "trimmedReason"],
+  archiveGame: [],
 };
 const playerOperations = new Set(["acknowledgeRole", "submitAction", "nominate", "voteIntent", "slayer", "scanQr"]);
 
@@ -54,7 +56,7 @@ describe("durable command contracts", () => {
     for (const value of [cyclic, new Array(2), getter, { [Symbol("secret")]: 1 }, new Map(), { nested: new Date() }]) expect(isJson(value)).toBe(false);
   });
 
-  it("audits all 36 production producers for explicit catalog operation, actor and intent", () => {
+  it("audits all 37 production producers for explicit catalog operation, actor and intent", () => {
     const found: string[] = [];
     for (const moduleName of ["game-session", "setup", "operational", "investigation", "scenario", "recovery"]) {
       const file = path.join(process.cwd(), `src/modules/${moduleName}/${moduleName}.service.ts`);
@@ -85,7 +87,30 @@ describe("durable command contracts", () => {
       };
       visit(source);
     }
-    expect(found).toHaveLength(36);
+    expect(found).toHaveLength(37);
+    expect(found.sort()).toEqual(Object.keys(commandContracts).sort());
+  });
+
+  it("all 37 HTTP command callers carry server-resolved exact-session admission to their writer", () => {
+    const found: string[] = [];
+    const root = path.join(process.cwd(), "src/app/api/v1/games");
+    for (const name of fs.readdirSync(root, { recursive: true, encoding: "utf8" })) {
+      if (!name.endsWith("route.ts")) continue;
+      const file = path.join(root, name);
+      const source = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+      const visit = (node: ts.Node) => {
+        if (ts.isCallExpression(node) && Object.hasOwn(commandContracts, node.expression.getText(source))) {
+          const operation = node.expression.getText(source) as CommandOperation;
+          const arrow = node.parent;
+          expect(ts.isArrowFunction(arrow)).toBe(true);
+          expect(ts.isCallExpression(arrow.parent) && arrow.parent.expression.getText(source)).toBe("write");
+          expect(source.text).toContain(playerOperations.has(operation) ? "await resolvePlayerWriter(gameId)" : "await resolveStorytellerWriter(gameId)");
+          found.push(operation);
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+    }
     expect(found.sort()).toEqual(Object.keys(commandContracts).sort());
   });
 });

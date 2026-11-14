@@ -8,6 +8,7 @@ import {
 function baseGame(overrides: Partial<StorytellerGameProjection> = {}): StorytellerGameProjection {
   return {
     gameId: "g1",
+    archivedAt: null,
     name: "Test",
     status: "ACTIVE",
     phase: "INVESTIGATION",

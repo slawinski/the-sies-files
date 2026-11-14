@@ -23,6 +23,19 @@ const FORBIDDEN_KEYS = [
 ];
 
 describe("projections (server-side allow-lists)", () => {
+  it("carries only the archive timestamp additively through every authorized view", async () => {
+    const { gameId } = await createGame("Archive marker");
+    const a = await addPlayer({ gameId, commandId: randomUUID(), expectedVersion: 1, displayName: "Ada" });
+    const players = await prisma.player.findMany({ where: { gameId } });
+    const game = await prisma.gameSession.findUniqueOrThrow({ where: { id: gameId } });
+    const before = buildPlayerProjection(game, players, a.playerId);
+    expect(before).toHaveProperty("archivedAt", null);
+    const archivedAt = new Date("2026-11-13T12:00:00.000Z");
+    const archived = { ...game, archivedAt };
+    expect(buildPlayerProjection(archived, players, a.playerId)).toEqual({ ...before, archivedAt: archivedAt.toISOString() });
+    expect(buildPublicProjection(archived, players)).toHaveProperty("archivedAt", archivedAt.toISOString());
+    expect(buildStorytellerProjection(archived, players, [])).toHaveProperty("archivedAt", archivedAt.toISOString());
+  });
   it("paired other-player secrets leave the complete public and own-player projections equal", async () => {
     const { gameId } = await createGame("Paired");
     const a = await addPlayer({ gameId, commandId: randomUUID(), expectedVersion: 1, displayName: "Ada" });

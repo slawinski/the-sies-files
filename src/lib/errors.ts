@@ -6,6 +6,7 @@ export const DOMAIN_ERROR_CODES = [
   "UNAUTHORIZED",
   "FORBIDDEN",
   "GAME_NOT_FOUND",
+  "GAME_ARCHIVED",
   "INVALID_SESSION_STATE",
   "INVALID_PHASE",
   "VERSION_CONFLICT",
@@ -61,6 +62,7 @@ export function httpStatusFor(code: DomainErrorCode): number {
       return 404;
     case "VERSION_CONFLICT":
     case "DUPLICATE_COMMAND":
+    case "GAME_ARCHIVED":
       return 409;
     case "RATE_LIMITED":
       return 429;

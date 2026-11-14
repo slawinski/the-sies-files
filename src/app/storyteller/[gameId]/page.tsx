@@ -12,6 +12,8 @@ import {
   ApiClientError,
   AUDIT_CATEGORIES,
   friendlyMessage,
+  decodeArchiveAcknowledgement,
+  decodeArchiveStatus,
   type AccessResetResponseDto,
   type AuditCategoryDto,
   type CheckpointResponseDto,
@@ -26,6 +28,7 @@ import { usePresenceHeartbeat } from "@/components/usePresenceHeartbeat";
 import { useVersionedMutation } from "@/components/useVersionedMutation";
 import { useProjectionReconciliation } from "@/components/useProjectionReconciliation";
 import { ProjectionGate } from "@/lib/projection-reconciliation";
+import { definitelyRejected } from "@/lib/command-outcome";
 import { isStorytellerView, type StorytellerView } from "@/lib/presentation/types";
 import { selectPrimaryStorytellerBlocker } from "@/lib/presentation/storyteller-mode";
 import { formatTime, phaseLabel } from "@/lib/presentation/labels";
@@ -238,19 +241,63 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
 
   // The stale banner persists until the user dismisses it or the next mutation
   // succeeds — a version conflict is worth an explicit acknowledgement.
-  const { busy, actionError, stale, setActionError, run, runWithResult } =
+  const { busy, actionError, stale, setActionError, run, runWithResult, recoverWithResult } =
     useVersionedMutation(load, { scope: gameId, ready: () => game !== null && projection.canCommand(game),
       current: () => projection.isCurrent(gameId), acknowledge: projection.acknowledge,
       captureAccess: projection.captureAccess, ownsAccess: projection.ownsAccess, denyAccess: projection.denyAccess });
   const canCommand = () => game !== null && projection.canCommand(game) && !busy;
   const commandsBusy = busy || !projection.ready;
+  const gameplayBusy = commandsBusy || !!game?.archivedAt;
+  const [archiveConfirmVersion, setArchiveConfirmVersion] = useState<number | null>(null);
+  const [archiveNote, setArchiveNote] = useState<string | null>(null);
+  const archivePending = useRef<string | null>(null);
+  const [archiveUnresolved, setArchiveUnresolved] = useState(false);
+  const archiveEligible = !!game && game.status === "ENDED" && !game.archivedAt && !commandsBusy && !archiveUnresolved;
+
+  async function checkArchiveOutcome() {
+    const id = archivePending.current;
+    const access = projection.captureAccess();
+    const valid = () => alive.current && projection.ownsAccess(access) && projection.isCurrent(gameId) && archivePending.current === id;
+    if (!id || !valid()) return;
+    try {
+      const result = await recoverWithResult(async () => decodeArchiveStatus(await api<unknown>(
+        `/api/v1/games/${gameId}/commands/${id}`), id));
+      if (!valid()) return;
+      if (result) {
+        archivePending.current = null; setArchiveUnresolved(false);
+        setArchiveNote("Archiwizacja potwierdzona.");
+      } else setArchiveNote("Wynik archiwizacji jest nieustalony. Brak wyniku nie oznacza, że polecenie się nie zapisało.");
+    } catch {
+      if (valid()) setArchiveNote("Nie udało się odczytać wyniku archiwizacji. Sprawdź ponownie wynik tego samego polecenia.");
+    }
+  }
+
+  async function handleArchive() {
+    if (!game || !archiveEligible || !canCommand() || archivePending.current || archiveConfirmVersion !== game.version) return;
+    const access = projection.captureAccess();
+    const id = crypto.randomUUID();
+    archivePending.current = id; setArchiveConfirmVersion(null); setArchiveNote(null);
+    let failure: unknown;
+    const result = await runWithResult(() => api<unknown>(`/api/v1/games/${gameId}/archive`, {
+      method: "POST", body: JSON.stringify({ commandId: id, expectedVersion: game.version }),
+    }).then(decodeArchiveAcknowledgement).catch(error => { failure = error; throw error; }));
+    if (!alive.current || !projection.ownsAccess(access) || !projection.isCurrent(gameId)) return;
+    if (result.ok && result.value) {
+      archivePending.current = null; setArchiveNote("Archiwizacja potwierdzona.");
+    } else if (definitelyRejected(failure)) {
+      archivePending.current = null;
+    } else {
+      setActionError(null); setArchiveUnresolved(true);
+      await checkArchiveOutcome();
+    }
+  }
 
   function mutate(
     path: string,
     method: "POST" | "PATCH" | "DELETE",
     payload: Record<string, unknown> = {},
   ) {
-    if (!game || !canCommand()) return Promise.resolve(false);
+    if (!game || game.archivedAt || !canCommand()) return Promise.resolve(false);
     return run(() =>
       api(path, {
         method,
@@ -432,7 +479,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
 
   async function handleRenameGame() {
     const trimmed = gameNameDraft.trim();
-    if (!trimmed || !game || !canCommand()) return;
+    if (!trimmed || !game || game.archivedAt || !canCommand()) return;
     const ok = await run(() =>
       api(`/api/v1/games/${gameId}`, {
         method: "PATCH",
@@ -494,7 +541,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
   }, [control, recoveryKind, recoveryTargetId]);
 
   async function handleCreateCheckpoint() {
-    if (!canCommand()) return;
+    if (game?.archivedAt || !canCommand()) return;
     const reason = checkpointReason.trim();
     setCheckpointNote(null);
     const res = await runWithResult<CheckpointResponseDto>(() =>
@@ -519,7 +566,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
 
   async function handleRecoveryOverride() {
     const reason = recoveryReason.trim();
-    if (!reason || !game || !canCommand() || controlError || !control || control.version < game.version) return;
+    if (!reason || !game || game.archivedAt || !canCommand() || controlError || !control || control.version < game.version) return;
     const target = recoveryTargetId.trim() || undefined;
     const payload =
       recoveryKind === "CORRECT_ALIVE"
@@ -538,7 +585,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
   const blocker = game ? selectPrimaryStorytellerBlocker(game) : null;
   const nameById = new Map((game?.players ?? []).map((p) => [p.id, p.displayName]));
   const gameEnded = game?.status === "ENDED" || game?.result !== null;
-  const renameEnabled = game ? game.status === "LOBBY" || game.status === "SETUP" : false;
+  const renameEnabled = game && !game.archivedAt ? game.status === "LOBBY" || game.status === "SETUP" : false;
   const ready = game?.isReady ?? false;
   const need = game ? Math.max(0, 13 - game.participantCount) : 0;
 
@@ -607,6 +654,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
 
         {game && (
           <>
+            {game.archivedAt && <Notice className="mb-4">Sprawa zarchiwizowana — tylko do odczytu. Status: {game.status}. LIVE oznacza aktualność widoku, nie trwającą grę.</Notice>}
             {!privacyCovered && (stale || actionError) && (
               <div className="mb-4 flex flex-col gap-2">
                 {stale && (
@@ -648,7 +696,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
                   control={control}
                   realtime={realtime}
                   nameById={nameById}
-                  busy={commandsBusy}
+                  busy={gameplayBusy}
                   gameEnded={gameEnded}
                   ready={ready}
                   need={need}
@@ -684,7 +732,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
               {view === "grimoire" && (
                 <GrimoireView
                   game={game}
-                  busy={commandsBusy}
+                  busy={gameplayBusy}
                   privacyCovered={privacyCovered}
                   onGenerateSetup={() => void handleGenerateSetup()}
                   onCommitSetup={() => void handleCommitSetup()}
@@ -693,7 +741,7 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
               {view === "scenario" && (
                 <ScenarioView
                   game={game}
-                  busy={commandsBusy}
+                  busy={gameplayBusy}
                   revealClueId={revealClueId}
                   onRevealClueIdChange={setRevealClueId}
                   revealTargetPlayerId={revealTargetPlayerId}
@@ -744,6 +792,13 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
               )}
               {view === "system" && (
                 <SystemView
+                  readOnly={!!game.archivedAt}
+                  archiveEligible={archiveEligible}
+                  onArchive={() => setArchiveConfirmVersion(game.version)}
+                  archiveNote={archiveNote}
+                  archiveUnresolved={archiveUnresolved}
+                  onCheckArchive={() => void checkArchiveOutcome()}
+                  archiveBusy={busy}
                   control={control}
                   nameById={nameById}
                   realtime={realtime}
@@ -772,6 +827,12 @@ function StorytellerPageInner({ projection }: { projection: StorytellerProjectio
           </>
         )}
       </AppShellContent>
+
+      <Dialog open={!!game && !privacyCovered && archiveConfirmVersion !== null && archiveConfirmVersion === game.version && archiveEligible}
+        onClose={() => setArchiveConfirmVersion(null)} title="Archiwizuj sprawę"
+        description="Zakończona sprawa pozostanie dostępna do odczytu dla obecnie uprawnionych osób. Nowe działania w grze zostaną zablokowane. Historia nie zostanie usunięta."
+        footer={<><Button variant="quiet" onClick={() => setArchiveConfirmVersion(null)}>Anuluj</Button>
+          <Button size="sm" disabled={!archiveEligible} onClick={() => void handleArchive()}>Archiwizuj</Button></>} />
 
       {game && !privacyCovered && claimModal && (
         <Dialog

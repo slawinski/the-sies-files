@@ -57,6 +57,13 @@ function needsPlayer(kind: RecoveryKind): boolean {
 }
 
 export interface SystemViewProps {
+  readOnly: boolean;
+  archiveEligible: boolean;
+  onArchive: () => void;
+  archiveNote: string | null;
+  archiveUnresolved: boolean;
+  onCheckArchive: () => void;
+  archiveBusy: boolean;
   control: StorytellerControlDto | null; // null while loading
   nameById: Map<string, string>; // playerId -> displayName
   realtime: RealtimeHealth; // "LIVE" | "RECONNECTING" | "OFFLINE"
@@ -83,6 +90,8 @@ export interface SystemViewProps {
 }
 
 export default function SystemView({
+  readOnly,
+  archiveEligible, onArchive, archiveNote, archiveUnresolved, onCheckArchive, archiveBusy,
   control,
   nameById,
   realtime,
@@ -147,6 +156,13 @@ export default function SystemView({
 
   return (
     <div className="flex flex-col gap-4">
+      <Surface variant="system">
+        <p className="eyebrow">ARCHIWUM</p>
+        <p className="mt-2 text-sm text-ink-secondary">Archiwizacja zakończonej sprawy zachowuje historię i blokuje nowe działania w grze. Nie usuwa danych.</p>
+        <Button size="sm" variant="secondary" className="mt-3" disabled={!archiveEligible} onClick={onArchive}>Archiwizuj sprawę</Button>
+        {archiveNote && <Notice className="mt-3">{archiveNote}</Notice>}
+        {archiveUnresolved && <Button variant="quiet" disabled={archiveBusy} onClick={onCheckArchive}>Sprawdź wynik archiwizacji</Button>}
+      </Surface>
       {/* ---- Czas rzeczywisty ------------------------------------------- */}
       <Surface variant="system">
         <p className="eyebrow">CZAS RZECZYWISTY</p>
@@ -237,7 +253,7 @@ export default function SystemView({
               className="min-h-11 w-full rounded-control border border-line bg-card-soft px-3 text-base text-ink-primary placeholder:text-ink-muted"
             />
           </label>
-          <Button variant="secondary" onClick={onCreateCheckpoint} busy={checkpointBusy}>
+          <Button variant="secondary" onClick={onCreateCheckpoint} busy={checkpointBusy} disabled={readOnly}>
             Utwórz punkt kontrolny
           </Button>
         </div>
@@ -390,7 +406,7 @@ export default function SystemView({
                 type="submit"
                 variant="danger"
                 fullWidth
-                disabled={!canSubmit}
+                disabled={readOnly || !canSubmit}
                 busy={recoveryBusy}
               >
                 Wykonaj nadpisanie
@@ -418,7 +434,7 @@ export default function SystemView({
             </Button>
             <Button
               variant="danger"
-              disabled={recoveryBusy || !canSubmit}
+              disabled={readOnly || recoveryBusy || !canSubmit}
               onClick={() => {
                 setConfirmOpen(false);
                 setAdvancedTarget("");

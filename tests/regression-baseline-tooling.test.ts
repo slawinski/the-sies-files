@@ -11,6 +11,16 @@ import { generateSetupCandidate } from '../src/modules/setup/generator';
 import { SeededRngV2 } from '../src/lib/rng';
 
 const trees: string[] = [];
+test('canonical lifecycle gate requires recorded-build proof and explicitly allowlisted sanitized evidence', () => {
+  const baseline = fs.readFileSync('scripts/regression-baseline.mts', 'utf8');
+  const ci = fs.readFileSync('.github/workflows/ci.yml', 'utf8');
+  expect(baseline).toContain("stage('lifecycle'");
+  expect(baseline).toContain('readLifecycleReport(');
+  expect(baseline).toContain('(metadata.lifecycle as { complete: boolean }).complete');
+  expect(ci).toContain('baseline-results/ci-production/lifecycle/summary.json');
+  expect(ci).not.toContain('lifecycle/**');
+  expect(ci).not.toContain('lifecycle/custody');
+});
 test('canonical baseline requires compatibility and CI retains its bounded evidence', () => {
   const baseline = fs.readFileSync('scripts/regression-baseline.mts', 'utf8');
   const ci = fs.readFileSync('.github/workflows/ci.yml', 'utf8');

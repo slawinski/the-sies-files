@@ -19,10 +19,11 @@
 import { Prisma } from "@prisma/client";
 import type { GameSession } from "@prisma/client";
 import { createHash } from "node:crypto";
-import { isJson, parseCommandResult, readCommandReceipt, receiptInvalid,
+import { archivedCommandPolicy, isJson, parseCommandResult, readCommandReceipt, receiptInvalid,
   type CommandActor, type CommandOperation, type CommandResultFor, type Json } from "./command-contracts";
 import { prisma } from "./db";
 import { DomainError } from "./errors";
+import { recheckWriterAdmission } from "@/modules/auth/session";
 
 export interface CommandContext {
   tx: Prisma.TransactionClient;
@@ -64,7 +65,7 @@ interface LockedGame {
 async function lockAndRead(
   tx: Prisma.TransactionClient,
   gameId: string,
-  opts: { actor?: string; commandId?: string },
+  opts: { actor?: string; commandId?: string; eventVersion?: "current" },
 ): Promise<LockedGame> {
   await tx.$queryRaw`SELECT id FROM game_sessions WHERE id = ${gameId} FOR UPDATE`;
   const game = await tx.gameSession.findUnique({ where: { id: gameId } });
@@ -81,7 +82,7 @@ async function lockAndRead(
       data: {
         gameId,
         sequence: seq,
-        gameVersion: game.version + 1,
+        gameVersion: opts.eventVersion === "current" ? game.version : game.version + 1,
         eventType: type,
         actor: opts.actor ?? null,
         commandId: opts.commandId ?? null,
@@ -139,6 +140,7 @@ export async function runCommand<O extends CommandOperation>({
   const requestHash = createHash("sha256").update(canonical({ format: 1, operation, actor, input })).digest("hex");
   return prisma.$transaction(async (tx) => {
     const locked = await lockAndRead(tx, gameId, { actor, commandId });
+    await recheckWriterAdmission(tx, gameId, actor);
 
     // Idempotency — checked under the lock so concurrent duplicate commandIds
     // serialize and the loser returns the original result.
@@ -158,6 +160,14 @@ export async function runCommand<O extends CommandOperation>({
         sequence: -1,
         duplicate: true,
       };
+    }
+
+    if ((operation === "archiveGame" || archivedCommandPolicy[operation] === "read-access") && actor !== "storyteller") {
+      throw new DomainError("FORBIDDEN", "Storyteller authority required");
+    }
+    if (locked.game.archivedAt) {
+      if (archivedCommandPolicy[operation] !== "read-access") throw new DomainError("GAME_ARCHIVED", "Game is archived and read-only");
+      await recheckWriterAdmission(tx, gameId, actor, true);
     }
 
     if (locked.game.version !== expectedVersion) {
@@ -216,14 +226,18 @@ export async function runGameTransaction<T>({
   actor,
   commandId,
   handler,
+  operation,
 }: {
   gameId: string;
   actor?: string;
   commandId?: string;
   handler: Handler<T>;
+  operation?: "claimPlayer";
 }): Promise<TransactionResult<T>> {
   return prisma.$transaction(async (tx) => {
     const locked = await lockAndRead(tx, gameId, { actor, commandId });
+    await recheckWriterAdmission(tx, gameId, actor);
+    if (locked.game.archivedAt && operation !== "claimPlayer") throw new DomainError("GAME_ARCHIVED", "Game is archived and read-only");
 
     const result = await handler({
       tx,
@@ -233,6 +247,8 @@ export async function runGameTransaction<T>({
     });
 
     if (locked.appendedCount() === 0) {
+      // Same-command claim retries restore credentials only, not game history.
+      if (operation === "claimPlayer") return { result, version: locked.game.version, sequence: locked.game.eventSequence };
       throw new Error(
         `Transaction ${commandId ?? "(unversioned)"} mutated state but appended no domain events`,
       );
@@ -245,5 +261,22 @@ export async function runGameTransaction<T>({
       version: locked.newVersion(),
       sequence: locked.finalSequence(),
     };
+  });
+}
+
+/** Root-coordinated operational/access metadata. Never increments gameplay version. */
+export async function runGameAccessTransaction<T>({ gameId, operation, actor, handler }: {
+  gameId: string;
+  operation: "recoverStorytellerAccess" | "presence" | "revokeSession";
+  actor?: string;
+  handler: Handler<T>;
+}): Promise<T> {
+  return prisma.$transaction(async tx => {
+    const locked = await lockAndRead(tx, gameId, { actor, eventVersion: "current" });
+    // Configured recovery has its own non-browser verifier at admission.
+    if (operation !== "recoverStorytellerAccess") await recheckWriterAdmission(tx, gameId, actor);
+    const result = await handler({ tx, game: locked.game, version: locked.game.version, appendEvent: locked.appendEvent });
+    if (locked.appendedCount()) await tx.gameSession.update({ where: { id: gameId }, data: { eventSequence: locked.finalSequence() } });
+    return result;
   });
 }

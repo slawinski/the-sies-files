@@ -248,3 +248,21 @@ No hosted CI or second-human operator is claimed; development was not rerun.
 This evidence covers the plan's one interrupted first-cycle voting specimen and
 declared bounded diagnostics, not arbitrary-history event sourcing, deployed
 recovery, cross-release retry compatibility, RPO/RTO or every unfinished state.
+
+## Manual-retirement proof is separate (U4)
+
+The new [lifecycle custody runbook](game-data-lifecycle.md) adds read-only staged
+restore admission against independent minimal intent/receipt evidence. Its PG16
+physical proof and native tests are separate from every playable-recovery receipt
+above; none of those historical measurements is relabeled as lifecycle coverage.
+The proof's `lifecycle.json` records the old ACTIVE root UUID/immutable creation
+time, absent old anchor, actual blocked check, explicit owned unserved staging
+reconciliation, clear recheck, unchanged other-game digest, stage exits and cleanup.
+Its build attribution is null, not a claim about a production browser specimen.
+
+U4 focused worker evidence is retained privately in the parent-provided temporary
+artifact area under `item7-u4-*`, with the detailed `item7-u4-unit-receipt.json`.
+This is an agent self-check, not hosted CI, a second human operator, canonical
+integration, deployed-copy cleanup or rights clearance. Earlier failed reports
+are retained. U5/parent owns authoritative final-source reruns, the unchanged
+playable-recovery gate and the remaining purge/restart browser case.

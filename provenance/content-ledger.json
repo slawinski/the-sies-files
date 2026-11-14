@@ -317,7 +317,7 @@
       "files": [
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "3e1f4fe6ea68b23363ff99b90df836abb89befbedf33a17b6d1bcbdbf9af2196"
+          "sha256": "57bd26309b1fb9a677d835b847aa4024315312cd8495eeb0480ffa0d30ebfac8"
         },
         {
           "path": ".gitignore",
@@ -353,7 +353,7 @@
         },
         {
           "path": "README.md",
-          "sha256": "53e73d11e26b623326f84bf04dee7811e9118410114bd262354b4954646d2665"
+          "sha256": "c915df278c9ef69c57de91d054298fc55e35da8ec89a7165315bbdcc5df5a644"
         },
         {
           "path": "docs/access-secrecy-verification.md",
@@ -369,7 +369,11 @@
         },
         {
           "path": "docs/content-provenance.md",
-          "sha256": "9d5010763b124ece28015c5bdd137b2a2175f4e403745871e3f42b34e93eb078"
+          "sha256": "fc7086d5a5b6f99fab235ce850f37ab9b70e49cbe8a0e142a123cd394fced039"
+        },
+        {
+          "path": "docs/game-data-lifecycle.md",
+          "sha256": "b588103b0efda68743f4ae3b51c9b4dd3474aee4d2f136c346d5b53edd47a374"
         },
         {
           "path": "docs/ideation/2026-10-28-legacy-app-reinforcement-ideation.html",
@@ -400,20 +404,24 @@
           "sha256": "3a1c0513c241c6149b75e5303f31a89da2374e254faabe99b6eff5e56b93dd66"
         },
         {
+          "path": "docs/plans/2026-11-12-1705-fix-manual-game-data-lifecycle-plan.md",
+          "sha256": "3422fe8b20225bee690207fdf695d51f272ff5ed9598559011e2caa143b55b89"
+        },
+        {
           "path": "docs/provenance-owner-evidence.md",
           "sha256": "8f517d5708953f646771e655a57faa343a640cec819e0e8ac4b835233904db9a"
         },
         {
           "path": "docs/recovery-drill.md",
-          "sha256": "29d0577243bf3528b54b09b5c7ac62c6b564cc28e245a3d89420eb81bc7c5a17"
+          "sha256": "36bc276f0e4d743877e12d70f77bbaead8e0a6f0a6bc1af77c2a84ab26855431"
         },
         {
           "path": "docs/recovery-verification.md",
-          "sha256": "37d0960c1dbbf189d1d02c5c99df2cfa80bb667b0334758b6eb63e130c127ded"
+          "sha256": "aae3a3e0f5163df755a132e61d0c53eba380611ecf8b0fafe71b63b0e14b002b"
         },
         {
           "path": "docs/regression-baseline.md",
-          "sha256": "43b307abb2ec4771eabba4716cde00a269e11929f0ca821df7a4a66d067803bc"
+          "sha256": "67c1b3e1fccb078ed6a22eccacf877c1d87682de2a9104c4ad29652a2881a81d"
         },
         {
           "path": "docs/regressions/F001-capture-migrations.md",
@@ -493,7 +501,7 @@
         },
         {
           "path": "package.json",
-          "sha256": "44b6cc59bf051ab22b9b0f5a6d5a90ae5bd21b792812def1309c062fa3585a10"
+          "sha256": "66abf3b3b7321121f9d1d6f48a7325bdc5ed3db3374110648f5951e9630e2f5e"
         },
         {
           "path": "playwright.config.ts",
@@ -564,12 +572,16 @@
           "sha256": "fcc61e9816045cd14a9184cdcb273aefb88c76070fe574f0686b987e928ba18e"
         },
         {
+          "path": "prisma/migrations/20261113120000_game_retirement/migration.sql",
+          "sha256": "261d0ee930abab505ab780467617d081566224577f6e407c3a4946f06110cff4"
+        },
+        {
           "path": "prisma/migrations/migration_lock.toml",
           "sha256": "99836963713b4f5b269ad49af0ed3d7b0b2e336115c2f92dc9ac683d139d0900"
         },
         {
           "path": "prisma/schema.prisma",
-          "sha256": "f183e2fae4e8e4691e0fd1d82b5bfa9d717c1574ba2719d4553b8597f5332c48"
+          "sha256": "2f783ea1061f857e8e6144c08364345d197f3407c112bc53ace4c3e7af4868d9"
         },
         {
           "path": "provenance/content-ledger.json",
@@ -604,6 +616,26 @@
           "sha256": "6e2e8ca6aa658e51f7da8d32ff397a421759ba59f8001e83be36cd2735611769"
         },
         {
+          "path": "scripts/game-data-journal.mts",
+          "sha256": "d3643c6791ada2002651fe47e88c4774ec886f364bd766224c501b6b1fa9c2a3"
+        },
+        {
+          "path": "scripts/game-data-lifecycle-browser.mts",
+          "sha256": "508570073ed2672213c098586b731911508a3e754e51bb79f9dc608f84e3eea8"
+        },
+        {
+          "path": "scripts/game-data-lifecycle-proof.mts",
+          "sha256": "5812fab08f1eba75fb37bcc25278abe7eb931086e64866df11a7879a7af85378"
+        },
+        {
+          "path": "scripts/game-data-lifecycle.mts",
+          "sha256": "ac726f01fb8aba043ed82ad6d19842fa20fb6f7c93b46391107cdc693c66f775"
+        },
+        {
+          "path": "scripts/game-data-policy.mts",
+          "sha256": "f8b971ba29fd49fd5c1ee0764fd1929534873ded7bf74c623703a7f4006aac0e"
+        },
+        {
           "path": "scripts/playable-recovery.mts",
           "sha256": "1e1f6040a64cd94d4ccf050e08d4bd0e7e6e3f2d4b8adfb9f30cc98c449b7dd6"
         },
@@ -629,7 +661,7 @@
         },
         {
           "path": "scripts/regression-baseline.mts",
-          "sha256": "60ee9673733d76bbca5ca1d5e49bf8621c2d5dcb067fbb128fc3c39eae4e1ea1"
+          "sha256": "e267fecb786430525f3d4cde31140fa1c8d177a457896fa020ab88f8e098309f"
         },
         {
           "path": "scripts/reset-e2e-db.sh",
@@ -644,12 +676,16 @@
           "sha256": "83e5c8f8dc45e4bf8d120204cf152cce262f12e69a695a82b394a2ca16bdd60b"
         },
         {
+          "path": "src/app/api/v1/games/[gameId]/archive/route.ts",
+          "sha256": "49ab7a8a7facfb36c5f2c1d6720752f7db7d802ac9dfbe0de4ed667ed3317b74"
+        },
+        {
           "path": "src/app/api/v1/games/[gameId]/commands/[commandId]/route.ts",
           "sha256": "15a166372246c6a6ff20ea22cd7c276792d5d819e3177c03861b8039aa6764ea"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/day-actions/slayer/route.ts",
-          "sha256": "6484bc171802151bd69bed903c00f3a909c8e27f1ce9306190efe6131fc09b7f"
+          "sha256": "c62d1b489177fccc0f2a9a99a3a45e5c6c1e1b303cceb84efd3779d77e834762"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/events/stream/route.ts",
@@ -657,19 +693,19 @@
         },
         {
           "path": "src/app/api/v1/games/[gameId]/investigation/close/route.ts",
-          "sha256": "123e560243e79d8efab487ce26ff1fcc4ae43b884a033b8ca6052e40a3e954aa"
+          "sha256": "ef21fa81018e27d209d6afc3b6355a46c4b5104652b0e42dd3322b09511514ef"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/investigation/nominations/close/route.ts",
-          "sha256": "c54e6ee5e8fa245d4542b2b247562962f562b2b2536ae656f2ad9d7fdc9b11d8"
+          "sha256": "6c4ab827ea894b86775b4b043aa195ac92f7beca7c459b4efe6d8598da56fe0d"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/investigation/nominations/open/route.ts",
-          "sha256": "4a656a08e3719905e65b638c94b5c74de09b3c79f15b8d9a26fb5eada9eaaa8a"
+          "sha256": "5cf55e5932d49e5ec5f52a41d39347d37e161b1cf84c9afeef08aa922f0c884c"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/investigation/resolve-execution/route.ts",
-          "sha256": "ba0df095f7ae2f2c41538fe4b23ff9d865888c32308a89a43a6546937a3db2b9"
+          "sha256": "61fd50b41c2542e995b399fef5775d742d94af7d543eaa2a43c0b8b7acd3d86d"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/map/layers/[layerId]/route.ts",
@@ -689,67 +725,67 @@
         },
         {
           "path": "src/app/api/v1/games/[gameId]/nominations/[nominationId]/triggers/resolve/route.ts",
-          "sha256": "0951cd8323a34b1579714caf5bb3a190f56b7f41ca1cc5e0a9591407d5eccde5"
+          "sha256": "91d975be069e35bc7a2f45f11abe6a53f9a607fa227851d902ce0607b9404396"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/nominations/[nominationId]/votes/intent/route.ts",
-          "sha256": "0c9c62cb7608f644c33b7ff2b72f40cd0e46952f2ed70e3fcdf09f82e0ad1dbf"
+          "sha256": "1586c24a6ab71bc37bf122bd5fbb776f082bf03762182a325b3b6901b4cf5a1e"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/nominations/[nominationId]/votes/lock/route.ts",
-          "sha256": "ca8943e4aee07ca57bd2a2f616b9740a0d55cbc990eb85f57a49b603108e0964"
+          "sha256": "3fcfe5ecb0a0cdbb1dc8b0ad1987b8e0fe26709e301331c9974520c69a10cf44"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/nominations/[nominationId]/voting/advance/route.ts",
-          "sha256": "1b2da36ddd7cfeb5685f39e557db9e119eecc8d3fcad153b89ee47519a55c1a9"
+          "sha256": "6022bb8a2daf2a3b9ba40b419e2d8215fe0e504411839c4ddba97cddb215ffde"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/nominations/[nominationId]/voting/start/route.ts",
-          "sha256": "65a37d920210a5cc430c20744be6a104a24b43ec85c496b3cf80d8e31514285e"
+          "sha256": "bb3156fb1d91918613fe9b5c5da5fe5ee4f50364751322deccd5308725ad4b83"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/nominations/route.ts",
-          "sha256": "20a28d81a23ccbce8d0fa883fe91409d8fd95a0b62d3b89521e8f87f3609b77b"
+          "sha256": "1057e24572d0aeffe51ad7848fafe28c922f934bfc569adc7a8e84e03716fe59"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/operational/actions/[actionId]/submit/route.ts",
-          "sha256": "f0ac0b903977969cc13f660508174e8ba1e6fa5c92e86c6b3d13d3680d1c651e"
+          "sha256": "ee7e564cf8ee59127f892c78bd58f124e4f8d8110e49c2d58e2232664c177edd"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/operational/complete/route.ts",
-          "sha256": "dd0a7742dec660c52f7f891ea0e08553da14ccc91950a829ccbf8d472333eae5"
+          "sha256": "2317b7ac26d0cdb6428c3aaf4de1a0d0d0dc5ec720e7fcf9d5fab11dc975e2f9"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/operational/start/route.ts",
-          "sha256": "736c56358d1840274804e28a146db667ec5fc33d20f3b87ef97b631596f2fe3d"
+          "sha256": "d64aa70b9bbad3c6bc2551ddbea9fc1a01e558f59ddb6a3e3c1f70ff4d19df82"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/players/[playerId]/access/reset/route.ts",
-          "sha256": "3d76e2ba4d93698f3333a570d84ffaa5acfee83eab34e0c2f4b780917b5c4335"
+          "sha256": "7d3f04b08c12c167f59b8fc2ee8db2f05514b8319bfdfb471fdd5c82507d563d"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/players/[playerId]/claim-token/route.ts",
-          "sha256": "3efb368fd32cee6c108640f3ddeeb3e97d21a962886a98a761269333f9a37ccd"
+          "sha256": "ca9d555232088485658c162c9404d7719cf9387b51f78c390fe71b65b722031a"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/players/[playerId]/kind/route.ts",
-          "sha256": "4edd4443ce6f41d532760f7546cd58a1bd43935cc83b51d3140b16a593f5e5bd"
+          "sha256": "006a7d96d51ecc8e645051729e735e64a7854ba815139d9e6e4b0f43aaaa8866"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/players/[playerId]/route.ts",
-          "sha256": "1aef3489b725991aed7098a0f8d93c15dc987871eaa5ef88a9f7ebb02a525a3b"
+          "sha256": "19aa380271b32d7256d0bc74836f19d0fd6f4e6b81be090bccbbbc43d61df913"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/players/reorder/route.ts",
-          "sha256": "d55260a27c915f6688b88d91fc8846db7732d220dfebac97531a8f084381fa00"
+          "sha256": "f129d83d3aa9f52d2f4b3b03808f2a0e3eeb68cfefc3769ff5e8cf6dc4220419"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/players/route.ts",
-          "sha256": "8fa303814a4c41f8e3b5db1153b8e6dafd83ee7c425bd2d4e98aba2403f41181"
+          "sha256": "28e4ecf44cede38c26c48f84ae5609f49dab7bcb4e097de5d200b2f89429ed72"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/presence/heartbeat/route.ts",
-          "sha256": "f20b81504652db81edcba3c0f6beb8368b9ce33ff91ca2d1e247e2464f95c80d"
+          "sha256": "4e405c4af07644cfc47aa77b2be115d4c64f3eea72decd3750bdd2679f7aa049"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/public/route.ts",
@@ -757,23 +793,23 @@
         },
         {
           "path": "src/app/api/v1/games/[gameId]/role-reveal/ack/route.ts",
-          "sha256": "946224b1103791b638977003adc3384cfcdac13ea68d17a8dd3194e0d7992644"
+          "sha256": "01da6e54169a965a59f7c190b88320cb73517cf27942c322b33eb04c7e298cd5"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/route.ts",
-          "sha256": "f71f268d7e224a42a321aacde102260993f8dd90352d653a9bfae7591b7e3a44"
+          "sha256": "9fa340ae58524a40a5c49149bf5efbcddb1ed58e91880d71333c4f80aa3d6318"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/scenario/qr/scan/route.ts",
-          "sha256": "2f137f60c64d4a7754d0aa22c93dee90d8af247600ed741c6532e66acbb7f4f5"
+          "sha256": "5dfb2fffadc6067cc02bc040c610222cb1f235d71eebd12d5b67aab0049c560f"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/setup/commit/route.ts",
-          "sha256": "c0fde37ccc1081f3082533cd01eb85d0893eb561dd23cc03a32280560d4385ec"
+          "sha256": "5bd9390fc7135fb753ff5245159ee96fb5e4161a0dc845cc01ed4a4b7169e9d9"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/setup/generate/route.ts",
-          "sha256": "70bfed3e2cb2c836ead96e6a47fa5ac53819e1266ae4c45dd05206e2a2194b4a"
+          "sha256": "6ff57c555bcd38962c542cc5c6c3181c2fa8c76377408b050924234fa7f293f6"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/actions/[actionId]/decision/route.ts",
@@ -781,7 +817,7 @@
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/actions/[actionId]/resolve/route.ts",
-          "sha256": "c41d82c77b8128660d2cf87397aba0fb481bd6a0724fc283e0d0bfb84f229671"
+          "sha256": "545ea88fffa9204433f20339a1c8c005df0e9ebe9d5247a23d9fc78b119e549e"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/audit/route.ts",
@@ -789,7 +825,7 @@
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/checkpoints/route.ts",
-          "sha256": "6cb92dc25363da29408658dffecbe7005bd6325e6d5c96910f1cd2329321321e"
+          "sha256": "a7341c271d2448927215edf2cd6528057f06839d17ace7709b5dd382d7f0f140"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/consistency/replay/route.ts",
@@ -805,11 +841,11 @@
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/day-actions/slayer/decide/route.ts",
-          "sha256": "5c03dd8f0538018e4ce49191bd82968952d659007bb809b9c7187656db9eda17"
+          "sha256": "3e0a46cba77f342cbd10b1bb12f456378793cc75278944a814891390685ba23b"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/recovery/override/route.ts",
-          "sha256": "661ac542ba4db91f8a73adac75ba2f87e4ab78bf2ec65e7208abd2671070fd21"
+          "sha256": "dad6c99aa6f81a4d56608d5846c68aa7280c6f7f2dbc460a6276913b87f6996e"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/route.ts",
@@ -817,27 +853,27 @@
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/scenario/clues/[clueId]/reveal/route.ts",
-          "sha256": "6abed34781c875e6ee3126a6150eeb2d5e15c0dab000f5b2360f7113f1a7b56b"
+          "sha256": "eefdc1d0a1a68c7945e750037b9b42e07ddb06bd03c5a661f632442c518cc18f"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/scenario/conditions/route.ts",
-          "sha256": "43aa16e416ef1d67e8f93cd9682f8d1536bdb23abe562f3f6e3844a474b5337f"
+          "sha256": "d5c7046aa5e07b7e328b13a0ad483915678682e8bbf0998a9e54f9389b390920"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/scenario/map/route.ts",
-          "sha256": "c0fc8c552e0aba58a9b04c4683da4754d2c610e39d14b6e7a94b4d2a5d5958c3"
+          "sha256": "acacec0ce6d197b21a3c808953d0842f1c5802052a0c35c3de842792fc5f5a56"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/scenario/stage/route.ts",
-          "sha256": "c488dfb2e7fd18fd18478946f7ba60e79cb5d906c3ff389e8999894d12403de6"
+          "sha256": "b866ab8c5078db2127086745ca8cbf416fc4fe4ac175d554c687f4a9137e5a03"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/storyteller/scenario/tasks/[taskId]/complete/route.ts",
-          "sha256": "6e7d97eacf960df587cbffa77deeb7adfd7a1f01544b576d5fa4fe185288862c"
+          "sha256": "354332932e29f750ac2eaf3edc24c99644cf2cf59cb5d3617151de1cfcdbdf9d"
         },
         {
           "path": "src/app/api/v1/games/[gameId]/traveller/exile/route.ts",
-          "sha256": "84d6483713423e90d07d4d0a6df1798d8aadd7e3cdba9be062d634cefd95451e"
+          "sha256": "5b16ba2e8f716d10f92a74923b17188c4adcb562112177d2949a53448f3c500f"
         },
         {
           "path": "src/app/api/v1/games/route.ts",
@@ -861,7 +897,7 @@
         },
         {
           "path": "src/app/api/v1/storyteller/recover/route.ts",
-          "sha256": "b2bf892310f569eb7167180347f736340f69304800709b7d2073e372dd97ebda"
+          "sha256": "6645ff0a5ad783d4fd5301a06b4b1af1bec153002ee3620f0aa4e1011f0c31c1"
         },
         {
           "path": "src/app/claim/page.tsx",
@@ -873,7 +909,7 @@
         },
         {
           "path": "src/app/player/_components/PlayerCaseView.tsx",
-          "sha256": "d163246ad20a976132078bedbb96e04ba2f015952ee69a06593840729f162642"
+          "sha256": "f4d2346bd9bf2dcfbdca22709b2ff4e00af55dca121a1c55df4544189b592a02"
         },
         {
           "path": "src/app/player/_components/PlayerJournalView.tsx",
@@ -881,7 +917,7 @@
         },
         {
           "path": "src/app/player/_components/PlayerMapView.tsx",
-          "sha256": "22622ef17114b13125d8dbe399fd78b76b9c4f746dd6e5249c77f270176118ee"
+          "sha256": "d70c585cbdf5c6f39ad5be2364228bccefe8ab3693d0bfd1f777ad4d9324f6ca"
         },
         {
           "path": "src/app/player/_components/PlayerPeopleView.tsx",
@@ -889,7 +925,7 @@
         },
         {
           "path": "src/app/player/page.tsx",
-          "sha256": "4fa808337a212d2c80334864a60b84ec6b235d0748c3ccdbcfcaf1224c11eb23"
+          "sha256": "c8cfcfb462a53245d0edac023dde164d397a0da5680643e7d43af336f66a8d42"
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/AuditView.tsx",
@@ -897,7 +933,7 @@
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/ControlView.test.ts",
-          "sha256": "82fa1cb527a290b4f56c78792f662f2956f1175dee2f6b97bf8008d35cf83414"
+          "sha256": "e0a65d8c8a5e970f7a9b1913e6c9662506229233bc2c0c9f40590e322294e7b7"
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/ControlView.tsx",
@@ -909,7 +945,7 @@
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/PlayersView.tsx",
-          "sha256": "de53d1137a1b80954c6bf143f94277c5c89839d10cd16b12f32521cfe8663db3"
+          "sha256": "8f71a8ce604a02f3c591628a1e935dee418c317c4983384217ff6ac91e6db643"
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/ScenarioView.tsx",
@@ -917,19 +953,19 @@
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/StorytellerShell.tsx",
-          "sha256": "9aeb17851bf504480868422f1d032db854ed961b872766669cb76a4f5352cd03"
+          "sha256": "d37efea9615947457319e33297b16539022272c7321f821b3da181e4a2ca8b13"
         },
         {
           "path": "src/app/storyteller/[gameId]/_components/SystemView.tsx",
-          "sha256": "589c96e6db965a831cf8db7629606093dcde0142963b620aaed4d35ce9b4fd6b"
+          "sha256": "cc371a336a70dc7fc305ee841e64e31f44b457e3c445c85005559541234d6d27"
         },
         {
           "path": "src/app/storyteller/[gameId]/page.tsx",
-          "sha256": "1b4e7fae7a85d5e983a1ea78011b7f7c42a01380ab53e9288024e893c2edc183"
+          "sha256": "dcb6c0d6e6cbe18705b11a68abf57ad2f6a112a20b4a1d935bd147ea55fd8c2f"
         },
         {
           "path": "src/app/storyteller/page.tsx",
-          "sha256": "f0104fcafe13141926ac12dbd6c6868f9d8ba69aaa6ac9ae48a4a85b58b8d4ee"
+          "sha256": "10e0af336df5aa3f09a8fb7d5692e600b40cfb1a946df2df858b67a5fb0906c7"
         },
         {
           "path": "src/components/ActionDecisionPanel.tsx",
@@ -1089,7 +1125,7 @@
         },
         {
           "path": "src/lib/auth/http.ts",
-          "sha256": "05af3d3ecc97bd114519da1ec2cb8b2fe4bd6627ebb15504bdb8c6839bb40d0b"
+          "sha256": "f6bc5674bc90b405c76a937b321f4c9107dc151569e99e29367622cb41c3f45c"
         },
         {
           "path": "src/lib/auth/tokens.test.ts",
@@ -1101,7 +1137,7 @@
         },
         {
           "path": "src/lib/client-api.ts",
-          "sha256": "5826b233305f17716a12449faa7b6adea93c4947806ec4e2b410ca6ae4722a3e"
+          "sha256": "914b301517de2a858f8b894d7d7b31ddccb62fbbfabd8188bef136a7b5d547ea"
         },
         {
           "path": "src/lib/clock.ts",
@@ -1113,7 +1149,7 @@
         },
         {
           "path": "src/lib/command-contracts.ts",
-          "sha256": "f1f6932080987aa6faa5318d5196e6342580af26b526ec8dfa9c19b8cecf2f89"
+          "sha256": "80144ea4429198d26c33661519d3714368d28d22aee9e2e109c57a8144b0009f"
         },
         {
           "path": "src/lib/command-outcome.ts",
@@ -1125,7 +1161,7 @@
         },
         {
           "path": "src/lib/command.ts",
-          "sha256": "c23c7413e49f35c1f7fc92a2da5ef89816ec1052f54adebd842e59e8359e3da9"
+          "sha256": "210589afe3c2eed41fdb83e29419dd2ffae6b31c465243a811ba0bec80b72bb7"
         },
         {
           "path": "src/lib/db.ts",
@@ -1133,7 +1169,7 @@
         },
         {
           "path": "src/lib/errors.ts",
-          "sha256": "1da477b467f1676ba325b9262cb033569065eb163e8ed669cc4c06f34f99271a"
+          "sha256": "206ff6191df171c66591245ce5e0374c79a7bb46952d5c7f7298517dc899eaa6"
         },
         {
           "path": "src/lib/http.ts",
@@ -1165,11 +1201,11 @@
         },
         {
           "path": "src/modules/auth/session.ts",
-          "sha256": "6972ead8aafc393a62cc3f62e6095b44fe9df5c58266d2aac9acd2adbe7aeebb"
+          "sha256": "432aa5e48b1a648212177d951fbb38d4f22b0879208019deb1ce60b72ae893c3"
         },
         {
           "path": "src/modules/events/event-types.ts",
-          "sha256": "92025a881de1a340753648fd240dd5ff17dd1b93292c27de0cfecebac8e0181a"
+          "sha256": "33a659723bb20b252940be88a270a0cd3050c1064efc331f5cc5f9cd13d172f0"
         },
         {
           "path": "src/modules/game-session/death.ts",
@@ -1177,7 +1213,7 @@
         },
         {
           "path": "src/modules/game-session/game-session.service.ts",
-          "sha256": "d6ae20f60bc7a5ec12bfa41aff323f6c3dbb67e208ad88e193fb2bcd174e5870"
+          "sha256": "d8a7a9f417514d9e7ccc106ec0f44b1fe5769d732ba04ab28e744129d62c55f6"
         },
         {
           "path": "src/modules/game-session/roster.rules.test.ts",
@@ -1241,7 +1277,7 @@
         },
         {
           "path": "src/modules/projections/projections.ts",
-          "sha256": "e9ff89ca316e07605916a2021f5ade27a273bbcfb3a86cdff0b4d06df2fe13da"
+          "sha256": "07e378ec9b419e78eca9e85afe20f9c35fca8303a16b4e30099e40571f51af56"
         },
         {
           "path": "src/modules/realtime/broker.ts",
@@ -1249,7 +1285,7 @@
         },
         {
           "path": "src/modules/recovery/recovery.service.ts",
-          "sha256": "737d26e9f7ae747d5d3e32d479a6868abf773063c7fb4a16b2392fbe50eb52a3"
+          "sha256": "76a46da8ef22ee28b26144b34cd54eba604311d8542ac7bdb9ac03fcc7261e0c"
         },
         {
           "path": "src/modules/setup/counts.ts",
@@ -1285,7 +1321,7 @@
         },
         {
           "path": "tests/command-contracts.test.ts",
-          "sha256": "5acad573035cb6ca2f7f8b9976bce019304f22c71f3bb010778c34caa7daac96"
+          "sha256": "5879ac85d944371ede1ce18b374cab2b23a7c246d811d9886e8bf9bba2dc2f57"
         },
         {
           "path": "tests/command-outcome.test.ts",
@@ -1356,6 +1392,10 @@
           "sha256": "bea1a337c705c6dadc7c31e9b9b81c239b9c2f2e4681f174587b1cd4cba18de5"
         },
         {
+          "path": "tests/e2e/e2e-14-game-lifecycle.spec.ts",
+          "sha256": "a2635dfaf3c933b885f7563b1e308199e2eba8f21c074238445a27d6ab132b23"
+        },
+        {
           "path": "tests/e2e/fixtures.ts",
           "sha256": "8fb1f22fc6ff25a7718c8cfe8cab93da1e97c1fd53cb0230da0926484757b147"
         },
@@ -1374,6 +1414,22 @@
         {
           "path": "tests/fixtures/command-receipts/unsupported.json",
           "sha256": "48cd477f770824745a5823dff70acf165a9f556c9d0f7893646c03b52bd0b54e"
+        },
+        {
+          "path": "tests/game-data-lifecycle-proof.test.ts",
+          "sha256": "c47a8bf55792bb43cbbec162bc786d704fa744282fa85ed3c2cb3504d32dcdb1"
+        },
+        {
+          "path": "tests/game-data-lifecycle-tooling.test.ts",
+          "sha256": "c0de6fa3677d591d047fd53d27ecf84a97668305f133325526d2c41091777aab"
+        },
+        {
+          "path": "tests/game-data-lifecycle.test.ts",
+          "sha256": "156b82f167e856c76d59398529842fd0fccbcba28229fd8fbc0a1d573593db17"
+        },
+        {
+          "path": "tests/game-lifecycle.test.ts",
+          "sha256": "66cc058f981993da9cdc491b30af7c058d63644bb9b87274dfac58dcd7185cc6"
         },
         {
           "path": "tests/game-session.test.ts",
@@ -1397,7 +1453,7 @@
         },
         {
           "path": "tests/projections.test.ts",
-          "sha256": "2ddff5426a5a39a3151d094975951b3289b272da53e6987962debdfeb22ca7a7"
+          "sha256": "7cbc02af238d71965234038b129266d561a47ff94f6587a8133a47bdf830b819"
         },
         {
           "path": "tests/provenance-content.test.ts",
@@ -1437,7 +1493,7 @@
         },
         {
           "path": "tests/regression-baseline-tooling.test.ts",
-          "sha256": "687670a726533e8b2baf70a5fbf993f22a147e3683bb9008f69d8b2082f45ebc"
+          "sha256": "42c608aa5cbd1c60d3421952d799384fdcbf73cf855318dc5b8d352945212724"
         },
         {
           "path": "tests/release-hardening.test.ts",
@@ -1500,7 +1556,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "4ee43af453616e3a58dfc103a93b1d3ad29ac72e9ed539873c4eaaa89e8305ed"
+      "membershipDigest": "175e130c29356fce2683fafdf388e871c1332486b65442123cb214e8e7ee3aff"
     },
     {
       "id": "rules-names-prose",
@@ -1601,7 +1657,7 @@
         },
         {
           "path": "src/lib/presentation/player-mode.test.ts",
-          "sha256": "bfcc37b1ead84d8a8fe9883f3f64a8c11e307974afb9beb2d0aa6b7b91f6cf54"
+          "sha256": "8e763c3ca3379f2648e67212b6a4f4c7da0a0deaef817387a525bfddc4cf854a"
         },
         {
           "path": "src/lib/presentation/player-mode.ts",
@@ -1613,7 +1669,7 @@
         },
         {
           "path": "src/lib/presentation/storyteller-mode.test.ts",
-          "sha256": "bff7889d5481ecf0f161b812f1bea4f5833ccc4d5d01311b7c34b9ba717c3304"
+          "sha256": "72d72c0136c88a4024782d1afcedc6f914101460af4ba0393778475326bd29ec"
         },
         {
           "path": "src/lib/presentation/storyteller-mode.ts",
@@ -1632,7 +1688,7 @@
           "sha256": "8ffcf25d711fec2681585f2b3733fea4e4c11245571762647fe52570e8b2ff1e"
         }
       ],
-      "membershipDigest": "61e17c1bf537fb615ebb9e9a862e3e9d565e3fd88bec25999f5e975bb9bd081d"
+      "membershipDigest": "169c501b905fdbfc6486c9d6bbf6e5e36b6bde2a5331fb095437edea9d90e668"
     },
     {
       "id": "vectors-favicon",

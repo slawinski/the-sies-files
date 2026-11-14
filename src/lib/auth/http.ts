@@ -21,6 +21,7 @@ import {
 import {
   findPlayerSessionByHash,
   findStorytellerSessionByHash,
+  withGameAdmission,
 } from "@/modules/auth/session";
 
 export async function setPlayerSessionCookie(token: string): Promise<void> {
@@ -68,6 +69,18 @@ export async function resolvePlayer(
     throw new DomainError("GAME_NOT_FOUND", "Game not found");
   }
   return { playerId: session.playerId, sessionId: session.id };
+}
+
+/** Capture the admitted persisted identity for the authoritative writer, not later cookies. */
+export async function resolveStorytellerWriter(gameId: string) {
+  const admitted = await resolveStoryteller(gameId);
+  return <T>(work: () => Promise<T>) => withGameAdmission(gameId, { kind: "storyteller", ...admitted }, work);
+}
+
+export async function resolvePlayerWriter(gameId: string) {
+  const admitted = await resolvePlayer(gameId);
+  return { playerId: admitted.playerId,
+    write: <T>(work: () => Promise<T>) => withGameAdmission(gameId, { kind: "player", ...admitted }, work) };
 }
 
 /** Resolve either a storyteller or a player session bound to `gameId`. */

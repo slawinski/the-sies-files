@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 import net from 'node:net';
 import { acquireLease, resolveTarget, stopOwnedServer } from './test-database.mjs';
@@ -254,6 +254,7 @@ export async function measure(root: string, out: string, profile: 'development' 
       stage('browser-discovery', 'npx', ['playwright', 'test', '--list', '--reporter=json']),
       stage('browser', 'npm', ['run', 'test:e2e', '--', '--reporter=list,json', '--output=' + path.join(out, 'browser-artifacts')], ['reset-browser', ...(profile === 'production' ? ['build'] : [])]),
       ...(profile === 'production' ? [stage('recovery', 'npm', ['run', 'recovery:prove', '--', '--output', path.join(out, 'recovery'), '--build-record', path.join(out, 'run.json')], ['build', 'generate'])] : []),
+      ...(profile === 'production' ? [{ ...stage('lifecycle', 'npm', ['run', 'game-data:prove', '--', '--output', path.join(out, 'lifecycle'), '--build-record', path.join(out, 'run.json')], ['build', 'generate', 'unit', 'unit-discovery']), private: true }] : []),
       stage('reset-security', 'npx', ['tsx', 'scripts/test-database.mts', 'reset'], ['generate']),
       { ...stage('security-discovery', 'npm', ['run', 'test:security', '--', '--list', '--reporter=json']), private: true,
         env: { ...env, PLAYWRIGHT_JSON_OUTPUT_FILE: path.join(out, 'security-private/discovery.json') } },
@@ -294,7 +295,13 @@ export async function measure(root: string, out: string, profile: 'development' 
     if (profile === 'production') {
       try { metadata.provenance = readProvenanceReport(path.join(out, 'provenance'), work, manifest.sourceId, metadata.build as ReturnType<typeof buildIdentity>); }
       catch { metadata.provenance = { complete: false, reason: 'Final provenance artifacts or source/build identity failed revalidation' }; }
+      try {
+        if (verifySource(manifest, work).length) throw new Error('Captured source changed');
+        const { readLifecycleReport } = await import(pathToFileURL(path.join(work, 'scripts/game-data-lifecycle-proof.mts')).href);
+        metadata.lifecycle = readLifecycleReport(path.join(out, 'lifecycle'), work, manifest, metadata.build as ReturnType<typeof buildIdentity>, out);
+      } catch { metadata.lifecycle = { complete: false, reason: 'Lifecycle evidence missing, failed, stale or incomplete' }; }
     }
+    else metadata.lifecycle = { complete: false, status: 'not-applicable', reason: 'Lifecycle browser proof requires the recorded production build' };
     try { metadata.compatibility = readCompatibilityReport(path.join(out, 'compatibility/compatibility.json'), manifest.sourceId); }
     catch { metadata.compatibility = { complete: false, reason: 'Compatibility report missing, failed or incomplete' }; }
     try { metadata.security = readSecurityInventory(out); }
@@ -317,14 +324,14 @@ export async function measure(root: string, out: string, profile: 'development' 
     try {
       const browserStage = results.find(s => s.name === 'browser');
       const inventory = readInventories(out, browserStage?.status === 'blocked' ? browserStage.reason : undefined); metadata.inventory = inventory;
-      rawFailures = inventory.unit.some(t => t.status === 'failed') || inventory.browser.some(t => t.results.some(r => ['failed', 'timedOut', 'interrupted'].includes(r.status)));
+      rawFailures = inventory.unit.some(t => t.status !== 'passed') || inventory.browser.some(t => t.results.some(r => r.status !== 'passed'));
     }
     catch (error) { metadata.inventoryError = (error as Error).message; }
     metadata.changedSource = verifySource(manifest, work);
     metadata.originalSourceUnchanged = capture(root).sourceId === manifest.sourceId;
     await stopOwnedServer(target, lease.token);
     await assertPortFree(3100); metadata.serverPortReleased = true;
-    metadata.complete = results.every(s => s.status === 'passed') && (metadata.provenance as { complete: boolean }).complete && (metadata.compatibility as { complete: boolean }).complete && (metadata.security as { status: string }).status === 'passed' && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed'));
+    metadata.complete = results.every(s => s.status === 'passed') && (metadata.provenance as { complete: boolean }).complete && (metadata.compatibility as { complete: boolean }).complete && (metadata.security as { status: string }).status === 'passed' && !rawFailures && !metadata.inventoryError && !(metadata.changedSource as string[]).length && metadata.originalSourceUnchanged && (profile !== 'production' || (!!metadata.build && (metadata.recovery as { status: string }).status === 'passed' && (metadata.lifecycle as { complete: boolean }).complete));
     write();
     return metadata.complete === true;
   } catch (error) { metadata.complete = false; metadata.blocker = (error as Error).message; write(); return false; }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonError, jsonOk, parseBody } from "@/lib/http";
-import { assertSameOrigin, resolveStoryteller } from "@/lib/auth/http";
+import { assertSameOrigin, resolveStorytellerWriter } from "@/lib/auth/http";
 import { resolveSlayerDecision } from "@/modules/investigation/investigation.service";
 
 const schema = z.object({
@@ -13,16 +13,16 @@ const schema = z.object({
 export async function POST(req: Request, { params }: { params: Promise<{ gameId: string }> }) {
   try {
     const { gameId } = await params;
-    await resolveStoryteller(gameId);
+    const write = await resolveStorytellerWriter(gameId);
     assertSameOrigin(req);
     const { commandId, expectedVersion, payload } = await parseBody(req, schema);
-    const { version, winner } = await resolveSlayerDecision({
+    const { version, winner } = await write(() => resolveSlayerDecision({
       gameId,
       slayerPlayerId: payload.slayerPlayerId,
       optionId: payload.optionId,
       commandId,
       expectedVersion,
-    });
+    }));
     return jsonOk({ version, winner });
   } catch (err) {
     return jsonError(err);
