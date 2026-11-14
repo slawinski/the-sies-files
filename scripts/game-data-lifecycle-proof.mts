@@ -12,6 +12,7 @@ import { verifySource, type capture } from './regression-baseline.mjs';
 import { execute, restoreCheck, LifecycleFailure, type Options } from './game-data-lifecycle.mjs';
 import { bytesDigest, digest, identities, readGraph, selection } from './game-data-policy.mjs';
 import { writePrivate } from './game-data-journal.mjs';
+import { proveBrowserLifecycle } from './game-data-lifecycle-browser.mjs';
 
 type ProofOptions = { output: string; manifest?: string; buildRecord?: string };
 type Hooks = { stage?: (name: string, archive: string) => void };
@@ -198,7 +199,6 @@ export async function proveLifecycle(options: ProofOptions, hooks: Hooks = {}): 
     if ((report.observations.rechecked as { outcome: string }).outcome !== 'clear') throw new Error('Recheck failed');
     if (options.buildRecord) {
       enter('browser-offline-purge');
-      const { proveBrowserLifecycle } = await import('./game-data-lifecycle-browser.mjs');
       browserResult = await proveBrowserLifecycle(source.target, db, custody, report.attribution.build!, browserPort!, command);
     }
     enter('verified');

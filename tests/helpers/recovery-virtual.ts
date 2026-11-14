@@ -124,7 +124,7 @@ export async function virtualRecovery(mode: Mode, mutation: Mutation, dumpFailur
   const load = (name: string): Record<string, unknown> => {
     if (cache.has(name)) return cache.get(name)!;
     const exports = {}; cache.set(name, exports);
-    const filename = path.join(process.cwd(), 'scripts', name + '.mts');
+    const filename = path.join(process.cwd(), 'scripts', name + (name.startsWith('../tests/') ? '.ts' : '.mts'));
     const source = fs.readFileSync(filename, 'utf8').replaceAll('import.meta.url', JSON.stringify('file://' + root + '/scripts/' + name + '.mts'));
     const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText;
     vm.runInNewContext('(async () => {\n' + compiled + '\n})()', {
@@ -144,6 +144,7 @@ export async function virtualRecovery(mode: Mode, mutation: Mutation, dumpFailur
         if (id === './playable-recovery.mjs') return load('playable-recovery');
         if (id === './command-receipt-compatibility.mjs') return load('command-receipt-compatibility');
         if (/^\.\/game-data-[a-z-]+\.mjs$/.test(id)) return load(id.slice(2, -4));
+        if (id === '../tests/e2e/fixtures.js') return load('../tests/e2e/fixtures');
         if (id.startsWith('./provenance') || (name.startsWith('provenance/') && id.startsWith('./'))) return load(path.posix.join(path.posix.dirname(name), id).replace(/\.mjs$/, ''));
         return require(id);
       },
