@@ -100,6 +100,53 @@ LIVE/readiness expectations were weakened.
 
 ## Routine baseline entry point
 
+### Required lifecycle evidence
+
+The production profile adds a required `lifecycle` stage to all 22 inherited
+stage identities (23 total). It does not replace physical playable recovery,
+the ordinary browser/security inventories, compatibility or provenance. Preserve
+the inherited native identities, not just their floors: 410 unit, 50 ordinary
+browser, 19 security, one playable recovery and 21 A/B compatibility observations.
+Lifecycle additions are additive; the current discovered inventories are the
+denominators, with no skipped outcomes admitted as success.
+
+`npm run game-data:prove -- --output NEW_PRIVATE_DIRECTORY --build-record RUN/run.json`
+consumes that run's `capsule/manifest.json`, native `unit-discovery.json`/`unit.json`
+and recorded production build. It never selects an arbitrary source/build from
+the lifecycle report. Source membership/content/modes and build artifacts are
+checked before and after; ingestion independently repeats those checks. Missing,
+truncated, failed, skipped, omitted or mismatched evidence fails the baseline.
+
+The proof creates two lease-owned synthetic PG16 databases, physically restores
+an old ACTIVE backup, detects retirement using independent evidence, and removes
+only the exact reintroduced staging identity. Fourteen named existing native U3
+cases supply actual held-writer, rollback and uncertain/finalization/retry
+observations from the unit stage, not invented summary booleans. Their native
+discovery/outcomes are revalidated at ingestion.
+
+The separate mobile-Chromium case owns its app and an ephemeral port lease. It
+creates its own archive target and retained game, keeps the same pages, private
+player dialog and real delayed committed archive-status response, drains only
+its own browser SSE transports, then normally stops its app. After disconnecting
+its own pool, the real offline CLI performs normal quiescence-checked plan/apply.
+The proof restarts the same build on the same port, verifies fresh API denial,
+and uses focus/session detection to clear private views, dialogs and the pending
+archive outcome. Delivery of the held response and saved real SSE hello metadata
+cannot revive them. No ordinary Playwright worker kills a shared server, no test
+application control endpoint exists, and no database session is terminated.
+
+CI explicitly uploads **only `lifecycle/summary.json`** from this stage. Its strict
+schema permits fixed synthetic case/stage identities, native statuses/exits,
+bounded assertion counts and public source/build/policy hashes. `lifecycle.json`,
+the custody tree, raw CLI/native/browser diagnostics, plans, journals, receipts,
+dumps, URLs, environment and gameplay values remain private. Stage stdout is
+also private. Both failed and successful local directories must be retained.
+
+The development profile labels this production-build proof not applicable rather
+than serving development output as the recorded build. It retains its inherited
+checks. A standalone `--manifest` physical test remains available but has null
+build attribution and cannot satisfy the production lifecycle gate.
+
 The required `provenance` technical stage runs after that capsule's successful
 build. It checks the committed content ledger and lock candidate index without
 refreshing them, collects bounded full public upstream notices, and binds

@@ -111,6 +111,16 @@ retains source-before/after equality. CI uploads these two exact paths, never a
 provenance directory wildcard. Authoritative results belong to those generated
 source-bound reports, not hardcoded counts or an earlier source's green receipt.
 
+Lifecycle integration adds covered tooling, tests, CI configuration and runbook
+bytes; it does not establish any new permission. Finish all included edits, then
+the canonical parent intentionally runs refresh/check before capture and final
+measurement. Preserve owner-curated metadata and all nine unknown owner-evidence
+groups. Any later covered edit requires another refresh/check and measurement;
+an earlier lifecycle or provenance receipt cannot be attributed to a new source.
+The lifecycle stage's separate upload is only `lifecycle/summary.json`; it does
+not broaden the two-file provenance upload contract or authorize publishing
+private retirement custody, participant data or rights documents.
+
 ## Candidates are not installed or shipped components
 
 `not_observed_installed` means the expected package location was absent; an

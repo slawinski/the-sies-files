@@ -25,6 +25,15 @@ instructions and [verification ledger](docs/recovery-verification.md) distinguis
 archive restoration, durable/runtime equality and legal continuation from the
 narrow player-flag replay diagnostic.
 
+Manual archive and offline selected-game retirement are documented in the
+[game-data lifecycle runbook](docs/game-data-lifecycle.md). The production
+baseline and CI require `game-data:prove` against their recorded source/build:
+physical old-backup detection, existing native writer/rollback/reconciliation
+cases, and a separately owned browser stop/purge/restart case. Only its sanitized
+`lifecycle/summary.json` is uploaded; custody, dumps and private diagnostics are
+not artifacts. This is synthetic verification, not proof that external copies
+or existing private datasets have been erased.
+
 ## Getting Started
 
 First, run the development server:

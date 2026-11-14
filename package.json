@@ -17,6 +17,7 @@
     "test:e2e:reset": "bash scripts/reset-e2e-db.sh",
     "baseline": "tsx scripts/regression-baseline.mts",
     "game-data": "tsx scripts/game-data-lifecycle.mts",
+    "game-data:prove": "tsx scripts/game-data-lifecycle-proof.mts",
     "provenance:refresh": "tsx scripts/provenance.mts refresh",
     "provenance:check": "tsx scripts/provenance.mts check",
     "test:provenance": "vitest run --config tests/provenance.vitest.config.mts",

@@ -317,7 +317,7 @@
       "files": [
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "3e1f4fe6ea68b23363ff99b90df836abb89befbedf33a17b6d1bcbdbf9af2196"
+          "sha256": "beaa76620d400c36ae75de90c583e8db93b1caf982d00e7d14ee02d3779a803a"
         },
         {
           "path": ".gitignore",
@@ -353,7 +353,7 @@
         },
         {
           "path": "README.md",
-          "sha256": "53e73d11e26b623326f84bf04dee7811e9118410114bd262354b4954646d2665"
+          "sha256": "c915df278c9ef69c57de91d054298fc55e35da8ec89a7165315bbdcc5df5a644"
         },
         {
           "path": "docs/access-secrecy-verification.md",
@@ -369,11 +369,11 @@
         },
         {
           "path": "docs/content-provenance.md",
-          "sha256": "9d5010763b124ece28015c5bdd137b2a2175f4e403745871e3f42b34e93eb078"
+          "sha256": "fc7086d5a5b6f99fab235ce850f37ab9b70e49cbe8a0e142a123cd394fced039"
         },
         {
           "path": "docs/game-data-lifecycle.md",
-          "sha256": "d5f9be05abf8e8ff25310342891a93dade314df7fe8cc5a46022e92b9f2c7899"
+          "sha256": "b588103b0efda68743f4ae3b51c9b4dd3474aee4d2f136c346d5b53edd47a374"
         },
         {
           "path": "docs/ideation/2026-10-28-legacy-app-reinforcement-ideation.html",
@@ -421,7 +421,7 @@
         },
         {
           "path": "docs/regression-baseline.md",
-          "sha256": "43b307abb2ec4771eabba4716cde00a269e11929f0ca821df7a4a66d067803bc"
+          "sha256": "b697f7b366f45654788fd8938504d7746558da28ba8307c6782afaa745b1713c"
         },
         {
           "path": "docs/regressions/F001-capture-migrations.md",
@@ -501,7 +501,7 @@
         },
         {
           "path": "package.json",
-          "sha256": "0c7f52c671189858d3c2f2df034e93a73d5cbf88ee0c2480217480fbf76c5dde"
+          "sha256": "66abf3b3b7321121f9d1d6f48a7325bdc5ed3db3374110648f5951e9630e2f5e"
         },
         {
           "path": "playwright.config.ts",
@@ -620,8 +620,12 @@
           "sha256": "ce533c366ecb6e449e11e64252a9a8b491530ad39fc3022c0130e680bfacaeed"
         },
         {
+          "path": "scripts/game-data-lifecycle-browser.mts",
+          "sha256": "74ebbec331666412b9acc51201b3e9dcc483a69d462361a7034f846bebba57b3"
+        },
+        {
           "path": "scripts/game-data-lifecycle-proof.mts",
-          "sha256": "f253167f99501bd6f631b7e4e1b26b9e8e1cbc5872a6018c54e48456b6548aaf"
+          "sha256": "116fd1777db8581383f9f99693368a2a00a520faed95e3ea27cfaacd860ad438"
         },
         {
           "path": "scripts/game-data-lifecycle.mts",
@@ -657,7 +661,7 @@
         },
         {
           "path": "scripts/regression-baseline.mts",
-          "sha256": "60ee9673733d76bbca5ca1d5e49bf8621c2d5dcb067fbb128fc3c39eae4e1ea1"
+          "sha256": "7e787682a55f255cb1032c8519a7b4a7a6529e14e23c7c4ceee97135e34432f7"
         },
         {
           "path": "scripts/reset-e2e-db.sh",
@@ -1413,7 +1417,7 @@
         },
         {
           "path": "tests/game-data-lifecycle-proof.test.ts",
-          "sha256": "96e025a160b237563184502351cb1ffe1cc09c7e63d38ebc9cb2ce2507f536fa"
+          "sha256": "3ac3dbd68f0f833be7b70d89959acb9f7842cfe0ad6d1d4df9950e35df91b461"
         },
         {
           "path": "tests/game-data-lifecycle-tooling.test.ts",
@@ -1489,7 +1493,7 @@
         },
         {
           "path": "tests/regression-baseline-tooling.test.ts",
-          "sha256": "687670a726533e8b2baf70a5fbf993f22a147e3683bb9008f69d8b2082f45ebc"
+          "sha256": "42c608aa5cbd1c60d3421952d799384fdcbf73cf855318dc5b8d352945212724"
         },
         {
           "path": "tests/release-hardening.test.ts",
@@ -1552,7 +1556,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "b54a2541244499dc222ff3eee333ef825235a4c7a031df36aa32f47b79478ef6"
+      "membershipDigest": "32b2b1f061452dbc73d5da062e27ae3c495a704fec69ba9af1ebac0ac2b36104"
     },
     {
       "id": "rules-names-prose",

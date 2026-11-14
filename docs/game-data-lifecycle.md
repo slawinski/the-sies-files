@@ -173,8 +173,9 @@ handlers, purges through actual lifecycle entry points, keeps the receipt outsid
 both databases, physically restores into its new staging DB, observes the block,
 explicitly removes that exact reintroduced identity only in owned unserved staging,
 and rechecks. The other game's complete graph digest must be unchanged. Ordinary
-live plan/apply remains refused. No app build or browser recovery is claimed;
-`attribution.build` is null. CLI proof verifies captured source before and after.
+live plan/apply remains refused. In this standalone physical mode no app build or
+browser recovery is claimed; `attribution.build` is null. CLI proof verifies
+captured source before and after.
 
 `lifecycle.json` records actual PG versions, source/policy/tool identity, target
 identities, stage exit codes, observations and cleanup. Nonzero backup/restore,
@@ -185,6 +186,18 @@ matching leases, without force, and releases those leases. Lost ownership or fai
 drop keeps a failure and resource for explicit reconciliation. Never clear a stale
 lease or stop a cluster merely because its name resembles this proof. A hard kill
 cannot run cleanup; keep the run/ownership record and have its owner reconcile.
+
+The canonical production baseline additionally invokes `game-data:prove` with
+`--build-record RUN/run.json`. That mode requires the captured manifest, exact
+recorded build and actual native U3 writer/rollback/reconciliation outcomes. It
+adds an exclusively owned built-app browser stop/offline-CLI-purge/restart case,
+retaining mounted private state and a delayed real archive outcome across the
+interruption. Fresh admission denies the removed identities; focus/session loss
+clears private projection, pending archive status and dialogs, including after
+late archive and saved SSE metadata delivery. This does not claim remote or
+offline-device erasure. See the [baseline contract](regression-baseline.md) for
+source/build validation, ownership and the explicit `summary.json`-only public
+artifact boundary. Standalone physical success cannot substitute for that gate.
 
 The original [playable recovery drill](recovery-drill.md) is a **different required
 gate**. A lifecycle block is not playable recovery; a playable old restore is not
