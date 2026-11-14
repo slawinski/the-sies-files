@@ -372,6 +372,10 @@
           "sha256": "9d5010763b124ece28015c5bdd137b2a2175f4e403745871e3f42b34e93eb078"
         },
         {
+          "path": "docs/game-data-lifecycle.md",
+          "sha256": "d5f9be05abf8e8ff25310342891a93dade314df7fe8cc5a46022e92b9f2c7899"
+        },
+        {
           "path": "docs/ideation/2026-10-28-legacy-app-reinforcement-ideation.html",
           "sha256": "0ccf8112cea01a3cd3874160e7da48424532ca4c24faaaf2299af876a5bb9196"
         },
@@ -409,11 +413,11 @@
         },
         {
           "path": "docs/recovery-drill.md",
-          "sha256": "29d0577243bf3528b54b09b5c7ac62c6b564cc28e245a3d89420eb81bc7c5a17"
+          "sha256": "36bc276f0e4d743877e12d70f77bbaead8e0a6f0a6bc1af77c2a84ab26855431"
         },
         {
           "path": "docs/recovery-verification.md",
-          "sha256": "37d0960c1dbbf189d1d02c5c99df2cfa80bb667b0334758b6eb63e130c127ded"
+          "sha256": "aae3a3e0f5163df755a132e61d0c53eba380611ecf8b0fafe71b63b0e14b002b"
         },
         {
           "path": "docs/regression-baseline.md",
@@ -616,8 +620,12 @@
           "sha256": "ce533c366ecb6e449e11e64252a9a8b491530ad39fc3022c0130e680bfacaeed"
         },
         {
+          "path": "scripts/game-data-lifecycle-proof.mts",
+          "sha256": "f253167f99501bd6f631b7e4e1b26b9e8e1cbc5872a6018c54e48456b6548aaf"
+        },
+        {
           "path": "scripts/game-data-lifecycle.mts",
-          "sha256": "9b8ab10bd571df240f542267eab58ccdcfdf82041e8f96c1a785612229ffc403"
+          "sha256": "2428326aaa9ed386a1f4a4c01ef8714df3fd10b5cecaa2a3507ce265d192ce9f"
         },
         {
           "path": "scripts/game-data-policy.mts",
@@ -1404,12 +1412,16 @@
           "sha256": "48cd477f770824745a5823dff70acf165a9f556c9d0f7893646c03b52bd0b54e"
         },
         {
+          "path": "tests/game-data-lifecycle-proof.test.ts",
+          "sha256": "96e025a160b237563184502351cb1ffe1cc09c7e63d38ebc9cb2ce2507f536fa"
+        },
+        {
           "path": "tests/game-data-lifecycle-tooling.test.ts",
-          "sha256": "ad9dc05da73f2502c7220fb94915b940daa246905e14ed6303b6b32d98dc5bf5"
+          "sha256": "6fca8fba52bc539999225e642edd434b7e17b2acd2ea44c4663f3538a512759d"
         },
         {
           "path": "tests/game-data-lifecycle.test.ts",
-          "sha256": "a0cf9f9ed489054139be3824093b85211a3b2a11db41d6ee4934fc9523c9a345"
+          "sha256": "4deda19119806654be8021b3fcc6be3ada685657a1322b5a7f1d9e0f62bb591f"
         },
         {
           "path": "tests/game-lifecycle.test.ts",
@@ -1540,7 +1552,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "d2fcf5e98b6672f94f7e297f74cd88ba05b83731167f9067423a59ca1671380c"
+      "membershipDigest": "b54a2541244499dc222ff3eee333ef825235a4c7a031df36aa32f47b79478ef6"
     },
     {
       "id": "rules-names-prose",

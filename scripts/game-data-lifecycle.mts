@@ -25,6 +25,13 @@ const failureSchema = z.object({ format: z.literal('game-retirement-failure/1'),
   stage: z.enum(['input','preflight','schema','selection','plan-file','pending','delete','zero-residue','anchor','commit','commit-observation','finalize']),
   state: z.enum(['not-deleted','rolled-back','uncertain','committed']), at: timestamp }).strict();
 type Failure = z.infer<typeof failureSchema>;
+const receiptSchema = z.object({ format: z.literal('game-retirement-receipt/1'), intent: intentSchema, intentDigest: hash,
+  retiredAt: timestamp, firstFailure: failureSchema.nullable(), earlierAttempt: z.literal('pending-or-incomplete'), scope: z.literal('selected-database-only') }).strict();
+const restoreOptionsSchema = z.object({ database: z.string(), evidence: z.string(), unservedStaging: z.literal(true) }).strict();
+export type RestoreOptions = z.infer<typeof restoreOptionsSchema>;
+// Completeness is a custodian assertion, not something a restored database can prove.
+const custodySchema = z.object({ format: z.literal('game-retirement-custody/1'), complete: z.literal(true),
+  entries: z.array(z.object({ journal: z.string(), receipt: z.string().nullable() }).strict()).max(1000) }).strict();
 const optionsSchema = z.object({ database: z.string(), game: uuid, plan: z.string(), journal: z.string(), receipt: z.string(), request: uuid, stoppedApplication: z.literal(true) }).strict();
 export type Options = z.infer<typeof optionsSchema>;
 type Mode = 'plan' | 'apply' | 'reconcile';
@@ -55,24 +62,77 @@ export function operatorTarget(raw: string | undefined, env: Partial<NodeJS.Proc
     return { url: url.href, host, port, database };
   } catch { throw new Error('Explicit local operator target refused'); }
 }
-export function parseArguments(args: string[]): { mode: Mode; options: Options } {
+export function parseArguments(args: string[]): { mode: Mode; options: Options } | { mode: 'restore-check'; options: RestoreOptions } {
   const [mode, ...rest] = args;
-  if (!['plan','apply','reconcile'].includes(mode)) throw new Error('Use plan, apply or reconcile');
+  if (!['plan','apply','reconcile','restore-check'].includes(mode)) throw new Error('Use plan, apply, reconcile or restore-check');
   const values: Record<string, unknown> = {};
   for (let i = 0; i < rest.length; i++) {
     const key = rest[i];
-    const name = key === '--stopped-application' ? 'stoppedApplication' : key.slice(2);
-    if (!['--database','--game','--plan','--journal','--receipt','--request','--stopped-application'].includes(key) || name in values) throw new Error('Ambiguous operator arguments');
-    if (key === '--stopped-application') values[name] = true;
+    const name = key === '--stopped-application' ? 'stoppedApplication' : key === '--unserved-staging' ? 'unservedStaging' : key.slice(2);
+    const allowed = mode === 'restore-check' ? ['--database','--evidence','--unserved-staging'] : ['--database','--game','--plan','--journal','--receipt','--request','--stopped-application'];
+    if (!allowed.includes(key) || name in values) throw new Error('Ambiguous operator arguments');
+    if (key === '--stopped-application' || key === '--unserved-staging') values[name] = true;
     else {
       const value = rest[++i];
       if (!value || value.startsWith('--')) throw new Error('Missing operator argument');
       values[name] = value;
     }
   }
+  if (mode === 'restore-check') {
+    const parsed = restoreOptionsSchema.safeParse(values);
+    if (!parsed.success) throw new Error('Explicit staging and independent evidence required');
+    return { mode, options: parsed.data };
+  }
   const parsed = optionsSchema.safeParse(values);
   if (!parsed.success) throw new Error('Complete explicit selection and stopped-application attestation required');
   return { mode: mode as Mode, options: parsed.data };
+}
+
+export async function restoreCheck(raw: RestoreOptions) {
+  let client: PrismaClient | undefined;
+  try {
+    const options = restoreOptionsSchema.parse(raw);
+    const target = operatorTarget(options.database);
+    const custody = custodySchema.parse(readPrivate(options.evidence));
+    const requests = new Set<string>(); const files = new Set<string>([options.evidence]);
+    const evidence = custody.entries.map(entry => {
+      for (const file of [entry.journal, ...(entry.receipt ? [entry.receipt] : [])]) {
+        if (files.has(file)) throw new Error('Duplicate custody input'); files.add(file);
+      }
+      const intent = intentSchema.parse(readPrivate(entry.journal));
+      validateCounts(intent.plan); same(intent.planDigest, digest(intent.plan));
+      if (requests.has(intent.plan.request)) throw new Error('Duplicate request'); requests.add(intent.plan.request);
+      if (entry.receipt) {
+        const receipt = receiptSchema.parse(readPrivate(entry.receipt));
+        same(receipt.intent, intent); same(receipt.intentDigest, digest(intent));
+        if (receipt.firstFailure) same(receipt.firstFailure.intentDigest, digest(intent));
+      }
+      return { game: intent.plan.game, createdAt: intent.plan.createdAt, request: intent.plan.request, state: entry.receipt ? 'committed' : 'pending-or-uncertain' };
+    });
+    client = new PrismaClient({ datasourceUrl: target.url, log: [], errorFormat: 'minimal' });
+    return await client.$transaction(async tx => {
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      await tx.$executeRaw`SET LOCAL statement_timeout = '15000'`;
+      await quiescent(tx);
+      const binding = await databaseIdentity(tx, target);
+      const conflicts: { game: string; createdAt: string; request: string; kind: string }[] = [];
+      let conflictCount = 0;
+      for (const item of evidence) {
+        // No archive-state filter and no dependency on an anchor in the old copy.
+        const root = await tx.gameSession.findUnique({ where: { id: item.game }, select: { createdAt: true } });
+        if (!root) continue;
+        conflictCount++;
+        if (conflicts.length < 100) conflicts.push({ game: item.game, createdAt: root.createdAt.toISOString(), request: item.request,
+          kind: root.createdAt.toISOString() !== item.createdAt ? 'immutable-identity-mismatch' : item.state });
+      }
+      const uncertainCount = evidence.filter(e => e.state === 'pending-or-uncertain').length;
+      return { outcome: conflictCount || uncertainCount ? 'blocked' : 'clear', target: binding, evidenceCount: evidence.length,
+        conflictCount, uncertainCount, conflicts, truncated: conflictCount > conflicts.length, scope: 'supplied-independent-evidence-only' };
+    }, { isolationLevel: 'RepeatableRead', maxWait: 2000, timeout: 30000 });
+  } catch {
+    // No filenames, row payloads, validation input or connection strings escape.
+    return { outcome: 'blocked', reason: 'custody-or-staging-check-incomplete', scope: 'supplied-independent-evidence-only' };
+  } finally { await client?.$disconnect(); }
 }
 
 async function quiescent(tx: Prisma.TransactionClient) {
@@ -178,8 +238,11 @@ export async function execute(mode: Mode, rawOptions: Options, hooks: Hooks = {}
       const root = selected.owned.game_sessions[0]?.row;
       if (!root) { state = 'uncertain'; throw new Error('Absent game without anchor'); }
       if (root.status !== 'ENDED' || typeof root.archivedAt !== 'string') throw new Error('Archived ended root required');
+      // PostgreSQL to_jsonb(timestamp without time zone) has no UTC suffix.
+      // Use Prisma's typed dates, not host-local Date parsing of graph JSON.
+      const dates = await tx.gameSession.findUniqueOrThrow({ where: { id: o.game }, select: { createdAt: true, archivedAt: true } });
       const plan: Plan = planSchema.parse({ format: 'game-cleanup-plan/1', request: o.request, custody, target: binding, game: o.game,
-        createdAt: new Date(root.createdAt as string).toISOString(), archivedAt: new Date(root.archivedAt).toISOString(), status: root.status,
+        createdAt: dates.createdAt.toISOString(), archivedAt: dates.archivedAt!.toISOString(), status: root.status,
         version: root.version, sequence: root.eventSequence, policy: identity.policy, tool: identity.tool, source: identity.source,
         sourceSchema: identity.sourceSchema, schema, data: selected.data, other: selected.other, counts: selected.counts });
       validateCounts(plan);
@@ -245,8 +308,10 @@ export async function execute(mode: Mode, rawOptions: Options, hooks: Hooks = {}
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const { mode, options } = parseArguments(process.argv.slice(2));
-    console.log(JSON.stringify(await execute(mode, options)));
+    const parsed = parseArguments(process.argv.slice(2));
+    const report = parsed.mode === 'restore-check' ? await restoreCheck(parsed.options) : await execute(parsed.mode, parsed.options);
+    console.log(JSON.stringify(report));
+    if (report.outcome === 'blocked') process.exitCode = 1;
   } catch (error) {
     console.log(JSON.stringify(error instanceof LifecycleFailure ? error.report : { outcome: 'failed', state: 'not-deleted', stage: 'arguments' }));
     process.exitCode = 1;

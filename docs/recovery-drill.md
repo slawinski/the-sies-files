@@ -155,6 +155,24 @@ deployed recovery, production RPO/RTO, rollback or backup retention guarantees.
 Presence/rate-limit transport state is re-established, not compared as durable
 gameplay truth.
 
+## Retirement admission is a separate check
+
+Before serving any real staged restore, follow the independent evidence and
+custody procedure in [game-data-lifecycle.md](game-data-lifecycle.md). Its
+`restore-check` is read-only and requires an explicit unserved staging URL and a
+complete independently held journal/receipt collection. An old ACTIVE copy can
+predate both archive state and the retirement anchor; neither absence clears it.
+Conflicts, pending attempts and custody uncertainty keep staging unserved until
+explicit reconciliation and a fresh check. Never auto-archive/purge restored live
+games or weaken the ordinary archive requirement to make this drill pass.
+
+The separate synthetic `game-data-lifecycle-proof.mts` PG16 dump/restore proof
+tests that rejection and explicit staging-only reconciliation. It does **not**
+replace this original mid-vote playable-recovery case, any of its six claims,
+native inventory, build attribution or cleanup gates. Lifecycle report attribution
+has no app build unless separately established; do not label its success as
+browser/playable-continuation evidence.
+
 ## Operator record
 
 The implementation agent self-ran the drill. **No second human operator has

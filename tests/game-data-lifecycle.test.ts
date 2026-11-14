@@ -5,9 +5,9 @@ import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { PrismaClient, Prisma } from "@prisma/client";
-import { execute, type Options, type Hooks } from "../scripts/game-data-lifecycle.mjs";
+import { execute, restoreCheck, type Options, type Hooks } from "../scripts/game-data-lifecycle.mjs";
 import { canonical, families } from "../scripts/game-data-policy.mjs";
-import { readPrivate } from "../scripts/game-data-journal.mjs";
+import { readPrivate, writePrivate } from "../scripts/game-data-journal.mjs";
 import { prisma as applicationDb } from "@/lib/db";
 import * as games from "@/modules/game-session/game-session.service";
 import { hashToken } from "@/lib/auth/tokens";
@@ -97,6 +97,38 @@ it("real CLI purges all 22 families, retaining the complete other game and globa
   expect(cli("apply", actual)).toMatchObject({ code: 0, report: { outcome: "reconciled" } });
   expect(await db.gameRetirement.count()).toBe(1);
   expect(await allRows()).toBe(retained);
+});
+
+it("read-only staging checks block old ACTIVE identities, pending evidence and mismatches without private rows", async () => {
+  const { g } = await fixture(); const opts = options(g.id);
+  await run("plan", opts); await run("apply", opts);
+  const evidence = path.join(dir, randomUUID() + ".custody.json");
+  writePrivate(evidence, { format: "game-retirement-custody/1", complete: true, entries: [{ journal: opts.journal, receipt: opts.receipt }] });
+  const check = async () => { await disconnect(); return restoreCheck({ database: opts.database, evidence, unservedStaging: true }); };
+  expect(await check()).toMatchObject({ outcome: "clear", conflictCount: 0 });
+  // Characterizes a pre-retirement copy, independently of its later DB anchor.
+  await db.gameRetirement.deleteMany();
+  await db.gameSession.create({ data: { id: g.id, createdAt: g.createdAt, name: secret, status: "ACTIVE", phase: "INVESTIGATION" } });
+  const before = await allRows();
+  expect(await check()).toMatchObject({ outcome: "blocked", conflictCount: 1, conflicts: [{ game: g.id, kind: "committed" }] });
+  expect(await allRows()).toBe(before);
+  await db.gameSession.update({ where: { id: g.id }, data: { createdAt: new Date(0) } });
+  const mismatch = await check();
+  expect(mismatch).toMatchObject({ outcome: "blocked", conflicts: [{ kind: "immutable-identity-mismatch" }] });
+  expect(JSON.stringify(mismatch)).not.toContain(secret);
+  replacePrivate(evidence, v => { v.entries = [{ journal: opts.journal, receipt: null }]; });
+  expect(await check()).toMatchObject({ outcome: "blocked", uncertainCount: 1 });
+  await db.gameSession.deleteMany();
+  expect(await check()).toMatchObject({ outcome: "blocked", uncertainCount: 1, conflictCount: 0 });
+  for (const entries of [[{ journal: opts.journal, receipt: opts.receipt + ".missing" }], [{ journal: opts.plan, receipt: opts.receipt }]]) {
+    replacePrivate(evidence, v => { v.entries = entries; });
+    expect(await check()).toMatchObject({ outcome: "blocked", reason: "custody-or-staging-check-incomplete" });
+  }
+  replacePrivate(evidence, v => { v.complete = false; });
+  expect(await check()).toMatchObject({ outcome: "blocked" });
+  await disconnect();
+  const result = spawnSync(path.join(process.cwd(), "node_modules/.bin/tsx"), ["scripts/game-data-lifecycle.mts", "restore-check", "--database", opts.database, "--evidence", evidence, "--unserved-staging"], { env: process.env, encoding: "utf8" });
+  expect(result.status).toBe(1); expect(JSON.parse(result.stdout)).toMatchObject({ outcome: "blocked" });
 });
 
 it.each(["version", "sequence", "private", "session", "credential", "claim", "audit", "checkpoint", "presence", "archive"])("refuses same-selection drift: %s", async kind => {

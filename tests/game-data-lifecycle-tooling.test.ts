@@ -16,7 +16,11 @@ it("requires explicit local target credentials from only the named environment v
   expect(target.host).toBe("127.0.0.1");
 });
 
-it("does not expose restore-check or accept ambiguous CLI inputs", () => {
+it("requires independent evidence and explicit unserved staging for restore-check", () => {
+  expect(parseArguments(["restore-check", "--database", "postgresql://operator@127.0.0.1:55499/staging_test", "--evidence", "/private/custody.json", "--unserved-staging"])).toEqual({ mode: "restore-check", options: { database: "postgresql://operator@127.0.0.1:55499/staging_test", evidence: "/private/custody.json", unservedStaging: true } });
+});
+
+it("does not accept ambiguous CLI inputs", () => {
   for (const args of [[], ["restore-check"], ["apply", "--database", "a", "--database", "b"], ["plan", "--force"], ["apply", "--stopped-application", "yes"]]) {
     expect(() => parseArguments(args)).toThrow();
   }
