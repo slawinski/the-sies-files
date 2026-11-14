@@ -2,14 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 import net from 'node:net';
 import { acquireLease, resolveTarget, stopOwnedServer } from './test-database.mjs';
 import { buildIdentity, completeClaims } from './playable-recovery.mjs';
 import { prepareCompatibilitySource, readCompatibilityReport } from './command-receipt-compatibility.mjs';
 import { readProvenanceReport } from './provenance.mjs';
-import { readLifecycleReport } from './game-data-lifecycle-proof.mjs';
 
 const hash = (data: string | Buffer) => crypto.createHash('sha256').update(data).digest('hex');
 function git(root: string, args: string[]) {
@@ -297,6 +296,8 @@ export async function measure(root: string, out: string, profile: 'development' 
       try { metadata.provenance = readProvenanceReport(path.join(out, 'provenance'), work, manifest.sourceId, metadata.build as ReturnType<typeof buildIdentity>); }
       catch { metadata.provenance = { complete: false, reason: 'Final provenance artifacts or source/build identity failed revalidation' }; }
       try {
+        if (verifySource(manifest, work).length) throw new Error('Captured source changed');
+        const { readLifecycleReport } = await import(pathToFileURL(path.join(work, 'scripts/game-data-lifecycle-proof.mts')).href);
         metadata.lifecycle = readLifecycleReport(path.join(out, 'lifecycle'), work, manifest, metadata.build as ReturnType<typeof buildIdentity>, out);
       } catch { metadata.lifecycle = { complete: false, reason: 'Lifecycle evidence missing, failed, stale or incomplete' }; }
     }
