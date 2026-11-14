@@ -53,6 +53,13 @@ decoded into libpq environment variables, never shell commands. Connection
 services/options cannot redirect the resolved target. Nonlocal URLs, URL
 parameters and non-test names are rejected; no destructive override exists.
 
+CI initializes its own PostgreSQL 16 cluster on `127.0.0.1:55432` with SCRAM
+authentication, a generated masked password and a private runner-temporary data
+directory. Cleanup stops only that cluster. Docker port forwarding is unsuitable
+for the offline lifecycle gate: the server reports its container address rather
+than the selected loopback address, so exact endpoint binding correctly refuses
+it. The native CLI happy-path test checks this binding before cleanup proceeds.
+
 `bash scripts/verify-clean-db.sh` owns a lease, recreates the explicit database,
 applies migrations and runs the entire unit suite on that same target.
 `bash scripts/reset-e2e-db.sh` performs only the owned reset. Direct Playwright

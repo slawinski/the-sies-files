@@ -317,7 +317,7 @@
       "files": [
         {
           "path": ".github/workflows/ci.yml",
-          "sha256": "beaa76620d400c36ae75de90c583e8db93b1caf982d00e7d14ee02d3779a803a"
+          "sha256": "57bd26309b1fb9a677d835b847aa4024315312cd8495eeb0480ffa0d30ebfac8"
         },
         {
           "path": ".gitignore",
@@ -421,7 +421,7 @@
         },
         {
           "path": "docs/regression-baseline.md",
-          "sha256": "b697f7b366f45654788fd8938504d7746558da28ba8307c6782afaa745b1713c"
+          "sha256": "67c1b3e1fccb078ed6a22eccacf877c1d87682de2a9104c4ad29652a2881a81d"
         },
         {
           "path": "docs/regressions/F001-capture-migrations.md",
@@ -1556,7 +1556,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "2d1469adf11747978002f68181914899b79a2a839c44ef596fe75244b1d00d04"
+      "membershipDigest": "175e130c29356fce2683fafdf388e871c1332486b65442123cb214e8e7ee3aff"
     },
     {
       "id": "rules-names-prose",
