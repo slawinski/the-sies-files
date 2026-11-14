@@ -5,7 +5,7 @@ import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { PrismaClient, Prisma } from "@prisma/client";
-import { execute, restoreCheck, type Options, type Hooks } from "../scripts/game-data-lifecycle.mjs";
+import { execute, restoreCheck, LifecycleFailure, type Options, type Hooks } from "../scripts/game-data-lifecycle.mjs";
 import { canonical, families } from "../scripts/game-data-policy.mjs";
 import { readPrivate, writePrivate } from "../scripts/game-data-journal.mjs";
 import { prisma as applicationDb } from "@/lib/db";
@@ -24,12 +24,14 @@ vi.mock("next/headers", () => ({ cookies: async () => ({
 
 const url = process.env.DATABASE_URL!;
 const db = new PrismaClient({ datasourceUrl: url });
+const observerUrl = new URL(url); observerUrl.pathname = "/postgres";
+const observer = new PrismaClient({ datasourceUrl: observerUrl.href });
 const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "item7-u3-proof-"));
 fs.chmodSync(dir, 0o700);
 const secret = "SYNTHETIC_PRIVATE_NEVER_SERIALIZE";
 const connection = new URL(url); connection.password = "";
 const options = (game: string, label = randomUUID()): Options => ({ database: connection.href, game, plan: path.join(dir, label + ".plan.json"), journal: path.join(dir, label + ".intent.json"), receipt: path.join(dir, label + ".receipt.json"), request: randomUUID(), stoppedApplication: true });
-afterAll(async () => { await disconnect(); fs.rmSync(dir, { recursive: true }); });
+afterAll(async () => { await disconnect(); await observer.$disconnect(); });
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllEnvs(); cookieJar.clear();
   await db.$executeRaw`TRUNCATE game_retirements, game_sessions, domain_events, command_receipts, checkpoints, presence, rate_limit_buckets CASCADE`;
@@ -60,10 +62,26 @@ async function fixture() {
   await db.presence.create({ data: { gameId: g.id, viewerId: p.id } });
   return { g, p, phase, nomination };
 }
-async function disconnect() { await applicationDb.$disconnect(); await db.$disconnect(); }
+async function disconnect() {
+  await applicationDb.$disconnect(); await db.$disconnect();
+  // Client disconnect completion can precede PostgreSQL backend teardown.
+  await vi.waitFor(async () => {
+    const [sessions] = await observer.$queryRaw<{ count: bigint }[]>`SELECT count(*) AS count FROM pg_stat_activity WHERE datname=${decodeURIComponent(new URL(url).pathname.slice(1))}`;
+    if (sessions.count) fs.appendFileSync(path.join(dir, "backend-drain.jsonl"), JSON.stringify({ at: new Date().toISOString(), sessionsAfterClientDisconnect: Number(sessions.count) }) + "\n", { mode: 0o600 });
+    expect(sessions.count).toBe(BigInt(0));
+  });
+}
 async function run(mode: "plan" | "apply" | "reconcile", opts: Options, hooks: Hooks = {}) {
   await disconnect();
-  return execute(mode, opts, hooks);
+  try { return await execute(mode, opts, hooks); }
+  catch (error) {
+    if (error instanceof LifecycleFailure) {
+      const message = `${error.message} [${error.report.stage}; ${error.report.state}]`;
+      error.stack = error.stack?.replace(error.message, message);
+      error.message = message;
+    }
+    throw error;
+  }
 }
 function cli(mode: string, opts: Options) {
   const args = Object.entries(opts).flatMap(([key, value]) => key === "stoppedApplication" ? ["--stopped-application"] : ["--" + key, String(value)]);

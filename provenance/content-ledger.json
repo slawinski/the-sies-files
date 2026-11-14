@@ -1425,7 +1425,7 @@
         },
         {
           "path": "tests/game-data-lifecycle.test.ts",
-          "sha256": "1eb7e0c9b602239978f587a3d4432d3276ab447896de630e6130fc2bd548592c"
+          "sha256": "21a97de9221c523670c16da10ebcd049fbd7d5c50d1b89013578b2f70fe0ae9c"
         },
         {
           "path": "tests/game-lifecycle.test.ts",
@@ -1556,7 +1556,7 @@
           "sha256": "2b2a9fceef78633d1d71dc2ea9031da846ade29f801bc6f897974f695f473c31"
         }
       ],
-      "membershipDigest": "bfde5af4105373943bc89558aa894942075bf237ae9cd7d273016da58ce0959d"
+      "membershipDigest": "86fdeb5b2c7a409a8c4fb7ef5c58140d07fb0cea6de8ee092c9e505d363ed9f2"
     },
     {
       "id": "rules-names-prose",
